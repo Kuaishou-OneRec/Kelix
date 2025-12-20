@@ -708,7 +708,8 @@ class TransformerDecoder(nn.Module):
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
-
+        import IPython
+        IPython.embed()
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type
         output = output if not hidden else [*hidden, output]

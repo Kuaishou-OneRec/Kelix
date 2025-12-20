@@ -4192,7 +4192,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             
         if self.output_one_token:
             logits[...,151936:] = -9999
-
+        import IPython
+        IPython.embed()
         # print(f"logitslogits={logits.shape}, self.chunked_loss_computer={self.chunked_loss_computer}" )
         
         loss = None
