@@ -297,6 +297,16 @@ class Qwen3Attention(nn.Module):
             training=self.training,
             **kwargs,
         )
+        torch.save(
+            {
+                "q":q,
+                "k":k,
+                "v":v,
+                "mask":mask,
+                "output":output,
+            },
+            "qwen3_attn_forward.pt"
+        )
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]

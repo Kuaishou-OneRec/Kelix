@@ -156,6 +156,7 @@ num_layers=1,  # 默认值
         token_head_nheads=token_head_nhead,
         token_head_dim_feedforward=token_head_intermediate_dim,
         token_head_num_layers=token_head_num_layers,
+        attention_function="flash_attention_2",
     )
 
     # 构造KeyeARConfig
@@ -569,7 +570,7 @@ def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
     inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(inputs["input_ids"].device)
 
     with autocast_cm(dtype=torch.bfloat16):
-        outputs = model(**inputs)
+        outputs = model(**inputs, cu_seqlens = None)#  torch.tensor([0,66]).cuda())
     
     # KeyeForConditionalGeneration直接返回logits
     if hasattr(outputs, 'logits'):
@@ -601,7 +602,7 @@ def get_keye_ar_model_logits(model, inputs, layer_hook=None):
             autocast_cm = nullcontext
 
     with autocast_cm(dtype=torch.bfloat16):
-        outputs = model(**inputs_ar)
+        outputs = model(**inputs_ar, cu_seqlens) #= torch.tensor([0,66]).cuda())
     
     return outputs
 
