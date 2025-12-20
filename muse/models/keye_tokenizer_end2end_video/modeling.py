@@ -123,7 +123,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
         self.model = Qwen3Model(qwen_config)
         self.use_multimodal_rope = qwen_config.use_multimodal_rope
-        self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
+        self.visual_tokenizer = KeyeVideoTokenizer(tokenizer_config)
         self.quant_projector = nn.ModuleList(
             [
                 nn.Linear(tokenizer_config.embedding_dim, qwen_config.embed_dim, bias=False)
