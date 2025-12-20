@@ -234,9 +234,9 @@ class PureDecoderTransformer(nn.Module):
         pos_emb = self.position_embedding(positions)
         x = x_emb + pos_emb
 
-        # print("PureDecoderTransformer.forward")
-        # import IPython
-        # IPython.embed()
+        print("PureDecoderTransformer.forward11111")
+        import IPython
+        IPython.embed()
 
         # 逐层前向传播
         if self.use_gradient_checkpointing and self.training:
