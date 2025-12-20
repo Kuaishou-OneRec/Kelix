@@ -1541,7 +1541,7 @@ if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
 
 else:
 
-    class RMSNorm(nn.Module):
+    class Qwen3RMSNorm(nn.Module):
         """
         Root Mean Square Normalization in fp32.
 
@@ -1552,8 +1552,9 @@ else:
             eps (float): small value to avoid division by zero. Default: 1e-6
         """
 
-        def __init__(self, dim: int, eps: float = 1e-6) -> None:
+        def __init__(self, hidden_size: int, eps: float = 1e-6) -> None:
             super().__init__()
+            dim = hidden_size
             self.normalized_shape = (dim,)
             self.eps = eps
             self.weight = nn.Parameter(torch.ones(dim))
