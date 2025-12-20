@@ -269,21 +269,32 @@ class TestToken2ImageDatasetCollateFn:
             multi_scale=True
         )
         
-        # Create batch with raw samples (PIL images) and target dimensions for multi_scale
+        # Create batch with raw samples (image paths) and target dimensions for multi_scale
+        # Save test images to temp files
+        img1_path = tmp_path / "test_img1.png"
+        img2_path = tmp_path / "test_img2.png"
+        create_test_image(256, 256).save(img1_path)
+        create_test_image(256, 256).save(img2_path)
+        
         batch = [
             {
-                "image": create_test_image(256, 256),
-                "target_height": 256,
-                "target_width": 256,
+                "image": str(img1_path),
+                "target_height": 224,
+                "target_width": 252,
             },
             {
-                "image": create_test_image(256, 256),
-                "target_height": 256,
-                "target_width": 256,
+                "image": str(img2_path),
+                "target_height": 224,
+                "target_width": 252,
             }
         ]
         
         result = dataset.collate_fn(batch)
+
+        print(result["pixel_values"])
+        print(result["image_grid_thw"])
+        print(result["image"])
+        gg
         
         assert "pixel_values" in result
         assert "image_grid_thw" in result
