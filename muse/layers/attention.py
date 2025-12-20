@@ -237,7 +237,6 @@ class MultiHeadAttention(nn.Module):
             - d: embed dim
             - h_d: head dim
         """
-        x0=x
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
@@ -324,9 +323,4 @@ class MultiHeadAttention(nn.Module):
             output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
-
-        print("mmmma")
-        if x.size(-1) == 512:
-            import IPython
-            IPython.embed()
         return self.output_proj(output)
