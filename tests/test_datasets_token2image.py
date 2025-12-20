@@ -290,11 +290,6 @@ class TestToken2ImageDatasetCollateFn:
         ]
         
         result = dataset.collate_fn(batch)
-
-        print(result["pixel_values"])
-        print(result["image_grid_thw"])
-        print(result["image"])
-        gg
         
         assert "pixel_values" in result
         assert "image_grid_thw" in result
@@ -306,6 +301,10 @@ class TestToken2ImageDatasetCollateFn:
         # image should be stacked (batch_size=2)
         assert result["image"].shape[0] == 2
         assert result["image"].shape[1] == 3  # RGB channels
+        assert result["image"].shape[2] == 224
+        assert result["image"].shape[3] == 252
+
+        assert result["image_grid_thw"] == torch.tensor([[1, 18, 18], [1, 18, 18]])
 
 
 # =============================================================================
