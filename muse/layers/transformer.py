@@ -175,7 +175,8 @@ class TransformerSelfAttentionLayer(nn.Module):
         # Norm applied before self-attention
         
         h = self.sa_norm(x)
-        if self.sa_norm.weight.shape[0] == 4096:
+        if getattr(self.sa_norm, "weight", torch.zeros([0])).shape[0] == 4096 \
+            or getattr(self.sa_norm, "scale", torch.zeros([0])).shape[0] == 4096:
             print(f"selfatt")
             import IPython
             IPython.embed()
