@@ -223,6 +223,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         print(f"  sin均值误差: {sin_diff:.10f}")
         print(f"  整体是否一致 (1e-6): {'✅' if (cos_diff < 1e-6 and sin_diff < 1e-6) else '❌'}")
         print("="*80 + "\n")
+        import IPython
+        IPython.embed()
 
 # 测试逻辑
 if __name__ == "__main__":
