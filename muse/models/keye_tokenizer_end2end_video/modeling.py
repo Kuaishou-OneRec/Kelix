@@ -689,10 +689,10 @@ class KeyeTokenizerEnd2EndVideo(Model):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
         
         if pixel_values_videos is not None:      
-            print('maosiyangdebugvideo', pixel_values_videos.shape, video_grid_thw)
+            # print('maosiyangdebugvideo', pixel_values_videos.shape, video_grid_thw)
             video_beta = 1.0  
             vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
-            print('maosiyangdebugvq_out_video', vq_out_video)
+            # print('maosiyangdebugvq_out_video', vq_out_video)
             video_embeds = self._project_visual_tokens(vq_out_video["z_q"])
             # 记录loss
             video_codebook_loss, video_commitment_loss, video_vq_indices = vq_out_video['codebook_loss'], vq_out_video['commitment_loss'], vq_out_video['indices']
