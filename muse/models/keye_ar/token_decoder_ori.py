@@ -160,7 +160,7 @@ class FlashAttentionDecoderLayer(nn.Module):
             q = q.view(batch_size, seq_len, self.nhead, self.head_dim)
             k = k.view(batch_size, seq_len, self.nhead, self.head_dim)
             v = v.view(batch_size, seq_len, self.nhead, self.head_dim)
-            return EagerAttention()(q,k,v,is_causal=True).reshape(q.shape)
+            return EagerAttention()(q,k,v,is_causal=True).view(batch_size, seq_len, self.d_model)
 
         # 重塑为(batch_size, nhead, seq_len, head_dim)
         q = q.view(batch_size, seq_len, self.nhead, self.head_dim).transpose(1, 2)
