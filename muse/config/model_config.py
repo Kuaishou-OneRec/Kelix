@@ -566,3 +566,11 @@ class KeyeTokenizerEnd2EndVideoConfig(ModelConfig):
         default=1.0,
         description="Amplifier for visual token projection"
     )
+    temporal_merge_position: str = Field(
+        default="before",
+        description="Temporal merge position"
+    )
+    temporal_merge_mode: str = Field(
+        default="avg",
+        description="Temporal merge mode"
+    )

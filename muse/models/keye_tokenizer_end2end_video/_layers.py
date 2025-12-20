@@ -31,6 +31,7 @@ class Projector(nn.Module):
         merge_kernel_size: Tuple[int, int] = (2, 2),
     ):
         super().__init__()
+        print("[INFO] temporal_merge_position:", temporal_merge_position,"temporal_merge_mode:", temporal_merge_mode)
         self.merge_kernel_size = merge_kernel_size
         self.temporal_merge_position = temporal_merge_position
         self.temporal_merge_mode = temporal_merge_mode

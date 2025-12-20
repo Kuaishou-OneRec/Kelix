@@ -60,9 +60,9 @@ def split_thw(tensor: torch.Tensor) -> torch.Tensor:
 
 class KeyeVideoTokenizer(KeyeImageTokenizer):
 
-    def __init__(self, config: KeyeTokenizerConfig):
+    def __init__(self, config: KeyeTokenizerConfig, temporal_merge_position: str = "before", temporal_merge_mode: str = "avg"):
         super().__init__(config)
-        self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
+        self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size, temporal_merge_position=temporal_merge_position, temporal_merge_mode=temporal_merge_mode)
     def get_image_embeds(self, pixel_values: Optional[torch.Tensor] = None, 
                             image_grid_thw: Optional[torch.LongTensor] = None, 
                             **kwargs):
@@ -120,10 +120,12 @@ class KeyeTokenizerEnd2EndVideo(Model):
         video_token_id = config.video_token_id
         pool = config.pool
         amplifier = config.amplifier
+        temporal_merge_position = config.temporal_merge_position
+        temporal_merge_mode = config.temporal_merge_mode
 
         self.model = Qwen3Model(qwen_config)
         self.use_multimodal_rope = qwen_config.use_multimodal_rope
-        self.visual_tokenizer = KeyeVideoTokenizer(tokenizer_config)
+        self.visual_tokenizer = KeyeVideoTokenizer(tokenizer_config, temporal_merge_position=temporal_merge_position, temporal_merge_mode=temporal_merge_mode)
         self.quant_projector = nn.ModuleList(
             [
                 nn.Linear(tokenizer_config.embedding_dim, qwen_config.embed_dim, bias=False)
