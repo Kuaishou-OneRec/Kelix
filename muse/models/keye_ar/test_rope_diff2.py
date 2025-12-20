@@ -52,7 +52,8 @@ class Qwen3RotaryEmbedding(nn.Module):
         print(f"self.attention_scaling={self.attention_scaling}")
         # Step 3: 计算freqs（矩阵乘法+转置）
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        # with torch.autocast(device_type=device_type, enabled=False):
+        if 1:
             freqs_before_trans = (inv_freq_expanded.float() @ position_ids_expanded.float())
             freqs = freqs_before_trans.transpose(1, 2)
             if save_intermediates:
