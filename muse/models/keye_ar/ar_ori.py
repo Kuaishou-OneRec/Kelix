@@ -2353,10 +2353,6 @@ class KeyeFlashAttention2(KeyeAttention):
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
-        print(f"keyeee")
-        import IPython
-        IPython.embed()
-
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
