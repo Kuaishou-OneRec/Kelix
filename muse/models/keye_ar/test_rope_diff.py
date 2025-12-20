@@ -55,7 +55,7 @@ import os
 # 会漏fp32的被转成bf16精度
 
 # 代码1：Qwen3RotaryEmbedding（保存中间结果）
-class Qwen3RotaryEmbedding(nn.Module):
+class Qwen3RotaryEmbedding_(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -117,7 +117,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-        
+
 # 代码2：RotaryPositionalEmbeddings
 class RotaryPositionalEmbeddings(nn.Module):
     def __init__(self, dim: int, max_seq_len: int = 4096, base: int = 1000_000) -> None:
