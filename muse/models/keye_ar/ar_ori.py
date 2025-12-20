@@ -2256,7 +2256,7 @@ class KeyeFlashAttention2(KeyeAttention):
         # print(f"query_states_before_mrope={query_states}")
         # torch.save(query_states, "query_states_before_mrope.pt")
         # torch.save(cos, "cos.pt")
-        
+
         # import IPython
         # IPython.embed()
         query_states, key_states = apply_rotary_pos_emb(
@@ -2352,6 +2352,10 @@ class KeyeFlashAttention2(KeyeAttention):
                 )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+
+        print(f"keyeee")
+        import IPython
+        IPython.embed()
 
         attn_output = self.o_proj(attn_output)
 
