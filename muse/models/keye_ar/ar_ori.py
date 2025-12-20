@@ -1512,7 +1512,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         )
 
 
-if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
+if os.environ.get("debug_for_muse", "0") == "0":
     class Qwen3RMSNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-6):
             """
@@ -1524,15 +1524,15 @@ if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
 
         def forward(self, hidden_states):
             input_dtype = hidden_states.dtype
-            print(11111, hidden_states.dtype)
-            if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
-                print(f"32_converted")
-                hidden_states = hidden_states.to(torch.float32)
-            print(22222, hidden_states.dtype)
+            # print(11111, hidden_states.dtype)
+            # if os.environ.get("debug_for_muse", "1") == "1":
+                #print(f"32_converted")
+            hidden_states = hidden_states.to(torch.float32)
+            #print(22222, hidden_states.dtype)
             variance = hidden_states.pow(2).mean(-1, keepdim=True)
-            print(33333, variance.dtype)
+            #print(33333, variance.dtype)
             hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-            print(444444, hidden_states.dtype)
+            #print(444444, hidden_states.dtype)
             # print(f"self.weight={self.weight}, hidden_states={hidden_states}")
             return self.weight * hidden_states.to(hidden_states)
 

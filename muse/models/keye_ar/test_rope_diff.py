@@ -35,8 +35,8 @@ class Qwen3RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
     
     def rope_init(self):
@@ -49,7 +49,7 @@ class Qwen3RotaryEmbedding(nn.Module):
 
 
 # 代码1：Qwen3RotaryEmbedding（保存中间结果）
-class Qwen3RotaryEmbedding_(nn.Module):
+class Qwen3RotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -78,7 +78,7 @@ class Qwen3RotaryEmbedding_(nn.Module):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         inv_freq_expanded0 = inv_freq_expanded
         
-        if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
+        if os.environ.get("debug_for_muse", "0") == "1":
             inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim)).to(x.device)
             self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
             inv_freq_expanded = inv_freq_expanded[None,:,None]
@@ -104,8 +104,6 @@ class Qwen3RotaryEmbedding_(nn.Module):
         
         cos_out = cos.to(dtype=x.dtype)
         sin_out = sin.to(dtype=x.dtype)
-        #import IPython
-        #IPython.embed()
         return cos_out, sin_out
     
     def rope_init(self):
