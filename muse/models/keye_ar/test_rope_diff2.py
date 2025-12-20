@@ -258,5 +258,6 @@ if __name__ == "__main__":
     # 3. 原测试逻辑验证
     custom_cache = custom_rope.cache[position_ids]
     cos2, sin2 = custom_cache[..., 0], custom_cache[..., 1]
+    print(f"cos1={cos1.dtype}, cos2={cos2.dtype}")
     is_match = torch.allclose(cos1.float(), cos2.float(), atol=1e-6) and torch.allclose(sin1.float(), sin2.float(), atol=1e-6)
     print(f"\n原测试逻辑最终结果: {'有误差' if not is_match else '无误差'}")
