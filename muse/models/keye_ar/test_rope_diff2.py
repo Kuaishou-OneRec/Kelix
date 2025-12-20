@@ -38,7 +38,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim))
         # theta = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64)[: (self.dim // 2)].float() / self.dim))
         # print(f"inv_freq_expanded0={inv_freq_expanded0.shape}, inv_freq_expanded={inv_freq_expanded.shape}")
-        self.inv_freq = inv_freq_expanded #  这里暂时对齐custom对
+        self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
         inv_freq_expanded = inv_freq_expanded[None,:,None]
         if save_intermediates:
             intermediates["inv_freq_expanded"] = inv_freq_expanded.clone()
@@ -52,8 +52,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         print(f"self.attention_scaling={self.attention_scaling}")
         # Step 3: 计算freqs（矩阵乘法+转置）
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # with torch.autocast(device_type=device_type, enabled=False):
-        if 1:
+        with torch.autocast(device_type=device_type, enabled=False):
             freqs_before_trans = (inv_freq_expanded.float() @ position_ids_expanded.float())
             freqs = freqs_before_trans.transpose(1, 2)
             if save_intermediates:
@@ -254,8 +253,7 @@ if __name__ == "__main__":
         custom_rope = RotaryPositionalEmbeddings(
             dim=head_dim, 
             max_seq_len=4096, 
-            base=1000000,  # 和Qwen的theta对齐
-            dtype=torch.float32
+            base=1000000  # 和Qwen的theta对齐
         ).to(device).bfloat16()
         # 核心：调用对比函数，逐步骤校验
         custom_rope.compare_with_qwen(qwen_intermediates, seq_len, device)
