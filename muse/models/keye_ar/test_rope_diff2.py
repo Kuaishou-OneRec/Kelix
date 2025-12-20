@@ -244,7 +244,7 @@ if __name__ == "__main__":
     device = "cpu"
     print(f"使用设备: {device} (CPU避免cuda精度干扰)")
 
-    with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=False):
+    with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=True):
         # 1. 实例化QwenRoPE并运行，保存所有中间结果
         qwen_rope = Qwen3RotaryEmbedding(config, device=device).to(device).bfloat16()
         position_ids = torch.arange(seq_len).expand(batch_size, -1).to(device)
