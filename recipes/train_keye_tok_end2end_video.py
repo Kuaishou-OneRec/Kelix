@@ -951,6 +951,12 @@ def train():
             image_grid_thw = batch.get("image_grid_thw", None)
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
+
+            # Debug: Check if batch contains video data
+            if pixel_values_videos is not None:
+                print_rank_0(f"[DEBUG] Batch contains video data: pixel_values_videos.shape={pixel_values_videos.shape}")
+            else:
+                print_rank_0(f"[DEBUG] Batch contains NO video data")
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1039,6 +1045,9 @@ def train():
             # ============ Compute codebook perplexity and usage (video) ============
             video_vq_indices = output.get("video_indices", None)
             if video_vq_indices is not None:
+                print_rank_0(f"[DEBUG] Model output contains video_indices with {len(video_vq_indices)} codebooks")
+            else:
+                print_rank_0(f"[DEBUG] Model output contains NO video_indices")
                 video_global_perplexities, video_codebook_usages = compute_codebook_metrics(
                     indices=video_vq_indices,
                     codebook_size=codebook_size,

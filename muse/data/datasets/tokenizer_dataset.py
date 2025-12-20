@@ -2006,6 +2006,19 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       "fast_pixel_values_videos": packed_fast_pixel_values_videos,
       "fast_video_grid_thw": packed_fast_video_grid_thw,
     }
+    print('-------------')
+    print('image_grid_thw', inputs["image_grid_thw"])
+    print('video_grid_thw', inputs["video_grid_thw"])
+    print('fast_video_grid_thw', inputs["fast_video_grid_thw"])
+    print('cu_seqlens', inputs["cu_seqlens"])
+    try:
+      r = dist.get_rank() if dist.is_initialized() else -1
+      spg = get_sequence_parallel_group()
+      sp_r = dist.get_rank(spg) if dist.is_initialized() and spg is not None else -1
+      print(f"[pack] rank={r}, sp_rank={sp_r}", flush=True)
+    except Exception:
+      pass
+    print('-------------')
     inputs = self._convert_pixels_types(inputs)
     return inputs
 
