@@ -163,8 +163,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         print(f"  均值误差: {diff:.10f}")
         print(f"  是否一致: {'✅' if is_same else '❌'}")
         if not is_same:
-            print(f"  Qwen前5值: {q_inv_freq[:5].float().numpy()}")
-            print(f"  Custom前5值: {c_theta[:5].float().numpy()}")
+            print(f"  Qwen前5值: {q_inv_freq[:5].float()}")
+            print(f"  Custom前5值: {c_theta[:5].float()}")
         
         # 对比步骤2: freqs_before_trans (Qwen) vs idx_theta (Custom)
         print("\n【步骤2】Qwen.freqs_before_trans vs Custom.idx_theta")
@@ -261,11 +261,11 @@ def debug_dtype_impact(qwen_cos, qwen_sin, custom_cos, custom_sin, seq_len):
     
     # 3. 打印具体数值差异（直观展示bfloat16精度损失）
     print("\n【3】具体数值对比（第0个位置，前5个维度）")
-    print(f"  float32 cos1: {cos1_float32[0,0,:5].numpy()}")
-    print(f"  float32 cos2: {cos2_float32[0,0,:5].numpy()}")
-    print(f"  bfloat16 cos1: {cos1_bf16[0,0,:5].numpy()}")
-    print(f"  bfloat16 cos2: {cos2_bf16[0,0,:5].numpy()}")
-    print(f"  bfloat16转换后的差值: {torch.abs(cos1_bf16[0,0,:5] - cos2_bf16[0,0,:5]).numpy()}")
+    print(f"  float32 cos1: {cos1_float32[0,0,:5]}")
+    print(f"  float32 cos2: {cos2_float32[0,0,:5]}")
+    print(f"  bfloat16 cos1: {cos1_bf16[0,0,:5]}")
+    print(f"  bfloat16 cos2: {cos2_bf16[0,0,:5]}")
+    print(f"  bfloat16转换后的差值: {torch.abs(cos1_bf16[0,0,:5] - cos2_bf16[0,0,:5])}")
     
     # 4. 验证bfloat16的精度极限
     print("\n【4】bfloat16 精度极限验证")
