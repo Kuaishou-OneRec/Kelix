@@ -146,11 +146,12 @@ class UnifiedTokenDecoder(Model):
         pos_emb = self.position_embedding(positions)
         x_emb = x_emb + pos_emb
         
-        print(f"unified_decoder11111111")
-        import IPython
-        IPython.embed()
+        # print(f"unified_decoder11111111")
+        # import IPython
+        # IPython.embed()
 
         # 前向传播 - 修改为传入tokens=None，input_embeds=x_emb
+        # input is checked
         output = self.transformer(tokens=None, input_embeds=x_emb)
 
         # 输出线性层和残差连接（修复：移除条件判断，始终应用残差连接）

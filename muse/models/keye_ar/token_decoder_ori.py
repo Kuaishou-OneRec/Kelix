@@ -90,8 +90,8 @@ class FlashAttentionDecoderLayer(nn.Module):
         # 自注意力子层
         tgt_norm = self.norm1(tgt)
 
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         qkv = self.qkv_proj(tgt_norm)
         q, k, v = qkv.chunk(3, dim=-1)
 
@@ -126,6 +126,9 @@ class FlashAttentionDecoderLayer(nn.Module):
         # 残差连接
         tgt = tgt + ffn_output
 
+        print("fddddd")
+        import IPython
+        IPython.embed()
         return tgt
 
 
@@ -234,9 +237,9 @@ class PureDecoderTransformer(nn.Module):
         pos_emb = self.position_embedding(positions)
         x = x_emb + pos_emb
 
-        print("PureDecoderTransformer.forward11111")
-        import IPython
-        IPython.embed()
+        # print("PureDecoderTransformer.forward11111")
+        # import IPython
+        # IPython.embed()
 
         # 逐层前向传播
         if self.use_gradient_checkpointing and self.training:
@@ -264,8 +267,8 @@ class PureDecoderTransformer(nn.Module):
         x_before_lm_head = x
         if self.lm_head is not None:
             x = self.lm_head(x)
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         return x
 
     def forward_with_tokens(self, tokens: torch.Tensor):
