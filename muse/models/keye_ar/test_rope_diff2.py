@@ -38,7 +38,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim))
         # theta = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64)[: (self.dim // 2)].float() / self.dim))
         # print(f"inv_freq_expanded0={inv_freq_expanded0.shape}, inv_freq_expanded={inv_freq_expanded.shape}")
-        # self.inv_freq = inv_freq_expanded
+        self.inv_freq = inv_freq_expanded # 这里暂时对齐custom的rope方便debug
         inv_freq_expanded = inv_freq_expanded[None,:,None]
         if save_intermediates:
             intermediates["inv_freq_expanded"] = inv_freq_expanded.clone()
