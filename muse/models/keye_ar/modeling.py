@@ -268,7 +268,8 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
-
+        import IPython
+        IPython.embed()
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type
         output = output if not hidden else [*hidden, output]
