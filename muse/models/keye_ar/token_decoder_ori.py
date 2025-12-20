@@ -83,6 +83,8 @@ class FlashAttentionDecoderLayer(nn.Module):
         return attn_output
 
     def forward(self, tgt: torch.Tensor) -> torch.Tensor:
+        import IPython
+        IPython.embed()
         batch_size, seq_len, _ = tgt.shape
 
         # 自注意力子层

@@ -4182,8 +4182,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             
             extended_token_embeddings = torch.cat([hidden_states[:,:,None], token_inputs_embeds_next], dim=2).to(hidden_states) #下一个token的embedding拼接当前token的hid
             extended_token_embeddings = extended_token_embeddings.reshape(-1, self.config.vision_config.n_q_tokens + 1, dim)
-            import IPython
-            IPython.embed()
+            # import IPython
+            # IPython.embed()
             hidden_states = self.token_head(extended_token_embeddings).reshape(batch, -1, dim)
 
         hidden_states = self.model.norm(hidden_states)
