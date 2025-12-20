@@ -7,7 +7,7 @@ import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
 os.environ["nosp"] = 'true'
-
+os.environ["Qwen3RMSNorm_fp32"] = "0"
 import json
 import torch
 import numpy as np
