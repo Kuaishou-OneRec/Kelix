@@ -38,7 +38,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         inv_freq_expanded0 = inv_freq_expanded
         
         if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
-            inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim))
+            inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim)).to(x.device)
             self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
         inv_freq_expanded = inv_freq_expanded[None,:,None]
         # Step 2: 扩展position_ids

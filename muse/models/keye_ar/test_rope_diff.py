@@ -45,17 +45,9 @@ class Qwen3RotaryEmbedding(nn.Module):
 
 
 
-import torch
-import torch.nn as nn
-from typing import Optional, Dict
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-import os
-
-
-# 会漏fp32的被转成bf16精度
 
 # 代码1：Qwen3RotaryEmbedding（保存中间结果）
-class Qwen3RotaryEmbedding_(nn.Module):
+class Qwen3RotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -85,7 +77,7 @@ class Qwen3RotaryEmbedding_(nn.Module):
         inv_freq_expanded0 = inv_freq_expanded
         
         if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
-            inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim))
+            inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim)).to(x.device)
             self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
         inv_freq_expanded = inv_freq_expanded[None,:,None]
         # Step 2: 扩展position_ids
@@ -117,7 +109,7 @@ class Qwen3RotaryEmbedding_(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-
+        
 # 代码2：RotaryPositionalEmbeddings
 class RotaryPositionalEmbeddings(nn.Module):
     def __init__(self, dim: int, max_seq_len: int = 4096, base: int = 1000_000) -> None:
