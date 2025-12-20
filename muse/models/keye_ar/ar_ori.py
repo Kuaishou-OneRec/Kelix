@@ -2012,6 +2012,65 @@ class Qwen3RotaryEmbedding(nn.Module):
 
 
 
+# 代码1：Qwen3RotaryEmbedding（保存中间结果）
+class Qwen3RotaryEmbedding(nn.Module):
+    def __init__(self, config, device=None):
+        super().__init__()
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        self.device = device
+        #self.config.rope_theta = 1000000
+        #self.config.hidden_size = 4096
+        #self.config.num_attention_heads = 32
+        self.head_dim = self.config.hidden_size // self.config.num_attention_heads
+        
+        # 初始化inv_freq
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        
+        # Step 1: 扩展inv_freq
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded0 = inv_freq_expanded
+        
+        if os.environ.get("debug_for_muse", "0") == "1":
+            inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim)).to(x.device)
+            self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
+            inv_freq_expanded = inv_freq_expanded[None,:,None]
+        
+        # Step 2: 扩展position_ids
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        # Step 3: 计算freqs（矩阵乘法+转置）
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            
+            # Step 4: 拼接生成emb
+            emb = torch.cat((freqs, freqs), dim=-1)
+            
+            # Step 5: 计算cos/sin并缩放
+            if os.environ.get("debug_for_muse", "0") == "1":
+                cos = emb.cos().bfloat16() * self.attention_scaling
+                sin = emb.sin().bfloat16() * self.attention_scaling
+            else:
+                cos = emb.cos() * self.attention_scaling
+                sin = emb.sin() * self.attention_scaling
+        
+        cos_out = cos.to(dtype=x.dtype)
+        sin_out = sin.to(dtype=x.dtype)
+        return cos_out, sin_out
+    
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
