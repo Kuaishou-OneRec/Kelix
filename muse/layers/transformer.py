@@ -205,6 +205,10 @@ class TransformerSelfAttentionLayer(nn.Module):
 
         # Residual connection; shape: [batch_size, seq_length, embed_dim]
         out = h + self.mlp_scale(mlp_out)
+        print("mmmma2222222")
+        if x.size(-1) == 512:
+            import IPython
+            IPython.embed()
         return out
 
 
