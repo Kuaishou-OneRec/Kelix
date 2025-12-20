@@ -142,7 +142,7 @@ class UnifiedTokenEmbedding(nn.Module):
     
 
 class UnifiedTransformerDecoder(TransformerDecoder):
-    def __init__(self, *args, token_head, **kwargs):
+    def __init__(self, *args, token_head: UnifiedTokenDecoder, **kwargs):
         super().__init__(*args, **kwargs)
         self.token_head = token_head
     
@@ -263,13 +263,13 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
         # import IPython
         # IPython.embed()
-
+        h = self.token_head(h.flatten(0,1)).reshape(h.shape)
         # h = h.reshape(-1, h.size(2), h.size(-1))
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type
         output = output if not hidden else [*hidden, output]

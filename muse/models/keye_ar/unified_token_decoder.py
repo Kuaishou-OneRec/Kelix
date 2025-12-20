@@ -155,6 +155,8 @@ class UnifiedTokenDecoder(Model):
         if self.lm_head is not None:
             output = self.lm_head(output)
         
+        import IPython
+        IPython.embed()
         return output
     
     def forward_with_tokens(self, tokens: torch.Tensor) -> torch.Tensor:

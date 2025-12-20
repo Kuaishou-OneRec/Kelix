@@ -254,18 +254,8 @@ class PureDecoderTransformer(nn.Module):
         x_before_lm_head = x
         if self.lm_head is not None:
             x = self.lm_head(x)
-
-        # from recovlm.utils.ds_utils import print_input_info
-        # import os
-        # if os.environ.get("OF_DEBUG"):
-        #     print_input_info(
-        #         {
-        #             "x_before_lm_head": x_before_lm_head,
-        #             "x_after_lm_head": x,
-        #         }, "keye_token_embedding2222", 
-        #         save_path="tokenizer_debug/{}.pth".format(os.environ.get("OF_DEBUG")))
-
-        # 处理返回结果
+        import IPython
+        IPython.embed()
         return x
 
     def forward_with_tokens(self, tokens: torch.Tensor):
