@@ -70,7 +70,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
-    def forward(self, x, position_ids) -> tuple[torch.Tensor, torch.Tensor, Optional[Dict]]:
+    def forward(self, x, position_ids):
         
         # Step 1: 扩展inv_freq
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
@@ -109,7 +109,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-        
+
 # 代码2：RotaryPositionalEmbeddings
 class RotaryPositionalEmbeddings(nn.Module):
     def __init__(self, dim: int, max_seq_len: int = 4096, base: int = 1000_000) -> None:
