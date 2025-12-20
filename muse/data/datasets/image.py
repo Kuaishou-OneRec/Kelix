@@ -43,6 +43,7 @@ from muse.data.datasets.base import DistributedDataset, load_image
 from muse.data.utils import (
     get_aspect_ratio_dict, 
     get_closest_ratio,
+    get_resolution_level,
     ResolutionBudget,
     ResolutionBudgetConfig,
 )
@@ -1044,12 +1045,13 @@ class MultiScaleDatasetWrapper(IterableDataset):
         total_steps: int = 1,
         drop_last: bool = False,
         max_bucket_size: int = 10000,
+        max_resolution_level: int = 1024,
     ):
         self.dataset = dataset
         self.config = config
         self.drop_last = drop_last
         self.max_bucket_size = max_bucket_size
-        
+        self.max_resolution_level = max_resolution_level
         # Use same random generator as dataset for consistent results across ranks
         self.rng = dataset.rng
         
@@ -1110,7 +1112,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
                 continue
             orig_h, orig_w = sample["height"], sample["width"]
 
-            res = self.scheduler.current_resolution
+            res = get_resolution_level(orig_h, orig_w)
             if res not in buckets:
                 continue
             aspect_ratio = get_closest_ratio(

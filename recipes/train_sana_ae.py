@@ -198,6 +198,9 @@ def get_argument_parser():
     parser.add_argument("--multi-scale", action="store_true",
                         help="Enable multi-scale training with variable aspect ratios. "
                              "Use --resolution-budgets for curriculum scheduling.")
+
+    parser.add_argument("--max-resolution-level", type=int, default=1024,
+                        help="Maximum resolution level for multi-scale training")
     
     parser.add_argument("--resolution-budgets", type=str, default=None,
                         help="Resolution budgets as 'size:batch_size,...' "
@@ -1169,6 +1172,7 @@ def train():
             config=budget_config,
             total_steps=args.num_training_steps,
             drop_last=True,
+            max_resolution_level=args.max_resolution_level,
         )
         
         dataloader = DataLoader(
@@ -1301,9 +1305,9 @@ def train():
 
             scheduler.step()
             
-            # Update multi-scale weights based on training progress
-            if multi_scale_wrapper is not None:
-                multi_scale_wrapper.set_step(scheduler.global_step)
+            # # Update multi-scale weights based on training progress
+            # if multi_scale_wrapper is not None:
+            #     multi_scale_wrapper.set_step(scheduler.global_step)
 
             # 3. VAE Encode (get latents)
             with record_function("VAE_Encode"):
