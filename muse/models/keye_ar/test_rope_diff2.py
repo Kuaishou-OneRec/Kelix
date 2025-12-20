@@ -103,6 +103,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.register_buffer("theta", theta, persistent=False)
         
         self.build_rope_cache(self.max_seq_len)
+        print(f"self.cache_ddd000", self.cache.dtype)
 
     def build_rope_cache(self, max_seq_len: int = 4096) -> None:
         # Step 2: 生成seq_idx（对应Qwen的position_ids）
@@ -210,6 +211,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         
         # 最终提取Custom的cos/sin（和测试逻辑一致）
         custom_cache = self.cache[:seq_len]
+        print(f"self.cache_ddd", self.cache.dtype)
         cos2 = custom_cache[..., 0].cpu()
         sin2 = custom_cache[..., 1].cpu()
         q_cos_out = qwen_intermediates["cos_final"][0].cpu()
