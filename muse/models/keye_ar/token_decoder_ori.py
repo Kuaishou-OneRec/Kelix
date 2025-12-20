@@ -213,9 +213,7 @@ class PureDecoderTransformer(nn.Module):
         Returns:
             out: (Batch, Seq_Len, d_model)
         """
-        print("PureDecoderTransformer.forward")
-        # import IPython
-        # IPython.embed()
+
         batch_size, seq_len, _ = x_emb.shape
         
         if not self.reduce: x_emb0 = 0
@@ -232,6 +230,10 @@ class PureDecoderTransformer(nn.Module):
         positions = torch.arange(seq_len, device=x_emb.device).unsqueeze(0)
         pos_emb = self.position_embedding(positions)
         x = x_emb + pos_emb
+
+        print("PureDecoderTransformer.forward")
+        import IPython
+        IPython.embed()
 
         # 逐层前向传播
         if self.use_gradient_checkpointing and self.training:
