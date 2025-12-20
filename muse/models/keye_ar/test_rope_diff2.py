@@ -71,8 +71,8 @@ class Qwen3RotaryEmbedding(nn.Module):
                 intermediates["cos_final"] = cos.clone()
                 intermediates["sin_final"] = sin.clone()
         
-        cos_out = cos#.to(dtype=x.dtype)
-        sin_out = sin#.to(dtype=x.dtype)
+        cos_out = cos.float()#.to(dtype=x.dtype)
+        sin_out = sin.to(dtype=x.dtype)
         
         if save_intermediates:
             return cos_out, sin_out, intermediates
