@@ -228,9 +228,6 @@ class FlashAttentionDecoderLayer(nn.Module):
         # 残差连接
         tgt = tgt + ffn_output
 
-        print("fddddd")
-        import IPython
-        IPython.embed()
         return tgt
 
 

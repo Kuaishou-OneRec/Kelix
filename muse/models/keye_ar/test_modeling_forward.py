@@ -1,6 +1,13 @@
 """
 KeyeARModel前向demo脚本
 基于test_ar_ori_forward.py修改，适配modeling.py中的KeyeARModel
+
+diff
+1. 8合1聚合embedding的时候有精度误差，muse代码求sum之后变成了fp32，而muse的保持bf16。
+2. Qwen3RMSNorm实现diff. 这个就用muse的Qwen3RMSNorm
+3. rope inv_freq和pos embedding diff. muse代码前向的时候使用的是bf16的inv freq (因为model.bfloat16()的时候会转成bf16), 而recovlm使用的是float32精度. 
+    这个引入的logits diff比较大。
+4. EagerAttention diff. 小transformer使用的是自己另外实现的eager attention, 跟muse的实现有区别, bf16下有万分位的MAE diff
 """
 
 import os
