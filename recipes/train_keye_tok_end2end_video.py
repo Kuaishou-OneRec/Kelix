@@ -749,7 +749,7 @@ def train():
             dataset_config["world_size"] = dist.get_world_size()
             print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
         
-        dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast(**dataset_config)
+        dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast_video(**dataset_config)
 
         if args.batch_size is not None and args.batch_size != 1:
             print_rank_0(f"Warning: batch_size arg is {args.batch_size}, but ignored (forced to 1) because dataset handles packing.")
