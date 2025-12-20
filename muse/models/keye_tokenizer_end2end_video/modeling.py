@@ -532,34 +532,54 @@ class KeyeTokenizerEnd2EndVideo(Model):
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
         
-        if pixel_values_videos is not None:      
-            video_beta = 1.0  
-            vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
-            video_embeds = self._project_visual_tokens(vq_out_video["z_q"])
-            # 记录loss
-            video_codebook_loss, video_commitment_loss, video_vq_indices = vq_out_video['codebook_loss'], vq_out_video['commitment_loss'], vq_out_video['indices']
-            if "codebook_loss" in aux_losses:
-                aux_losses["codebook_loss"] = [
-                        img_loss + video_beta * vid_loss
-                        for img_loss, vid_loss in zip(aux_losses["codebook_loss"], video_codebook_loss)
-                    ]
-            else:
-                aux_losses["codebook_loss"] = [video_beta * vid_loss for vid_loss in video_codebook_loss]
-            if "commitment_loss" in aux_losses:
-                aux_losses["commitment_loss"] = [
-                        img_loss + video_beta * vid_loss
-                        for img_loss, vid_loss in zip(aux_losses["commitment_loss"], video_commitment_loss)
-                    ]
-            else:
-                aux_losses["commitment_loss"] = [video_beta * vid_loss for vid_loss in video_commitment_loss]
+        if pixel_values_videos is not None:
+            try:
+                video_beta = 1.0
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Processing video data: pixel_values_videos shape: {pixel_values_videos.shape}, video_grid_thw shape: {video_grid_thw.shape if video_grid_thw is not None else None}")
+                vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
+                logger.info(f"VQ output keys: {list(vq_out_video.keys())}")
+                if 'indices' not in vq_out_video:
+                    raise ValueError(f"VQ output missing 'indices' key: {list(vq_out_video.keys())}")
+                video_embeds = self._project_visual_tokens(vq_out_video["z_q"])
+                # 记录loss
+                video_codebook_loss, video_commitment_loss, video_vq_indices = vq_out_video['codebook_loss'], vq_out_video['commitment_loss'], vq_out_video['indices']
+                logger.info(f"Video VQ indices type: {type(video_vq_indices)}, length: {len(video_vq_indices) if isinstance(video_vq_indices, list) else 'not list'}")
+                if "codebook_loss" in aux_losses:
+                    aux_losses["codebook_loss"] = [
+                            img_loss + video_beta * vid_loss
+                            for img_loss, vid_loss in zip(aux_losses["codebook_loss"], video_codebook_loss)
+                        ]
+                else:
+                    aux_losses["codebook_loss"] = [video_beta * vid_loss for vid_loss in video_codebook_loss]
+                if "commitment_loss" in aux_losses:
+                    aux_losses["commitment_loss"] = [
+                            img_loss + video_beta * vid_loss
+                            for img_loss, vid_loss in zip(aux_losses["commitment_loss"], video_commitment_loss)
+                        ]
+                else:
+                    aux_losses["commitment_loss"] = [video_beta * vid_loss for vid_loss in video_commitment_loss]
 
-            aux_losses["video_indices"] = video_vq_indices
-            n_video_tokens = (input_ids == self.video_token_id).sum().item()
-            n_video_features = video_embeds.shape[0]
-            if n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
+                aux_losses["video_indices"] = video_vq_indices
+                logger.info(f"Successfully set video_indices")
+                n_video_tokens = (input_ids == self.video_token_id).sum().item()
+                n_video_features = video_embeds.shape[0]
+                if n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
+            except Exception as e:
+                # Debug: log the exception that prevented video_indices from being set
+                import logging
+                logger = logging.getLogger(__name__)
+                import traceback
+                logger.warning(f"Failed to process video data: {e}")
+                logger.warning(f"pixel_values_videos shape: {pixel_values_videos.shape}")
+                logger.warning(f"video_grid_thw shape: {video_grid_thw.shape if video_grid_thw is not None else None}")
+                logger.warning(f"video_grid_thw content: {video_grid_thw}")
+                logger.warning(f"Traceback: {traceback.format_exc()}")
+                # Don't set video_indices, so it remains None
 
             mask = (input_ids == self.video_token_id)
             mask_unsqueezed = mask.unsqueeze(-1)
