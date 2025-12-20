@@ -47,7 +47,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
         if save_intermediates:
             intermediates["position_ids_expanded"] = position_ids_expanded.clone()
-        
+        print(f"self.attention_scaling={self.attention_scaling}")
         # Step 3: 计算freqs（矩阵乘法+转置）
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -71,7 +71,7 @@ class Qwen3RotaryEmbedding(nn.Module):
                 intermediates["cos_final"] = cos.clone()
                 intermediates["sin_final"] = sin.clone()
         
-        cos_out = cos.float().bfloat16()#.to(dtype=x.dtype)
+        cos_out = cos.to(dtype=x.dtype)
         sin_out = sin.to(dtype=x.dtype)
         
         if save_intermediates:
