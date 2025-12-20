@@ -94,6 +94,9 @@ class Qwen3Model(Model):
                 sa_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
                 mlp_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
             )
+            print(f"qwen3modelllll")
+            import IPython
+            IPython.embed()
             layers.append(layer)
 
         tok_embeddings = nn.Embedding(config.vocab_size, config.embed_dim)
