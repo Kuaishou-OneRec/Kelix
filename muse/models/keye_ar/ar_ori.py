@@ -1512,7 +1512,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         )
 
 
-if os.environ.get("debug_for_muse", "0") == "0":
+if os.environ.get("debug_for_muse", "0") == "0" or True:
     class Qwen3RMSNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-6):
             """
