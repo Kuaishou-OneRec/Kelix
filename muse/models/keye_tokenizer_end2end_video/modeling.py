@@ -11,7 +11,7 @@ from einops import rearrange
 
 from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig
-from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
+from muse.config.model_config import ModelConfig, KeyeTokenizerConfig, KeyeTokenizerEnd2EndVideoConfig
 from muse.models.qwen3.modeling import Qwen3Model
 from muse.models.keye_tokenizer_end2end_video._layers import Projector
 from muse.models.keye_vit.modeling import KeyeVisionModel
@@ -108,21 +108,21 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
     def __init__(
         self,
-        qwen_config: Qwen3Config,
-        vision_config: KeyeVisionConfig,
-        tokenizer_config: Optional[KeyeTokenizerConfig] = None,
-        image_token_id: int = -1,
-        video_token_id: int = -1,
-        pool: str = "avg",
-        amplifier: float = 1.0,
+        config: KeyeTokenizerEnd2EndImageConfig
     ):
-        super().__init__(qwen_config)
+        super().__init__(config)
+        self.config = config
+        
+        qwen_config = config.qwen_config
+        vision_config = config.vision_config
+        tokenizer_config = config.tokenizer_config
+        image_token_id = config.image_token_id
+        pool = config.pool
+        amplifier = config.amplifier
+
         self.model = Qwen3Model(qwen_config)
         self.use_multimodal_rope = qwen_config.use_multimodal_rope
-        tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
-            vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
-        )
-        self.visual_tokenizer = KeyeVideoTokenizer(tokenizer_config)
+        self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
         self.quant_projector = nn.ModuleList(
             [
                 nn.Linear(tokenizer_config.embedding_dim, qwen_config.embed_dim, bias=False)
@@ -130,11 +130,11 @@ class KeyeTokenizerEnd2EndVideo(Model):
             ]
         )
         self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
         self.pool = pool
         self.amplifier = amplifier
         self.vocab_size = qwen_config.vocab_size
-        # self.lm_head = nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size, bias=False)
+        # Note: lm_head is inside self.model.model.output (TransformerDecoder.output)
+        # We don't define a separate lm_head here to avoid redundancy
         # cache rope deltas (aligned with origin implementation)
         self.rope_deltas: Optional[torch.Tensor] = None
 
@@ -153,6 +153,162 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
     def get_checkpointable_module_classes(self):
         return self.model.get_checkpointable_module_classes()
+
+    def get_optimizer_grouped_parameters(
+            self,
+            learning_rate: float,
+            weight_decay: float,
+            vision_learning_rate: float = -1.0,
+            vision_lr_layer_decay: float = 1.0,
+            no_decay_name_list: Optional[List[str]] = None) -> List[Dict[str, any]]:
+        """Get the optimizer grouped parameters with separate vision learning rate.
+        
+        Args:
+            learning_rate: The learning rate for LLM and projector.
+            weight_decay: The weight decay for AdamW optimizer.
+            vision_learning_rate: The learning rate for vision encoder. 
+                If < 0, uses learning_rate.
+            vision_lr_layer_decay: Layer-wise learning rate decay for vision encoder.
+            no_decay_name_list: List of parameter name patterns that should not have weight decay.
+        
+        Returns:
+            A list of optimizer grouped parameters for AdamW optimizer.
+        """
+        if vision_learning_rate < 0:
+            vision_learning_rate = learning_rate
+        
+        if no_decay_name_list is None:
+            no_decay_name_list = ["bias", "layer_norm", "layernorm", "norm"]
+        
+        def is_no_decay(name: str) -> bool:
+            return any(nd in name.lower() for nd in no_decay_name_list)
+        
+        def get_vision_layer_idx(name: str) -> int:
+            """Extract layer index from vision encoder parameter name."""
+            # visual_tokenizer.visual.encoder.layers.{idx}.*
+            if "visual_tokenizer.visual.encoder.layers." in name:
+                parts = name.split(".")
+                for i, part in enumerate(parts):
+                    if part == "layers" and i + 1 < len(parts):
+                        try:
+                            return int(parts[i + 1])
+                        except ValueError:
+                            pass
+            return -1
+        
+        # Get the number of vision encoder layers for layer decay
+        num_vision_layers = 0
+        if hasattr(self, 'visual_tokenizer') and hasattr(self.visual_tokenizer, 'visual'):
+            if hasattr(self.visual_tokenizer.visual, 'encoder'):
+                num_vision_layers = len(self.visual_tokenizer.visual.encoder.layers)
+        
+        # Group parameters
+        vision_decay_params = []
+        vision_no_decay_params = []
+        llm_decay_params = []
+        llm_no_decay_params = []
+        
+        vision_decay_lrs = []
+        vision_no_decay_lrs = []
+        
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            
+            # Check if it's a vision encoder parameter
+            is_vision = name.startswith("visual_tokenizer.visual.")
+            
+            if is_vision:
+                # Apply layer-wise learning rate decay
+                layer_idx = get_vision_layer_idx(name)
+                if layer_idx >= 0 and num_vision_layers > 0 and vision_lr_layer_decay < 1.0:
+                    # Layer decay: deeper layers get higher learning rate
+                    # layer_idx=0 gets vision_lr * decay^(num_layers-1)
+                    # layer_idx=num_layers-1 gets vision_lr
+                    decay_factor = vision_lr_layer_decay ** (num_vision_layers - 1 - layer_idx)
+                    layer_lr = vision_learning_rate * decay_factor
+                else:
+                    layer_lr = vision_learning_rate
+                
+                if is_no_decay(name):
+                    vision_no_decay_params.append(param)
+                    vision_no_decay_lrs.append(layer_lr)
+                else:
+                    vision_decay_params.append(param)
+                    vision_decay_lrs.append(layer_lr)
+            else:
+                # LLM and projector parameters
+                if is_no_decay(name):
+                    llm_no_decay_params.append(param)
+                else:
+                    llm_decay_params.append(param)
+        
+        optimizer_grouped_parameters = []
+        
+        # LLM parameters with weight decay
+        if llm_decay_params:
+            optimizer_grouped_parameters.append({
+                "params": llm_decay_params,
+                "weight_decay": weight_decay,
+                "lr": learning_rate,
+            })
+        
+        # LLM parameters without weight decay
+        if llm_no_decay_params:
+            optimizer_grouped_parameters.append({
+                "params": llm_no_decay_params,
+                "weight_decay": 0.0,
+                "lr": learning_rate,
+            })
+        
+        # Vision parameters - group by learning rate for layer decay
+        if vision_lr_layer_decay < 1.0 and num_vision_layers > 0:
+            # Group by learning rate for layer-wise decay
+            lr_to_decay_params = {}
+            lr_to_no_decay_params = {}
+            
+            for param, lr in zip(vision_decay_params, vision_decay_lrs):
+                lr_key = round(lr, 10)  # Round to avoid floating point issues
+                if lr_key not in lr_to_decay_params:
+                    lr_to_decay_params[lr_key] = []
+                lr_to_decay_params[lr_key].append(param)
+            
+            for param, lr in zip(vision_no_decay_params, vision_no_decay_lrs):
+                lr_key = round(lr, 10)
+                if lr_key not in lr_to_no_decay_params:
+                    lr_to_no_decay_params[lr_key] = []
+                lr_to_no_decay_params[lr_key].append(param)
+            
+            for lr, params in lr_to_decay_params.items():
+                optimizer_grouped_parameters.append({
+                    "params": params,
+                    "weight_decay": weight_decay,
+                    "lr": lr,
+                })
+            
+            for lr, params in lr_to_no_decay_params.items():
+                optimizer_grouped_parameters.append({
+                    "params": params,
+                    "weight_decay": 0.0,
+                    "lr": lr,
+                })
+        else:
+            # Simple case: all vision params have the same learning rate
+            if vision_decay_params:
+                optimizer_grouped_parameters.append({
+                    "params": vision_decay_params,
+                    "weight_decay": weight_decay,
+                    "lr": vision_learning_rate,
+                })
+            
+            if vision_no_decay_params:
+                optimizer_grouped_parameters.append({
+                    "params": vision_no_decay_params,
+                    "weight_decay": 0.0,
+                    "lr": vision_learning_rate,
+                })
+        
+        return optimizer_grouped_parameters
 
     @classmethod
     def convert_hf_state_dict(cls,
@@ -515,10 +671,9 @@ class KeyeTokenizerEnd2EndVideo(Model):
             aux_losses["commitment_loss"] = commitment_loss
             aux_losses["indices"] = vq_indices
 
-
-
             n_image_tokens = (input_ids == self.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
+
             if n_image_tokens != n_image_features:
                 fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
                 raise ValueError(

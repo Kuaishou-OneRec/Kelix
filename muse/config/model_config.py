@@ -532,3 +532,37 @@ class KeyeTokenizerEnd2EndImageConfig(ModelConfig):
         default=1.0,
         description="Amplifier for visual token projection"
     )
+
+
+class KeyeTokenizerEnd2EndVideoConfig(ModelConfig):
+    """Configuration for KeyeTokenizerEnd2EndVideo model."""
+
+    model_class: str = Field(
+        default="KeyeTokenizerEnd2EndVideo",
+        description="Model class name"
+    )
+    qwen_config: Qwen3Config = Field(
+        description="Configuration for LLM"
+    )
+    vision_config: KeyeVisionConfig = Field(
+        description="Configuration for vision encoder"
+    )
+    tokenizer_config: KeyeTokenizerConfig = Field(
+        description="Configuration for visual tokenizer"
+    )
+    image_token_id: int = Field(
+        default=-1,
+        description="Token ID for image placeholder"
+    )
+    video_token_id: int = Field(
+        default=-1,
+        description="Token ID for video placeholder"
+    )
+    pool: str = Field(
+        default="avg",
+        description="Pooling method for visual token projection"
+    )
+    amplifier: float = Field(
+        default=1.0,
+        description="Amplifier for visual token projection"
+    )
