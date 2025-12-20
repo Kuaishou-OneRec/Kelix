@@ -180,6 +180,7 @@ class TransformerSelfAttentionLayer(nn.Module):
             # print(f"selfatt")
             # import IPython
             # IPython.embed()
+            pass
         if self.mask_mod is not None:
             # With TP we need to use a replicated tensor here
             bsz, seq_len, *_ = h.shape
