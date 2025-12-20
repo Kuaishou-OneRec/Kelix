@@ -6,8 +6,8 @@ import json
 import torch
 import tempfile
 import base64
+import os
 from io import BytesIO
-from unittest.mock import Mock, patch, MagicMock
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -24,6 +24,17 @@ from muse.data.utils import (
     ResolutionBudgetConfig,
     get_aspect_ratio_dict,
     get_closest_ratio,
+)
+
+
+# Real processor path for testing
+PROCESSOR_PATH = "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/"
+PROCESSOR_AVAILABLE = os.path.exists(PROCESSOR_PATH)
+
+# Skip marker for tests that require the real processor
+requires_processor = pytest.mark.skipif(
+    not PROCESSOR_AVAILABLE,
+    reason=f"Processor not found at {PROCESSOR_PATH}"
 )
 
 
@@ -47,27 +58,6 @@ def create_test_parquet(tmp_path, data=None):
     return str(parquet_path)
 
 
-class MockProcessor:
-    """Mock processor for testing, compatible with HuggingFace processor interface."""
-    
-    def __init__(self):
-        self.image_processor = Mock()
-    
-    def apply_chat_template(self, messages, tokenize=False):
-        """Mock chat template application."""
-        return "<|im_start|>user\n<image>\n<|im_end|>"
-    
-    def __call__(self, text, images, padding=False, truncation=False, return_tensors=None):
-        """Mock processor call."""
-        num_images = len(images) if images else 1
-        # Create mock outputs that mimic Qwen2-VL processor
-        result = {
-            "pixel_values": torch.randn(num_images * 16, 3, 14, 14),  # [patches, C, H, W]
-            "image_grid_thw": torch.tensor([[1, 4, 4]] * num_images),  # [B, 3]
-        }
-        return result
-
-
 class MockDataset:
     """Mock iterable dataset for testing MultiScaleDatasetWrapper."""
     
@@ -89,19 +79,18 @@ class MockDataset:
 # Tests for Token2ImageDataset
 # =============================================================================
 
+@requires_processor
 class TestToken2ImageDatasetInit:
     """Test Token2ImageDataset initialization."""
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_init_basic(self, mock_auto_processor, tmp_path):
+    def test_init_basic(self, tmp_path):
         """Test basic initialization with default parameters."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=512,
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -110,31 +99,27 @@ class TestToken2ImageDatasetInit:
         assert dataset.center_crop is True
         assert dataset.multi_scale is False
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_init_with_tuple_size(self, mock_auto_processor, tmp_path):
+    def test_init_with_tuple_size(self, tmp_path):
         """Test initialization with tuple image_size."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=(256, 512),
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
         assert dataset.image_size == (256, 512)
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_init_multi_scale(self, mock_auto_processor, tmp_path):
+    def test_init_multi_scale(self, tmp_path):
         """Test initialization with multi_scale enabled."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=1024,
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             multi_scale=True,
             num_workers=1
         )
@@ -142,19 +127,18 @@ class TestToken2ImageDatasetInit:
         assert dataset.multi_scale is True
 
 
+@requires_processor
 class TestToken2ImageDatasetTransform:
     """Test Token2ImageDataset transform methods."""
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_build_transform(self, mock_auto_processor, tmp_path):
+    def test_build_transform(self, tmp_path):
         """Test _build_transform creates valid transform pipeline."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=256,
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             center_crop=True,
             num_workers=1
         )
@@ -168,16 +152,14 @@ class TestToken2ImageDatasetTransform:
         assert transformed.min() >= -1.0
         assert transformed.max() <= 1.0
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_build_multiscale_transform(self, mock_auto_processor, tmp_path):
+    def test_build_multiscale_transform(self, tmp_path):
         """Test _build_multiscale_transform creates correct size transform."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=512,
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -189,18 +171,17 @@ class TestToken2ImageDatasetTransform:
         assert transformed.shape == (3, 768, 512)
 
 
+@requires_processor
 class TestToken2ImageDatasetExtract:
     """Test Token2ImageDataset extract_image_text method."""
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_extract_direct_fields(self, mock_auto_processor, tmp_path):
+    def test_extract_direct_fields(self, tmp_path):
         """Test extraction from direct image/text fields."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -212,15 +193,13 @@ class TestToken2ImageDatasetExtract:
         assert result["image"] is img
         assert result["text"] == "A beautiful sunset"
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_extract_from_messages(self, mock_auto_processor, tmp_path):
+    def test_extract_from_messages(self, tmp_path):
         """Test extraction from messages format."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -236,15 +215,13 @@ class TestToken2ImageDatasetExtract:
         assert result["text"] == "Generate an image of a cat"
         assert result["image"] == img_data
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_extract_from_segments(self, mock_auto_processor, tmp_path):
+    def test_extract_from_segments(self, tmp_path):
         """Test extraction from segments format."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -260,15 +237,13 @@ class TestToken2ImageDatasetExtract:
         assert result["text"] == "Segment text"
         assert result["image"] == img_data
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    def test_extract_returns_none_for_missing(self, mock_auto_processor, tmp_path):
+    def test_extract_returns_none_for_missing(self, tmp_path):
         """Test extraction returns None for missing data."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
@@ -278,23 +253,18 @@ class TestToken2ImageDatasetExtract:
         assert result is None
 
 
+@requires_processor
 class TestToken2ImageDatasetCollateFn:
     """Test Token2ImageDataset collate_fn method."""
 
-    @patch('muse.data.datasets.image.AutoProcessor')
-    @patch('muse.data.datasets.image.process_vision_info')
-    @patch('muse.data.datasets.base.load_image')
-    def test_collate_concatenates_pixel_values(
-        self, mock_load_image, mock_process_vision_info, mock_auto_processor, tmp_path
-    ):
+    def test_collate_concatenates_pixel_values(self, tmp_path):
         """Test that collate_fn concatenates pixel_values correctly."""
-        mock_auto_processor.from_pretrained.return_value = MockProcessor()
         parquet_path = create_test_parquet(tmp_path)
         
         dataset = Token2ImageDataset(
             sources=[parquet_path],
             image_size=256,
-            processor_path="mock_processor",
+            processor_path=PROCESSOR_PATH,
             num_workers=1
         )
         
