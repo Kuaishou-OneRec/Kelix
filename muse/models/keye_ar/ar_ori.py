@@ -1512,33 +1512,67 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         )
 
 
+if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
+    class Qwen3RMSNorm(nn.Module):
+        def __init__(self, hidden_size, eps=1e-6):
+            """
+            Qwen3RMSNorm is equivalent to T5LayerNorm
+            """
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(hidden_size))
+            self.variance_epsilon = eps
 
-class Qwen3RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+        def forward(self, hidden_states):
+            input_dtype = hidden_states.dtype
+            print(11111, hidden_states.dtype)
+            if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
+                print(f"32_converted")
+                hidden_states = hidden_states.to(torch.float32)
+            print(22222, hidden_states.dtype)
+            variance = hidden_states.pow(2).mean(-1, keepdim=True)
+            print(33333, variance.dtype)
+            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+            print(444444, hidden_states.dtype)
+            # print(f"self.weight={self.weight}, hidden_states={hidden_states}")
+            return self.weight * hidden_states.to(hidden_states)
+
+        def extra_repr(self):
+            return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+else:
+
+    class RMSNorm(nn.Module):
         """
-        Qwen3RMSNorm is equivalent to T5LayerNorm
+        Root Mean Square Normalization in fp32.
+
+        See: https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html
+
+        Args:
+            dim (int): embedding size
+            eps (float): small value to avoid division by zero. Default: 1e-6
         """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        print(11111, hidden_states.dtype)
-        if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
-            print(f"32_converted")
-            hidden_states = hidden_states.to(torch.float32)
-        print(22222, hidden_states.dtype)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        print(33333, variance.dtype)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        print(444444, hidden_states.dtype)
-        # print(f"self.weight={self.weight}, hidden_states={hidden_states}")
-        return self.weight * hidden_states.to(hidden_states)
+        def __init__(self, dim: int, eps: float = 1e-6) -> None:
+            super().__init__()
+            self.normalized_shape = (dim,)
+            self.eps = eps
+            self.weight = nn.Parameter(torch.ones(dim))
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            """
+            Args:
+                x (torch.Tensor): input tensor to normalize
 
+            Returns:
+                torch.Tensor: The normalized and scaled tensor having the same shape as ``x``.
+            """
+            # computation is in fp32
+            x_fp32 = x.float()
+            x_normed = (
+                x_fp32 * torch.rsqrt(x_fp32.pow(2).mean(-1, keepdim=True) + self.eps)
+            ).type_as(x)
+            return x_normed * self.weight
+        
 
 class KeyePatchMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
