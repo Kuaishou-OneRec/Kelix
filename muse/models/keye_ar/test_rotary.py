@@ -93,6 +93,8 @@ def test_rmsnorm_bf16():
         output_v1 = norm_v1(input_tensor)
         output_v2 = norm_v2(input_tensor)
     
+    print(output_v1)
+    print(output_v2)
     # 5. 计算数值差异
     # 绝对误差（逐元素）
     abs_error = torch.abs(output_v1 - output_v2)
