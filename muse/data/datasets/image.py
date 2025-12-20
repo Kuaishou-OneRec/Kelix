@@ -909,7 +909,7 @@ class Token2ImageDataset(DistributedDataset):
                 "content": [
                     {
                         "type": "image",
-                        "image": image,
+                        "image": target_image,
                         "min_pixels": 4 * 28 * 28,
                         "max_pixels": self.max_condition_length * 28 * 28
                     }
