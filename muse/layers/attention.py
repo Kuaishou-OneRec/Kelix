@@ -239,7 +239,7 @@ class MultiHeadAttention(nn.Module):
         """
         if x.size(-1) == 512:
             import IPython
-            IPython3.embed()
+            IPython.embed()
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
