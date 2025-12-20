@@ -16,7 +16,7 @@
     "cut_to_pad": 0,
     "patch_size": 14,
     "use_flops_balance": false,
-    "video_total_pixels": 47040000,
+    "video_total_pixels": 154140672,
     "max_sample_length": 15000,
     "train_video": true
 }
