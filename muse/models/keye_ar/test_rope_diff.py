@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-
+import os
 
 # 代码1：Qwen3RotaryEmbedding
 class Qwen3RotaryEmbedding(nn.Module):
