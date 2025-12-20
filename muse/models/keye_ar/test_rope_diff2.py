@@ -155,8 +155,8 @@ class RotaryPositionalEmbeddings(nn.Module):
         print(f"  均值误差: {diff:.10f}")
         print(f"  是否一致: {'✅' if is_same else '❌'}")
         if not is_same:
-            print(f"  Qwen前5值: {q_inv_freq[:5].numpy()}")
-            print(f"  Custom前5值: {c_theta[:5].numpy()}")
+            print(f"  Qwen前5值: {q_inv_freq[:5].float().numpy()}")
+            print(f"  Custom前5值: {c_theta[:5].float().numpy()}")
         
         # 对比步骤2: freqs_before_trans (Qwen) vs idx_theta (Custom)
         print("\n【步骤2】Qwen.freqs_before_trans vs Custom.idx_theta")
