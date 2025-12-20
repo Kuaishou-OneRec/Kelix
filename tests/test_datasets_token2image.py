@@ -306,7 +306,7 @@ class TestToken2ImageDatasetCollateFn:
 
         torch.testing.assert_close(
             result["image_grid_thw"],
-            torch.tensor([[1, 18, 18], [1, 18, 18]])
+            torch.tensor([[1, 16, 18], [1, 16, 18]])
         )
 
 
