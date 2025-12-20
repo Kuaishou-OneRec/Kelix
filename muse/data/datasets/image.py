@@ -983,8 +983,7 @@ class Token2ImageDataset(DistributedDataset):
         """
         # Here is the real process of batch.
         result = {}
-        if not self.multi_scale:
-            batch = [self._process_pair(sample) for sample in batch]
+        batch = [self._process_pair(sample) for sample in batch]
 
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)

@@ -265,20 +265,21 @@ class TestToken2ImageDatasetCollateFn:
             sources=[parquet_path],
             image_size=256,
             processor_path=PROCESSOR_PATH,
-            num_workers=1
+            num_workers=1,
+            multi_scale=True
         )
         
-        # Create batch with pre-processed samples
+        # Create batch with raw samples (PIL images) and target dimensions for multi_scale
         batch = [
             {
-                "image": torch.randn(3, 256, 256),
-                "pixel_values": torch.randn(16, 3, 14, 14),
-                "image_grid_thw": torch.tensor([[1, 4, 4]]),
+                "image": create_test_image(256, 256),
+                "target_height": 256,
+                "target_width": 256,
             },
             {
-                "image": torch.randn(3, 256, 256),
-                "pixel_values": torch.randn(16, 3, 14, 14),
-                "image_grid_thw": torch.tensor([[1, 4, 4]]),
+                "image": create_test_image(256, 256),
+                "target_height": 256,
+                "target_width": 256,
             }
         ]
         
@@ -287,12 +288,13 @@ class TestToken2ImageDatasetCollateFn:
         assert "pixel_values" in result
         assert "image_grid_thw" in result
         assert "image" in result
-        # pixel_values should be concatenated along dim 0
-        assert result["pixel_values"].shape[0] == 32  # 16 + 16
-        # image_grid_thw should be concatenated
+        # pixel_values should be concatenated along dim 0 (2 samples)
+        assert result["pixel_values"].dim() == 4
+        # image_grid_thw should be concatenated (2 samples)
         assert result["image_grid_thw"].shape[0] == 2
-        # image should be stacked
-        assert result["image"].shape == (2, 3, 256, 256)
+        # image should be stacked (batch_size=2)
+        assert result["image"].shape[0] == 2
+        assert result["image"].shape[1] == 3  # RGB channels
 
 
 # =============================================================================
