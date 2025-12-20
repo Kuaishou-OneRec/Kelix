@@ -2253,11 +2253,12 @@ class KeyeFlashAttention2(KeyeAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         cos, sin = position_embeddings
-        print(f"query_states_before_mrope={query_states}")
-        torch.save(query_states, "query_states_before_mrope.pt")
-        torch.save(cos, "cos.pt")
-        import IPython
-        IPython.embed()
+        # print(f"query_states_before_mrope={query_states}")
+        # torch.save(query_states, "query_states_before_mrope.pt")
+        # torch.save(cos, "cos.pt")
+        
+        # import IPython
+        # IPython.embed()
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin #, self.rope_scaling["mrope_section"]
         )

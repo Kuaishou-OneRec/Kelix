@@ -177,9 +177,9 @@ class TransformerSelfAttentionLayer(nn.Module):
         h = self.sa_norm(x)
         if getattr(self.sa_norm, "weight", torch.zeros([0])).shape[0] == 4096 \
             or getattr(self.sa_norm, "scale", torch.zeros([0])).shape[0] == 4096:
-            print(f"selfatt")
-            import IPython
-            IPython.embed()
+            # print(f"selfatt")
+            # import IPython
+            # IPython.embed()
         if self.mask_mod is not None:
             # With TP we need to use a replicated tensor here
             bsz, seq_len, *_ = h.shape

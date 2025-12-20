@@ -224,8 +224,8 @@ class Qwen3Attention(nn.Module):
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         q_after_norm = q
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:

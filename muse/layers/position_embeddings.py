@@ -292,6 +292,9 @@ class RotaryPositionalEmbeddings(nn.Module):
         x_out = (x * cos) + (x_rotated * sin)
 
         return x_out
+    
+# q_after_norm
+# (q_after_norm * cos[0,:66]) + (x_rotated * sin[0,:66])
 
 
 class Roraty2DPositionalEmbeddings(nn.Module):
