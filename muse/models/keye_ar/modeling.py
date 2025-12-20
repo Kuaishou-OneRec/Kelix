@@ -234,8 +234,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
-        print(f"unified_output_before_input=\n{h}, input_pos={input_pos}")
-        torch.save(h, "h.pt")
+
         hidden = []
         for i, layer in enumerate(self.layers):
             if i in self.output_hidden_states:
@@ -249,10 +248,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 input_pos=input_pos,
                 **kwargs,
             )
-            break
-        
-        print(f"unified_output_hid_states=\n{h}")
-        
+
         if len(self.layers) in self.output_hidden_states:
             hidden.append(h)
 

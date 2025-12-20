@@ -58,7 +58,6 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
 class Qwen3Model(Model):
     def __init__(self, config: Qwen3Config):
         super().__init__(config)
-        print(f"config.tie_word_embeddings={config.tie_word_embeddings}")
         self.config = config
 
         head_dim = config.head_dim or config.embed_dim // config.num_heads
