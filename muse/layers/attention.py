@@ -237,9 +237,9 @@ class MultiHeadAttention(nn.Module):
             - d: embed dim
             - h_d: head dim
         """
-        # if x.size(-1) == 512:
-        #     import IPython
-        #     IPython.embed()
+        if x.size(-1) == 512:
+            import IPython
+            IPython.embed()
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
