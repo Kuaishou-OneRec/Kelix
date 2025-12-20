@@ -253,7 +253,8 @@ if __name__ == "__main__":
         custom_rope = RotaryPositionalEmbeddings(
             dim=head_dim, 
             max_seq_len=4096, 
-            base=1000000  # 和Qwen的theta对齐
+            base=1000000,  # 和Qwen的theta对齐
+            dtype=torch.float32
         ).to(device).bfloat16()
         # 核心：调用对比函数，逐步骤校验
         custom_rope.compare_with_qwen(qwen_intermediates, seq_len, device)
