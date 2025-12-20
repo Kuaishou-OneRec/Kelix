@@ -111,7 +111,8 @@ if __name__ == "__main__":
     cos1, sin1 = qwen_rope.forward(x_dummy, position_ids)
     custom_cache = custom_rope.cache[position_ids]
     cos2, sin2 = custom_cache[..., 0], custom_cache[..., 1]
-
+    diff = torch.abs(cos1 - cos2)
+    print(diff.abs().mean())
     # 比较（允许1e-6浮点误差）
     is_match = torch.allclose(cos1.float(), cos2.float(), atol=1e-6) and torch.allclose(sin1, sin2, atol=1e-6)
     print("有误差" if not is_match else "无误差")
