@@ -100,8 +100,8 @@ if __name__ == "__main__":
     seq_len = 66
 
     # 实例化两个RoPE
-    qwen_rope = Qwen3RotaryEmbedding(config, device="cuda")#.bfloat16()
-    custom_rope = RotaryPositionalEmbeddings(dim=head_dim, max_seq_len=4096).to("cuda")#.bfloat16()
+    qwen_rope = Qwen3RotaryEmbedding(config, device="cuda").bfloat16()
+    custom_rope = RotaryPositionalEmbeddings(dim=head_dim, max_seq_len=4096).to("cuda").bfloat16()
 
     # 生成测试数据
     position_ids = torch.arange(seq_len).expand(batch_size, -1).to("cuda")
