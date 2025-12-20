@@ -21,6 +21,7 @@
 
 import math
 from typing import Dict, List, Optional, Union
+from PIL import Image
 
 import numpy as np
 import torch
@@ -47,7 +48,7 @@ from transformers.image_utils import (
 )
 from transformers.utils import TensorType, is_vision_available, logging
 
-import numpy as np
+
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
 ]  # noqa
@@ -62,10 +63,6 @@ VideoInput = Union[
     list[list["np.ndarrray"]],
     list[list["torch.Tensor"]],
 ]  # noqa
-
-
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -201,7 +198,7 @@ class SiglipImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -244,7 +241,7 @@ class SiglipImageProcessor(BaseImageProcessor):
             scale = math.sqrt(self.in_token_limit / ((w // patch_size) * (h // patch_size)))
             new_w, new_h = int(w * scale), int(h * scale)
             
-            image = image.resize((new_w, new_h), Image.Resampling.BICUBIC)
+            image = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
         if self.pad_input:
             new_w, new_h = image.size
             pad_size_h = merge_size * patch_size
