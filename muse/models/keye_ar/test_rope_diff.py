@@ -1,14 +1,8 @@
 import torch
 import torch.nn as nn
 from typing import Optional
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 
-# 模拟transformers的ROPE_INIT_FUNCTIONS（适配default rope_type）
-ROPE_INIT_FUNCTIONS = {
-    "default": lambda config, device: (
-        1.0 / (10000 ** (torch.arange(0, 128, 2, dtype=torch.float32, device=device)[:64] / 128)),
-        1.0  # attention_scaling
-    )
-}
 
 # 代码1：Qwen3RotaryEmbedding
 class Qwen3RotaryEmbedding(nn.Module):
@@ -23,6 +17,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         self.device = device
+        self.config.rope_theta = 1000000
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
@@ -46,7 +41,7 @@ class Qwen3RotaryEmbedding(nn.Module):
 
 # 代码2：RotaryPositionalEmbeddings
 class RotaryPositionalEmbeddings(nn.Module):
-    def __init__(self, dim: int, max_seq_len: int = 4096, base: int = 10_000) -> None:
+    def __init__(self, dim: int, max_seq_len: int = 4096, base: int = 1000_000) -> None:
         super().__init__()
         self.dim = dim
         self.base = base
