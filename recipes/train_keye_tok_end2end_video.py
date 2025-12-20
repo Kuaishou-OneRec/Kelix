@@ -104,7 +104,7 @@ from muse.utils.common import (
     to_device,
     dist_reduce_dict
 )
-from muse.data.datasets import ChatCompletionVisionDataset,ChatCompletionVisionDataset_keye_vitrope_slowfast
+from muse.data.datasets import ChatCompletionVisionDataset_video,ChatCompletionVisionDataset_keye_vitrope_slowfast_video
 
 from muse.config import load_config
 
@@ -1047,15 +1047,17 @@ def train():
             if video_vq_indices is not None:
                 print_rank_0(f"[DEBUG] Model output contains video_indices with {len(video_vq_indices)} codebooks")
             else:
-                video_grid_thw = output.get("video_grid_thw", None)
-                fast_video_grid_thw = output.get("fast_video_grid_thw", None)
-                pixel_values_videos = output.get("pixel_values_videos", None)
-                fast_pixel_values_videos = output.get("fast_pixel_values_videos", None)
+                # Debug: check batch input data
+                video_grid_thw_batch = batch.get("video_grid_thw", None)
+                pixel_values_videos_batch = batch.get("pixel_values_videos", None)
+                fast_video_grid_thw_batch = batch.get("fast_video_grid_thw", None)
+                fast_pixel_values_videos_batch = batch.get("fast_pixel_values_videos", None)
+
                 print_rank_0(f"[DEBUG] Model output contains NO video_indices")
-                print_rank_0(f"[DEBUG] video_grid_thw: {video_grid_thw}")
-                print_rank_0(f"[DEBUG] fast_video_grid_thw: {fast_video_grid_thw}")
-                print_rank_0(f"[DEBUG] pixel_values_videos shape: {pixel_values_videos.shape if pixel_values_videos is not None else None}")
-                print_rank_0(f"[DEBUG] fast_pixel_values_videos shape: {fast_pixel_values_videos.shape if fast_pixel_values_videos is not None else None}")
+                print_rank_0(f"[DEBUG] Batch input - video_grid_thw shape: {video_grid_thw_batch.shape if video_grid_thw_batch is not None else None}")
+                print_rank_0(f"[DEBUG] Batch input - pixel_values_videos shape: {pixel_values_videos_batch.shape if pixel_values_videos_batch is not None else None}")
+                print_rank_0(f"[DEBUG] Batch input - fast_video_grid_thw shape: {fast_video_grid_thw_batch.shape if fast_video_grid_thw_batch is not None else None}")
+                print_rank_0(f"[DEBUG] Batch input - fast_pixel_values_videos shape: {fast_pixel_values_videos_batch.shape if fast_pixel_values_videos_batch is not None else None}")
                 video_global_perplexities, video_codebook_usages = compute_codebook_metrics(
                     indices=video_vq_indices,
                     codebook_size=codebook_size,
