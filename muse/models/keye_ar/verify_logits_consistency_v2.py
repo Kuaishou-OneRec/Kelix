@@ -602,7 +602,7 @@ def get_keye_ar_model_logits(model, inputs, layer_hook=None):
             autocast_cm = nullcontext
 
     with autocast_cm(dtype=torch.bfloat16):
-        outputs = model(**inputs_ar, cu_seqlens) #= torch.tensor([0,66]).cuda())
+        outputs = model(**inputs_ar, cu_seqlens=None) #= torch.tensor([0,66]).cuda())
     
     return outputs
 
