@@ -89,7 +89,7 @@ class Qwen3RotaryEmbedding_(nn.Module):
         # Step 3: 计算freqs（矩阵乘法+转置）
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float())
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             
             # Step 4: 拼接生成emb
             emb = torch.cat((freqs, freqs), dim=-1)
