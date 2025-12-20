@@ -96,8 +96,8 @@ if __name__ == "__main__":
     # 初始化参数
     config = MockConfig()
     head_dim = 128
-    batch_size = 2
-    seq_len = 10
+    batch_size = 1
+    seq_len = 66
 
     # 实例化两个RoPE
     qwen_rope = Qwen3RotaryEmbedding(config, device="cuda").bfloat16()
