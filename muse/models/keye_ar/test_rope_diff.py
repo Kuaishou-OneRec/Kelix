@@ -113,5 +113,5 @@ if __name__ == "__main__":
     cos2, sin2 = custom_cache[..., 0], custom_cache[..., 1]
 
     # 比较（允许1e-6浮点误差）
-    is_match = torch.allclose(cos1, cos2, atol=1e-6) and torch.allclose(sin1, sin2, atol=1e-6)
+    is_match = torch.allclose(cos1.float(), cos2.float(), atol=1e-6) and torch.allclose(sin1, sin2, atol=1e-6)
     print("有误差" if not is_match else "无误差")
