@@ -111,6 +111,8 @@ if __name__ == "__main__":
     cos1, sin1 = qwen_rope.forward(x_dummy, position_ids)
     custom_cache = custom_rope.cache[position_ids]
     cos2, sin2 = custom_cache[..., 0], custom_cache[..., 1]
+    print(cos1)
+    print(cos2)
     diff = torch.abs(cos1 - cos2)
     print(diff.abs().mean())
     # 比较（允许1e-6浮点误差）
