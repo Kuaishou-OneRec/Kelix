@@ -16,6 +16,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        print(help(self.rope_init_fn)); exit()
         self.device = device
         self.config.rope_theta = 1000000
         self.config.hidden_size = 4096
