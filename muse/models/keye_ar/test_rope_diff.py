@@ -18,6 +18,9 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         self.device = device
         self.config.rope_theta = 1000000
+        # config.hidden_size // config.num_attention_heads)
+        self.config.hidden_size = 4096
+        self.config.num_attention_heads = 32
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
