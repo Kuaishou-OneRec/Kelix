@@ -108,7 +108,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
     def __init__(
         self,
-        config: KeyeTokenizerEnd2EndImageConfig
+        config: KeyeTokenizerEnd2EndVideoConfig
     ):
         super().__init__(config)
         self.config = config
