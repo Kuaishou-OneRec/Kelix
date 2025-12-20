@@ -105,7 +105,7 @@ if __name__ == "__main__":
 
     # 生成测试数据
     position_ids = torch.arange(seq_len).expand(batch_size, -1)
-    x_dummy = torch.randn(batch_size, seq_len, head_dim, device="cpu")
+    x_dummy = torch.randn(batch_size, seq_len, head_dim, device="cuda")
 
     # 获取cos/sin
     cos1, sin1 = qwen_rope.forward(x_dummy, position_ids)
