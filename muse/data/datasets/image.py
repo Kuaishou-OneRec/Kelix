@@ -1062,15 +1062,12 @@ class Chat2ImageDataset(Token2ImageDataset):
             messages, 
             tokenize=False
         )
-        p = process_vision_info(messages)
-        print(p); exit()
-        image_inputs, video_inputs = process_vision_info(messages)
+        image_inputs, _, _ = process_vision_info(messages)
 
         # Process with processor and include ALL output fields
         inputs = self.processor(
             text=[text],
             images=image_inputs,
-            videos=video_inputs,
             padding=False,
             truncation=False,
             return_tensors="pt",
