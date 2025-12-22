@@ -698,7 +698,7 @@ class Token2ImageDataset(DistributedDataset):
             key: Key to get content from
             
         Returns:
-            Parsed JSON content or empty list if parsing fails
+Parsed JSON content or empty list if parsing fails
         """
         content = sample.get(key, "[]")
         try:
@@ -998,8 +998,19 @@ class Token2ImageDataset(DistributedDataset):
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
-        result["image"] = torch.stack([s["image"] for s in batch])
 
+        for key in ["input_ids", "attention_mask"]:
+            if key in batch[0]:
+                result[key] = torch.concat([s[key] for s in batch], dim=1)        
+        
+        # Add cu_seqlens for flash_attention
+        if "input_ids" in batch[0]:
+            # Calculate sequence lengths for each sample
+            seq_lens = [s["input_ids"].shape[1] for s in batch]
+            # Create cumulative sequence lengths: [0, seq_len1, seq_len1+seq_len2, ...]
+            cu_seqlens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(dim=0)
+            result["cu_seqlens"] = cu_seqlens
+        
         return result
 
 
@@ -1072,9 +1083,6 @@ class Chat2ImageDataset(Token2ImageDataset):
             truncation=False,
             return_tensors="pt",
         )
-
-        for key in ["input_ids", "attention_mask"]:
-            inputs[key] = inputs[key].squeeze(0)
 
         # Include all processor output fields in result
         for key, value in inputs.items():
@@ -1175,8 +1183,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         for key in ["input_ids", "attention_mask"]:
             if key in batch[0]:
-                print(f"key={key}, shape={[s[key].shape for s in batch]}")
-                result[key] = torch.stack([s[key] for s in batch])        
+                result[key] = torch.concat([s[key] for s in batch], dim=1)        
         return result
     
 class MultiScaleDatasetWrapper(IterableDataset):
@@ -1300,7 +1307,6 @@ class MultiScaleDatasetWrapper(IterableDataset):
             aspect_ratio = get_closest_ratio(
                 orig_h, orig_w, self.scheduler.get_aspect_ratios(res))
             # TODO: filter out too extreme aspect ratios
-
             buckets[res][aspect_ratio].append(sample)
             # if bucket exceeds the maximum size, discard the oldest sample to avoid memory overflow
             buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
@@ -1319,4 +1325,3 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     yield batch
                     self.scheduler.step()
                     break
-
