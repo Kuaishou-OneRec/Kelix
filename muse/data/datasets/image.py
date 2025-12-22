@@ -1141,11 +1141,8 @@ class Chat2ImageDataset(Token2ImageDataset):
             image_dict = json.loads(sample["images"])
             def call_back(x):
                 if not isinstance(x, dict): return
-                if x.get("type") == "image_gen":
-                    x["image_gen"] = image_dict[x["image_gen"]] if x["image"] in image_dict else x["image_gen"]
-                if x.get("type") == "image":
-                    if x["image"] in image_dict:
-                        x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
+                if x.get("type") in ("image_gen", "image"):
+                    x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
 
             recursive_traverse(messages, call_back)
             pair["message"] = messages
