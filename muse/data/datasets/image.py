@@ -876,8 +876,23 @@ class Token2ImageDataset(DistributedDataset):
         return {"image": image, "text": text}
 
 
+class Chat2ImageDataset(Token2ImageDataset):
+    """Dataset for chat-style image generation with message-based processing.
+    
+    This dataset extends Token2ImageDataset to support chat-style message processing.
+    It uses the 'message' field from samples for apply_chat_template and includes
+    all processor output fields in the result.
+    
+    Args:
+        sources: Path(s) to parquet files or directory
+        image_size: Target image size (int or tuple)
+        processor_path: Path to processor
+        max_condition_length: Maximum condition sequence length
+        **kwargs: Additional args passed to DistributedDataset
+    """
+    
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
-        """Process a single image-text pair.
+        """Process a single image-text pair using chat-style message processing.
         
         Args:
             sample: Sample dict with 'image' and 'text' keys
@@ -912,45 +927,40 @@ class Token2ImageDataset(DistributedDataset):
             target_image = self.transform(image)
             condition_image = image
 
-        fake_message = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "image": condition_image,
-                        "min_pixels": 4 * 28 * 28,
-                        "max_pixels": self.max_condition_length * 28 * 28
-                    }
-                ]
-            }
-        ]
+        # Get message from sample for chat template processing
+        messages = sample.get("message")
 
+        # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
-            fake_message, 
+            messages, 
             tokenize=False
         )
 
-        image_inputs, _, _ = process_vision_info(fake_message)
+        image_inputs, video_inputs = process_vision_info(messages)
 
+        # Process with processor and include ALL output fields
         inputs = self.processor(
             text=[text],
             images=image_inputs,
+            videos=video_inputs,
             padding=False,
             truncation=False,
             return_tensors="pt",
         )
 
+        # Include all processor output fields in result
+        for key, value in inputs.items():
+            result[key] = value
+        
+        # Add the target image
         result["image"] = target_image
-        result["pixel_values"] = inputs["pixel_values"]
-        result["image_grid_thw"] = inputs["image_grid_thw"]
         
         return result
 
     def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
-        """Process a single sample.
+        """Process a single sample with message-based chat processing.
         
-        Extracts image-text pair from sample and processes it.
+        Extracts image-text pair from sample and processes it using chat-style messages.
         
         Args:
             sample: Raw sample dict from parquet
@@ -958,13 +968,16 @@ class Token2ImageDataset(DistributedDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
-        print(f"sample={sample}")
         pair = self.extract_image_text(sample)
         if pair:
             images = json.loads(sample.get("images", '{}'))
             image = pair["image"]
             if image in images:
                 pair["image"] = images[image]
+            
+            # Include the message field from the original sample
+            # pair["message"] = sample.get("message")
+            
             metadata = json.loads(sample.get("metadata", '{}'))
             images_info = metadata.get("images_info", {})
             image_info = images_info.get(image, {})
@@ -978,9 +991,9 @@ class Token2ImageDataset(DistributedDataset):
 
     def collate_fn(
         self,
-        batch: List[Dict[str, Any]],
+        batch: List[Dict[str, torch.Tensor]],
     ) -> Dict[str, torch.Tensor]:
-        """Collate batch samples.
+        """Collate batch samples for chat-style processing.
         
         Args:
             batch: List of processed samples
@@ -989,20 +1002,23 @@ class Token2ImageDataset(DistributedDataset):
             Collated batch dict
             
         Note:
-            For multi-scale training without AspectRatioBatchSampler,
-            images in a batch may have different sizes. We resize all
-            images to the first image's size for consistent batching.
+            Handles variable-length processor outputs by concatenating along sequence dimension.
         """
-        # Here is the real process of batch.
         result = {}
-        batch = [self._process_pair(sample) for sample in batch]
-
-        # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
-        result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
-        result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
-        result["image"] = torch.stack([s["image"] for s in batch])
-
+        
+        # Handle image tensor (same for all samples)
+        if "image" in batch[0]:
+            result["image"] = torch.stack([s["image"] for s in batch])
+        
+        # Handle processor outputs - concatenate along sequence dimension
+        processor_keys = [key for key in batch[0].keys() if key not in ["image"]]
+        for key in processor_keys:
+            if all(key in s for s in batch):
+                # Concatenate along sequence dimension (dim=0)
+                result[key] = torch.cat([s[key] for s in batch], dim=0)
+        
         return result
+
 
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.

@@ -13,6 +13,7 @@ __all__ = [
     'TextDataset',
     'Text2ImageDataset',
     'Token2ImageDataset',
+    'Chat2ImageDataset',
     'MultiScaleDatasetWrapper',
     'ResolutionBudgetScheduler',
 ]

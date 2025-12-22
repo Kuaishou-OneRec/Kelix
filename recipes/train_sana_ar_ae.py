@@ -95,6 +95,7 @@ from muse.utils.common import (
 from muse.data.datasets import (
     Token2ImageDataset, 
     MultiScaleDatasetWrapper,
+    Chat2ImageDataset
 )
 from muse.data.utils import (
     parse_resolution_budgets, 
@@ -1146,7 +1147,7 @@ def train():
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    dataset = Token2ImageDataset(**dataset_config)
+    dataset = Chat2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     
     # Store wrapper reference for step updates (used in training loop)
