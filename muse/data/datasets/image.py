@@ -608,6 +608,8 @@ class Text2ImageDataset(DistributedDataset):
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
+
+
 class Token2ImageDataset(DistributedDataset):
     """Dataset for visual token-to-image pairs.
     
@@ -956,6 +958,7 @@ class Token2ImageDataset(DistributedDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
+        print(f"sample={sample}")
         pair = self.extract_image_text(sample)
         if pair:
             images = json.loads(sample.get("images", '{}'))
@@ -1141,4 +1144,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     yield batch
                     self.scheduler.step()
                     break
-            
+
+
+class Chat2ImageDataset(DistributedDataset):
+    pass
