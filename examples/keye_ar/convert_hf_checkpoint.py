@@ -10,6 +10,7 @@ import os
 import warnings
 from pathlib import Path
 from typing import Dict, Any
+import traceback
 
 import torch
 from transformers import AutoProcessor
@@ -262,6 +263,7 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
             print(f"✓ Forward pass successful! Output type: {type(outputs)}")
             
     except Exception as e:
+        traceback.print_exc()
         print(f"⚠ Forward pass verification failed: {e}")
         print("Continuing with model saving...")
     
