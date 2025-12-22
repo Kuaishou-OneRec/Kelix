@@ -136,7 +136,7 @@ def demo_with_collator(dataset):
     
     # Create a batch of samples
     batch_samples = []
-    for i in range(min(2, len(dataset))):  # Use first 2 samples
+    for i in range(2):  # Use first 2 samples
         sample = dataset[i]
         if sample is not None:
             batch_samples.append(sample)
