@@ -45,65 +45,6 @@ def cleanup_distributed():
         print("✅ Distributed environment cleaned up")
 
 
-def create_test_image(width=100, height=100, color='red', mode='RGB'):
-    """Create a test PIL Image."""
-    return Image.new(mode, (width, height), color=color)
-
-
-def create_test_parquet(tmp_path):
-    """Create a test parquet file with chat-style data."""
-    # Create test images
-    img1 = create_test_image(256, 256, color='red')
-    img2 = create_test_image(300, 200, color='blue')
-    
-    # Save images to temp files
-    img1_path = tmp_path / "test_img1.png"
-    img2_path = tmp_path / "test_img2.png"
-    img1.save(img1_path)
-    img2.save(img2_path)
-    
-    # Create chat-style messages
-    message1 = [
-        {"role": "user", "content": "Generate an image of a beautiful sunset over the ocean"},
-        {"role": "assistant", "content": [{"type": "image", "image": "img1"}]}
-    ]
-    
-    message2 = [
-        {"role": "user", "content": "Create an image of a cute cat playing with a ball"},
-        {"role": "assistant", "content": [{"type": "image", "image": "img2"}]}
-    ]
-    
-    data = {
-        'uuid': ['1', '2'],
-        'source': ['test', 'test'],
-        'image': ['img1', 'img2'],
-        'message': [json.dumps(message1), json.dumps(message2)],
-        'images': [
-            json.dumps({"img1": str(img1_path)}),
-            json.dumps({"img2": str(img2_path)})
-        ],
-        'metadata': [
-            json.dumps({
-                "images_info": {
-                    "img1": {"height": 256, "width": 256},
-                    "img2": {"height": 300, "width": 200}
-                }
-            }),
-            json.dumps({
-                "images_info": {
-                    "img1": {"height": 256, "width": 256},
-                    "img2": {"height": 300, "width": 200}
-                }
-            })
-        ]
-    }
-    
-    df = pd.DataFrame(data)
-    parquet_path = tmp_path / "test_chat.parquet"
-    df.to_parquet(parquet_path)
-    return str(parquet_path)
-
-
 def print_sample_info(sample, title):
     """Print detailed information about a sample."""
     print(f"\n{'='*60}")
@@ -247,7 +188,6 @@ def main():
             tmp_path = Path(tmp_dir)
             
             print("📁 Creating test data...")
-            # parquet_path = create_test_parquet(tmp_path)
             parquet_path = "/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json"
             
             print("🔧 Initializing Chat2ImageDataset...")
