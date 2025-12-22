@@ -283,7 +283,7 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     print("Verifying model loading with from_pretrained...")
     try:
         # 加载转换后的模型
-        loaded_model = KeyeARModel.from_pretrained(new_model_dir, torch_dtype=dtype)
+        loaded_model = KeyeARModel.from_pretrained(new_model_dir)
         loaded_model = loaded_model.to(device)
         
         # 再次进行前向传播验证
