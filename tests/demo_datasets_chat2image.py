@@ -253,7 +253,7 @@ def main():
             
             print("🔧 Initializing Chat2ImageDataset...")
             dataset = Chat2ImageDataset(
-                sources=[parquet_path],
+                sources=parquet_path,
                 image_size=256,
                 processor_path=PROCESSOR_PATH,
                 num_workers=1
