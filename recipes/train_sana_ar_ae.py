@@ -388,10 +388,17 @@ def load_image_tokenizer(tokenizer_dir: str, device: torch.device, dtype: torch.
     # with set_default_dtype(dtype), torch.device(device):
     #     tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
     #     tokenizer.requires_grad_(False)
-    from muse.models.keye_ar import KeyeARModel
+
+    # from muse.models.keye_ar import KeyeARModel
+    # with set_default_dtype(dtype), torch.device(device):
+    #     tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
+    #     tokenizer.requires_grad_(False)
+
+    from muse.models.keye_tokenizer import KeyeImageTokenizer
     with set_default_dtype(dtype), torch.device(device):
-        tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
+        tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
         tokenizer.requires_grad_(False)
+
     return tokenizer
 
 def tokenize_images(tokenizer,
@@ -1296,6 +1303,13 @@ def train():
                 except StopIteration:
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
+
+            for k, v in batch.items():
+                if torch.is_tensor(v):
+                    try:
+                        print(f"dataset: {k}: {v.shape}/{v.dtype}")
+                    except Exception:
+                        print(f"dataset: {k}: {v.shape}/{v}")
 
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
