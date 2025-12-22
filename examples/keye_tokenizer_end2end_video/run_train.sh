@@ -123,7 +123,7 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --max-length 11000 \
+                --max-length 10000 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 1000 \
                 --logging_per_step 10 \
