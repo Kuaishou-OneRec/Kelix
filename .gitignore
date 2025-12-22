@@ -20,3 +20,4 @@ build
 *.ttf
 hostfile
 debug
+*pt
