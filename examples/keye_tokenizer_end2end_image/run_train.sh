@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # Model and output directories - modify as needed
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/MuseV2/keye_tok_e2e/test
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/MuseV2/keye_tok_e2e/test_with_source
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -113,7 +113,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/train_keye_tok_end2end.py \
+        bash -c "python3 recipes/train_keye_tok_end2end_with_sourceloss.py \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_tokenizer_end2end_image/run_exp1.6.8_stage2.json \
@@ -137,6 +137,8 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
+                --monitor_datasource_loss \
+                --monitor_datasource_cnt \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

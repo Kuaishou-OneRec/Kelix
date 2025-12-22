@@ -375,10 +375,10 @@ def get_argument_parser():
                         help="Freeze visual_tokenizer.mlp_AR parameters")
 
     ############ Data Source Monitoring Args ############
-    parser.add_argument("--monitor-datasource-loss", action="store_true",
+    parser.add_argument("--monitor_datasource_loss", action="store_true",
                         help="Whether to monitor loss of each datasource")
     
-    parser.add_argument("--monitor-datasource-cnt", action="store_true",
+    parser.add_argument("--monitor_datasource_cnt", action="store_true",
                         help="Whether to monitor sample count of each datasource")
 
     return parser
