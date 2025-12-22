@@ -1115,8 +1115,8 @@ class Chat2ImageDataset(Token2ImageDataset):
                 pair["width"] = width
             
             messages = sample["messages"]
-            print(f"messages={messages}")
-            messages = [json.loads(x) for x in messages]
+            print(f"messages={messages}", type(messages[0]))
+            # messages = [json.loads(x) for x in messages]
             pair["message"] = messages
             print(f"sample={sample}\npair={pair}")
             # pair={'image': '/mmu_mllm_hdd_2/zhouyang12/media/images/cc/5a/ee/fd/53/mmu-vcg-data-bd6c6e695e21adeba3038ad5d0a327d1.jpg', 'text': 'The image features a gray leather handbag with a textured surface and two handles, accompanied by a strap with red and navy stripes. The handbag is positioned against a plain white background, highlighting its design and details.', 'height': 2000, 'width': 1128}
