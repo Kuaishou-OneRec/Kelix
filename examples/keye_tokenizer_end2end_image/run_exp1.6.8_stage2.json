@@ -17,6 +17,6 @@
     "patch_size": 14,
     "use_flops_balance": false,
     "video_total_pixels": 47040000,
-    "max_sample_length": 88000,
+    "max_sample_length": 15000,
     "train_video": false
 }
