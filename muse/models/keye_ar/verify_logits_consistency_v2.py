@@ -152,10 +152,10 @@ num_layers=1,  # 默认值
         q_eos_token=q_eos_token,
         codebook_size=codebook_size,
         n_q_tokens=n_q_tokens,
-        token_head_d_model=token_head_dim,
-        token_head_nheads=token_head_nhead,
-        token_head_dim_feedforward=token_head_intermediate_dim,
-        token_head_num_layers=token_head_num_layers,
+        # token_head_d_model=token_head_dim,
+        # token_head_nheads=token_head_nhead,
+        # token_head_dim_feedforward=token_head_intermediate_dim,
+        # token_head_num_layers=token_head_num_layers,
         attention_function="flash_attention_2",
     )
 
