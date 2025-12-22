@@ -1142,7 +1142,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             def call_back(x):
                 if not isinstance(x, dict): return
                 if x.get("type") == "image_gen":
-                    x["image_gen"] = image_dict[x["image_gen"]] if x["image_gen"] in image_dict else x["image_gen"]
+                    x["image_gen"] = image_dict[x["image_gen"]] if x["image"] in image_dict else x["image_gen"]
                 if x.get("type") == "image":
                     if x["image"] in image_dict:
                         x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
