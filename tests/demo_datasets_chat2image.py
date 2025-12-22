@@ -13,7 +13,6 @@ import torch.distributed as dist
 
 from muse.data.datasets.image import Chat2ImageDataset, Token2ImageDataset
 
-Chat2ImageDataset = Token2ImageDataset
 # Real processor path for testing
 PROCESSOR_PATH = "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/"
 PROCESSOR_AVAILABLE = os.path.exists(PROCESSOR_PATH)
