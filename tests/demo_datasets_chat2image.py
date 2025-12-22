@@ -257,7 +257,7 @@ def main():
                 processor_path=PROCESSOR_PATH,
                 num_workers=1
             )
-            print(dataset.collate_fn); exit()
+
             print("📊 Dataset type: IterableDataset (use iterator, not indexing)")
             
             # Run demos
