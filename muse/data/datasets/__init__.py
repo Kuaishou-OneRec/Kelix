@@ -1,6 +1,7 @@
 from .base import DistributedDataset
 from .text import TextDataset
 from .image import (
+    Chat2ImageDataset,
     Text2ImageDataset, 
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
