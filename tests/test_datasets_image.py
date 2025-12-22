@@ -1065,3 +1065,247 @@ class TestCollateFn:
         assert "image" in result
         assert "input_ids" not in result
         assert "attention_mask" not in result
+
+
+# =============================================================================
+# Tests for Dynamic Multi-Scale Training
+# =============================================================================
+
+from muse.data.utils import (
+    ResolutionBudget,
+    ResolutionBudgetConfig,
+    DEFAULT_RESOLUTION_BUDGETS,
+    parse_resolution_budgets,
+)
+from muse.data.datasets.image import ResolutionBudgetScheduler
+
+
+class TestResolutionBudgetConfig:
+    """Test ResolutionBudgetConfig class"""
+    
+    def test_init_normalizes_weights(self):
+        """Test that weights are normalized on init"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[2.0, 1.0],  # Will be normalized to [0.667, 0.333]
+            end_weights=[1.0, 2.0],    # Will be normalized to [0.333, 0.667]
+        )
+        
+        assert abs(sum(config.start_weights) - 1.0) < 1e-6
+        assert abs(sum(config.end_weights) - 1.0) < 1e-6
+    
+    def test_get_weights_at_start(self):
+        """Test get_weights returns start_weights at progress=0"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[0.8, 0.2],
+            end_weights=[0.2, 0.8],
+        )
+        
+        weights = config.get_weights(0.0)
+        
+        assert abs(weights[0] - 0.8) < 1e-6
+        assert abs(weights[1] - 0.2) < 1e-6
+    
+    def test_get_weights_at_end(self):
+        """Test get_weights returns end_weights at progress=1"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[0.8, 0.2],
+            end_weights=[0.2, 0.8],
+        )
+        
+        weights = config.get_weights(1.0)
+        
+        assert abs(weights[0] - 0.2) < 1e-6
+        assert abs(weights[1] - 0.8) < 1e-6
+    
+    def test_get_weights_at_midpoint(self):
+        """Test get_weights returns interpolated weights at progress=0.5"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[0.8, 0.2],
+            end_weights=[0.2, 0.8],
+        )
+        
+        weights = config.get_weights(0.5)
+        
+        # At midpoint, should be [0.5, 0.5]
+        assert abs(weights[0] - 0.5) < 1e-6
+        assert abs(weights[1] - 0.5) < 1e-6
+    
+    def test_get_weights_clamps_progress(self):
+        """Test get_weights clamps progress to [0, 1]"""
+        config = ResolutionBudgetConfig(
+            budgets=[ResolutionBudget(512, 32)],
+            start_weights=[1.0],
+            end_weights=[1.0],
+        )
+        
+        # Should not raise for out-of-range progress
+        weights_neg = config.get_weights(-0.5)
+        weights_over = config.get_weights(1.5)
+        
+        assert len(weights_neg) == 1
+        assert len(weights_over) == 1
+
+
+class TestParseResolutionBudgets:
+    """Test parse_resolution_budgets function"""
+    
+    def test_parse_basic(self):
+        """Test parsing basic budget string"""
+        config = parse_resolution_budgets("512:32,1024:8")
+        
+        assert len(config.budgets) == 2
+        assert config.budgets[0].size == 512
+        assert config.budgets[0].batch_size == 32
+        assert config.budgets[1].size == 1024
+        assert config.budgets[1].batch_size == 8
+    
+    def test_parse_with_weights(self):
+        """Test parsing with explicit weights"""
+        config = parse_resolution_budgets(
+            "512:32,768:16,1024:8",
+            "0.7,0.2,0.1",
+            "0.1,0.2,0.7"
+        )
+        
+        assert len(config.budgets) == 3
+        assert abs(config.start_weights[0] - 0.7) < 1e-6
+        assert abs(config.end_weights[2] - 0.7) < 1e-6
+    
+    def test_parse_defaults_weights(self):
+        """Test that weights default correctly when not specified"""
+        config = parse_resolution_budgets("512:32,1024:8")
+        
+        # Default: start favors low-res (0.7 for first)
+        assert config.start_weights[0] > config.start_weights[1]
+        # Default: end favors high-res (0.7 for last)
+        assert config.end_weights[1] > config.end_weights[0]
+
+
+class TestResolutionBudgetScheduler:
+    """Test ResolutionBudgetScheduler class"""
+    
+    def test_init(self):
+        """Test sampler initialization"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        
+        assert len(sampler.budgets) == 3
+        assert sampler.total_steps == 1000
+        assert sampler._current_step == 0
+    
+    def test_set_step(self):
+        """Test set_step updates current step"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        
+        sampler.set_step(500)
+        
+        assert sampler._current_step == 500
+        assert abs(sampler.progress - 0.5) < 1e-6
+    
+    def test_progress_capped_at_one(self):
+        """Test progress is capped at 1.0"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        
+        sampler.set_step(2000)  # Beyond total_steps
+        
+        assert sampler.progress == 1.0
+    
+    def test_sample_returns_budget(self):
+        """Test sample returns a ResolutionBudget"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        
+        budget = sampler.sample()
+        
+        assert isinstance(budget, ResolutionBudget)
+        assert budget.size in [512, 768, 1024]
+    
+    def test_sample_distribution_at_start(self):
+        """Test sample distribution favors low-res at start"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[0.9, 0.1],
+            end_weights=[0.1, 0.9],
+        )
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        sampler.set_step(0)
+        
+        # Sample many times and count
+        counts = {512: 0, 1024: 0}
+        for _ in range(1000):
+            budget = sampler.sample()
+            counts[budget.size] += 1
+        
+        # At start, 512 should be much more common (90% expected)
+        assert counts[512] > counts[1024] * 2  # At least 2x more
+    
+    def test_sample_distribution_at_end(self):
+        """Test sample distribution favors high-res at end"""
+        config = ResolutionBudgetConfig(
+            budgets=[
+                ResolutionBudget(512, 32),
+                ResolutionBudget(1024, 8),
+            ],
+            start_weights=[0.9, 0.1],
+            end_weights=[0.1, 0.9],
+        )
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        sampler.set_step(1000)
+        
+        # Sample many times and count
+        counts = {512: 0, 1024: 0}
+        for _ in range(1000):
+            budget = sampler.sample()
+            counts[budget.size] += 1
+        
+        # At end, 1024 should be much more common (90% expected)
+        assert counts[1024] > counts[512] * 2  # At least 2x more
+    
+    def test_get_aspect_ratios(self):
+        """Test get_aspect_ratios returns correct dict"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        
+        ratios_512 = sampler.get_aspect_ratios(512)
+        ratios_1024 = sampler.get_aspect_ratios(1024)
+        
+        # Both should have aspect ratios
+        assert len(ratios_512) > 0
+        assert len(ratios_1024) > 0
+        # 1024 sizes should be larger
+        assert ratios_1024["1.0"][0] > ratios_512["1.0"][0]
+    
+    def test_get_stats(self):
+        """Test get_stats returns correct info"""
+        config = DEFAULT_RESOLUTION_BUDGETS
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
+        sampler.set_step(250)
+        
+        stats = sampler.get_stats()
+        
+        assert stats["step"] == 250
+        assert abs(stats["progress"] - 0.25) < 1e-6
+        assert 512 in stats["weights"]
+        assert 768 in stats["weights"]
+        assert 1024 in stats["weights"]

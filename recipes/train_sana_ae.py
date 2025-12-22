@@ -92,7 +92,16 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import Token2ImageDataset, MultiScaleDatasetWrapper
+from muse.data.datasets import (
+    Token2ImageDataset, 
+    MultiScaleDatasetWrapper,
+)
+from muse.data.utils import (
+    parse_resolution_budgets, 
+    DEFAULT_RESOLUTION_BUDGETS,
+    ResolutionBudget,
+    ResolutionBudgetConfig,
+)
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -187,7 +196,23 @@ def get_argument_parser():
                         help="Number of data loading workers")
     
     parser.add_argument("--multi-scale", action="store_true",
-                        help="Enable multi-scale training with variable aspect ratios")
+                        help="Enable multi-scale training with variable aspect ratios. "
+                             "Use --resolution-budgets for curriculum scheduling.")
+
+    parser.add_argument("--max-resolution-level", type=int, default=1024,
+                        help="Maximum resolution level for multi-scale training")
+    
+    parser.add_argument("--resolution-budgets", type=str, default=None,
+                        help="Resolution budgets as 'size:batch_size,...' "
+                             "Example: '512:32,768:16,1024:8'")
+    
+    parser.add_argument("--resolution-start-weights", type=str, default=None,
+                        help="Starting weights for each resolution (low-res heavy). "
+                             "Example: '0.7,0.2,0.1' means 70%% 512, 20%% 768, 10%% 1024")
+    
+    parser.add_argument("--resolution-end-weights", type=str, default=None,
+                        help="Ending weights for each resolution (high-res heavy). "
+                             "Example: '0.1,0.2,0.7' means 10%% 512, 20%% 768, 70%% 1024")
 
     ############ Diffusion args ############
     parser.add_argument("--num-timesteps", type=int, default=1000,
@@ -1104,11 +1129,6 @@ def train():
         dataset_config["processor_path"] = args.image_tokenizer_dir
         print_rank_0(f"Set tokenizer_path of dataset to: {args.image_tokenizer_dir}")
     
-    # Enable multi-scale training if requested
-    if args.multi_scale:
-        dataset_config["multi_scale"] = True
-        print_rank_0("Multi-scale training enabled with variable aspect ratios")
-
     # Add distributed rank/world_size to dataset config for proper data sharding
     if dist.is_initialized():
         dataset_config["rank"] = dist.get_rank()
@@ -1118,17 +1138,51 @@ def train():
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Token2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
+    
+    # Store wrapper reference for step updates (used in training loop)
+    multi_scale_wrapper = None
+    
     if args.multi_scale:
-        dataset = MultiScaleDatasetWrapper(
+        # Parse resolution budget config or create single-resolution default
+        if args.resolution_budgets:
+            budget_config = parse_resolution_budgets(
+                args.resolution_budgets,
+                args.resolution_start_weights,
+                args.resolution_end_weights,
+            )
+        else:
+            # Single resolution default - no curriculum scheduling
+            budget_config = ResolutionBudgetConfig(
+                budgets=[ResolutionBudget(args.image_size, args.batch_size)],
+                start_weights=[1.0],
+                end_weights=[1.0],
+            )
+        
+        print_rank_0(f"Multi-scale training with curriculum scheduling:")
+        print_rank_0(f"  Total steps: {args.num_training_steps}")
+        for b, sw, ew in zip(budget_config.budgets, 
+                              budget_config.start_weights, 
+                              budget_config.end_weights):
+            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
+                         f"weight {sw:.2f} -> {ew:.2f}")
+        
+        # Wrap with multi-scale wrapper (supports both fixed and dynamic resolution)
+        multi_scale_wrapper = MultiScaleDatasetWrapper(
             dataset=dataset,
-            batch_size=args.batch_size
+            config=budget_config,
+            total_steps=args.num_training_steps,
+            drop_last=True,
+            max_resolution_level=args.max_resolution_level,
         )
+        
         dataloader = DataLoader(
-            dataset,
-            batch_size=1,
+            multi_scale_wrapper,
+            batch_size=1,  # Wrapper yields pre-batched lists
             num_workers=args.num_workers,
             collate_fn=lambda x: collate_fn(x[0])
         )
+        
+        print_rank_0("Multi-scale training enabled")
     else:
         dataloader = DataLoader(
             dataset,
@@ -1250,6 +1304,10 @@ def train():
                         )
 
             scheduler.step()
+            
+            # # Update multi-scale weights based on training progress
+            # if multi_scale_wrapper is not None:
+            #     multi_scale_wrapper.set_step(scheduler.global_step)
 
             # 3. VAE Encode (get latents)
             with record_function("VAE_Encode"):
@@ -1266,7 +1324,7 @@ def train():
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
-                    args.batch_size,
+                    batch["image"].shape[0],
                     args.max_condition_length,
                 )
 
@@ -1313,6 +1371,18 @@ def train():
             # Logging
             if scheduler.should_logging():
                 metrics.write_logs(scheduler.global_step)
+                
+                # Log curriculum weight progression for multi-scale
+                if multi_scale_wrapper is not None:
+                    stats = multi_scale_wrapper.get_sampler_stats()
+                    weight_str = ", ".join(
+                        f"{size}:{w:.2f}" 
+                        for size, w in stats["weights"].items()
+                    )
+                    print_rank_0(
+                        f"[step={stats['step']}] progress={stats['progress']:.1%}, "
+                        f"weights=[{weight_str}]"
+                    )
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
