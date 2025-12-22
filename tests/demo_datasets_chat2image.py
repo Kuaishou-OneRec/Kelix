@@ -112,11 +112,15 @@ def demo_single_samples(dataset):
     print("🎯 DEMO 1: Single Samples (Without Collator)")
     print("🎯" * 30)
     
-    print("🔍 Iterating through dataset samples individually:")
+    print("🔍 Iterating through dataset samples using iterator:")
     
-    for i in range(2):  # Show first 2 samples
+    # Use iterator to get samples
+    sample_count = 0
+    for i, sample in enumerate(dataset):
+        if sample_count >= 2:  # Show only first 2 samples
+            break
+            
         print(f"\n📦 Sample {i}:")
-        sample = dataset[i]
         print_sample_info(sample, f"Sample {i} - Raw Output")
         
         if sample and "pixel_values" in sample:
@@ -124,6 +128,8 @@ def demo_single_samples(dataset):
         
         if sample and "image_grid_thw" in sample:
             print(f"   📐 Image grid shape: {sample['image_grid_thw']}")
+        
+        sample_count += 1
 
 
 def demo_with_collator(dataset):
@@ -134,13 +140,16 @@ def demo_with_collator(dataset):
     
     print("🔍 Creating a batch of samples and applying collate_fn:")
     
-    # Create a batch of samples
+    # Create a batch of samples using iterator
     batch_samples = []
-    for i in range(2):  # Use first 2 samples
-        sample = dataset[i]
+    sample_count = 0
+    for sample in dataset:
+        if sample_count >= 2:  # Use first 2 samples
+            break
         if sample is not None:
             batch_samples.append(sample)
-            print(f"📥 Added sample {i} to batch")
+            print(f"📥 Added sample {sample_count} to batch")
+            sample_count += 1
     
     if not batch_samples:
         print("❌ No valid samples found for batching")
@@ -171,7 +180,12 @@ def demo_processor_outputs(dataset):
     print("🔧 DEMO 3: Processor Output Analysis")
     print("🔧" * 30)
     
-    sample = dataset[0] if len(dataset) > 0 else None
+    # Get first sample using iterator
+    sample = None
+    for s in dataset:
+        sample = s
+        break
+    
     if sample is None:
         print("❌ No sample available for analysis")
         return
@@ -217,7 +231,7 @@ def main():
             num_workers=1
         )
         
-        # print(f"📊 Dataset length: {len(dataset)}")
+        print("📊 Dataset type: IterableDataset (use iterator, not indexing)")
         
         # Run demos
         demo_single_samples(dataset)
@@ -228,6 +242,7 @@ def main():
         print("✅ Demo Completed Successfully!")
         print("✅" * 30)
         print("\n📝 Summary:")
+        print("   • IterableDataset: use iterator (for sample in dataset)")
         print("   • Single samples show individual processor outputs")
         print("   • Collator concatenates sequence-based fields along dim=0")
         print("   • Image tensors are stacked along batch dimension")
