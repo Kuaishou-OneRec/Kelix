@@ -1095,6 +1095,27 @@ class Chat2ImageDataset(Token2ImageDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
+        def recursive_traverse(obj, call_back_function):
+            """
+            递归遍历dict/list对象，对每个对象（包括子对象）先执行回调函数
+            
+            参数:
+                obj: 待遍历的对象，仅支持dict或list类型
+                call_back_function: 回调函数，接收当前遍历的对象作为参数
+            """
+            # 第一步：调用回调函数处理当前对象
+            call_back_function(obj)
+            
+            # 判断类型并递归遍历内部成员
+            if isinstance(obj, list):
+                # 遍历列表的每个元素
+                for item in obj:
+                    recursive_traverse(item, call_back_function)
+            elif isinstance(obj, dict):
+                # 遍历字典的每个值（key一般为不可变类型，无需递归）
+                for value in obj.values():
+                    recursive_traverse(value, call_back_function)
+
         pair = self.extract_image_text(sample)
         if pair:
             images = json.loads(sample.get("images", '{}'))
@@ -1114,9 +1135,19 @@ class Chat2ImageDataset(Token2ImageDataset):
                 pair["height"] = height
                 pair["width"] = width
             
-            messages = sample["messages"]
-            # messages=[{"role": "user", "content": [{"type": "text", "text": "Produce a corresponding visual for the text below:\nThe image features a gray leather handbag with a textured surface and two handles, accompanied by a strap with red and navy stripes. The handbag is positioned against a plain white background, highlighting its design and details."}]}, {"role": "assistant", "content": [{"type": "image_gen", "image": "mmu-vcg-data:bd6c6e695e21adeba3038ad5d0a327d1.JPEG"}]}] <class 'str'>
-            messages = json.loads(messages)
+
+
+            messages = json.loads(sample["messages"])
+            image_dict = json.loads(sample["images"])
+            def call_back(x):
+                if not isinstance(x, dict): return
+                if x.get("type") == "image_gen":
+                    x["image_gen"] = image_dict[x["image_gen"]] if x["image_gen"] in image_dict else x["image_gen"]
+                if x.get("type") == "image":
+                    if x["image"] in image_dict:
+                        x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
+
+            recursive_traverse(messages, call_back)
             pair["message"] = messages
             print(f"sample={sample}\npair={pair}")
             # pair={'image': '/mmu_mllm_hdd_2/zhouyang12/media/images/cc/5a/ee/fd/53/mmu-vcg-data-bd6c6e695e21adeba3038ad5d0a327d1.jpg', 'text': 'The image features a gray leather handbag with a textured surface and two handles, accompanied by a strap with red and navy stripes. The handbag is positioned against a plain white background, highlighting its design and details.', 'height': 2000, 'width': 1128}
