@@ -1003,14 +1003,6 @@ Parsed JSON content or empty list if parsing fails
             if key in batch[0]:
                 result[key] = torch.concat([s[key] for s in batch], dim=1)        
         
-        # Add cu_seqlens for flash_attention
-        if "input_ids" in batch[0]:
-            # Calculate sequence lengths for each sample
-            seq_lens = [s["input_ids"].shape[1] for s in batch]
-            # Create cumulative sequence lengths: [0, seq_len1, seq_len1+seq_len2, ...]
-            cu_seqlens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(dim=0)
-            result["cu_seqlens"] = cu_seqlens
-        
         return result
 
 
@@ -1183,7 +1175,16 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         for key in ["input_ids", "attention_mask"]:
             if key in batch[0]:
-                result[key] = torch.concat([s[key] for s in batch], dim=1)        
+                result[key] = torch.concat([s[key] for s in batch], dim=1)       
+
+        # Add cu_seqlens for flash_attention
+        if "input_ids" in batch[0]:
+            # Calculate sequence lengths for each sample
+            seq_lens = [s["input_ids"].shape[1] for s in batch]
+            # Create cumulative sequence lengths: [0, seq_len1, seq_len1+seq_len2, ...]
+            cu_seqlens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(dim=0)
+            result["cu_seqlens"] = cu_seqlens
+         
         return result
     
 class MultiScaleDatasetWrapper(IterableDataset):
