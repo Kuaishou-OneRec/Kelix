@@ -1171,9 +1171,10 @@ class Chat2ImageDataset(Token2ImageDataset):
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
-        
+
         for key in ["input_ids", "attention_mask"]:
             if key in batch[0]:
+                print(f"key={key}, shape={[s[key].shape for s in batch]}")
                 result[key] = torch.stack([s[key] for s in batch])        
         return result
     
