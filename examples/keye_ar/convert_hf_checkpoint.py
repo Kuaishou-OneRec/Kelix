@@ -283,7 +283,7 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     print("Verifying model loading with from_pretrained...")
     try:
         # 加载转换后的模型
-        loaded_model = KeyeARModel.from_pretrained(new_model_dir)
+        loaded_model = KeyeARModel.from_pretrained(new_model_dir).to(dtype=dtype)
         loaded_model = loaded_model.to(device)
         
         # 再次进行前向传播验证
@@ -319,13 +319,13 @@ def main():
     parser.add_argument(
         "--hf-checkpoint-path",
         type=str,
-        default="/llm_reco_ssd/lingzhixin/models/tmp",
+        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/converted",
         help="Path to Hugging Face checkpoint directory"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="/llm_reco_ssd/lingzhixin/models/tmp_muse",
+        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
         help="Output directory for Muse format checkpoint"
     )
     
