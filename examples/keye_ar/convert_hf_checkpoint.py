@@ -186,25 +186,6 @@ def load_safetensors_state_dict(model_dir):
     return state_dict
 
 
-def load_keye_for_conditional_generation(output_model_dir, device):
-    """加载KeyeForConditionalGeneration模型（参考verify_logits_consistency_v2.py）"""
-    try:
-        from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration
-    except ImportError:
-        raise ImportError("KeyeForConditionalGeneration not found, please check the import path")
-    
-    model = KeyeForConditionalGeneration.from_pretrained(
-        output_model_dir, 
-        _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.bfloat16, 
-        low_cpu_mem_usage=True
-    )
-    model.config.output_one_token = model.output_one_token = False
-    model.token_head.use_flash_attn = True
-    model = model.to(device).bfloat16()
-    return model
-
-
 def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     """Convert a Hugging Face Keye checkpoint to a Muse KeyeAR checkpoint"""
     
@@ -236,20 +217,13 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     with set_default_dtype(dtype):
         model = KeyeARModel(config)
     
-    # 加载Hugging Face权重
-    print("Loading Hugging Face weights...")
-    try:
-        # 方法1：从KeyeForConditionalGeneration加载权重（参考verify_logits_consistency_v2.py）
-        keye_model = load_keye_for_conditional_generation(hf_checkpoint_path, device)
-        keye_state_dict = keye_model.state_dict()
-        converted_state_dict = model.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
-    except Exception as e:
-        print(f"Failed to load from KeyeForConditionalGeneration: {e}")
-        print("Falling back to direct safetensors loading...")
-        
-        # 方法2：直接加载safetensors文件
-        hf_state_dict = load_safetensors_state_dict(hf_checkpoint_path)
-        converted_state_dict = model.convert_hf_state_dict(hf_state_dict, tie_word_embeddings=False)
+    # 直接加载safetensors文件
+    print("Loading Hugging Face weights from safetensors...")
+    hf_state_dict = load_safetensors_state_dict(hf_checkpoint_path)
+    
+    # 转换权重
+    print("Converting weights to Muse format...")
+    converted_state_dict = model.convert_hf_state_dict(hf_state_dict, tie_word_embeddings=False)
     
     # 加载权重到Muse模型
     print("Loading converted weights...")
@@ -271,7 +245,7 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     
     print("Model conversion completed successfully!")
     
-    # 前向传播验证（参考qwen3转换脚本）
+    # 前向传播验证
     print("Performing forward pass verification...")
     try:
         # 简单的随机输入验证
@@ -303,6 +277,40 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     with open(config_path, 'w') as f:
         json.dump(config.to_dict(), f, indent=2)
     
+    print("✓ Model saved successfully!")
+    
+    # 使用from_pretrained加载验证（参考qwen3转换脚本）
+    print("Verifying model loading with from_pretrained...")
+    try:
+        # 加载转换后的模型
+        loaded_model = KeyeARModel.from_pretrained(new_model_dir, torch_dtype=dtype)
+        loaded_model = loaded_model.to(device)
+        
+        # 再次进行前向传播验证
+        print("Performing forward pass with loaded model...")
+        with torch.no_grad():
+            loaded_outputs = loaded_model(tokens=input_ids, position_ids=position_ids)
+        
+        # 比较原始模型和加载模型的输出
+        if hasattr(outputs, 'last_hidden_state') and hasattr(loaded_outputs, 'last_hidden_state'):
+            diff = (outputs.last_hidden_state - loaded_outputs.last_hidden_state).abs()
+            max_diff = diff.max().item()
+            mean_diff = diff.mean().item()
+            
+            print(f"✓ Loaded model forward pass successful!")
+            print(f"  Max difference: {max_diff:.6e}")
+            print(f"  Mean difference: {mean_diff:.6e}")
+            
+            if max_diff < 1e-5:
+                print("✓✓✓ SUCCESS: Loaded model matches original model perfectly!")
+            else:
+                print("⚠ WARNING: Loaded model differs from original model")
+        else:
+            print("✓ Loaded model forward pass successful!")
+            
+    except Exception as e:
+        print(f"⚠ from_pretrained verification failed: {e}")
+    
     print("✓✓✓ SUCCESS: KeyeAR model conversion completed!")
 
 
@@ -311,13 +319,13 @@ def main():
     parser.add_argument(
         "--hf-checkpoint-path",
         type=str,
-        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted",
+        default="/llm_reco_ssd/lingzhixin/models/tmp",
         help="Path to Hugging Face checkpoint directory"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/muse_converted",
+        default="/llm_reco_ssd/lingzhixin/models/tmp_muse",
         help="Output directory for Muse format checkpoint"
     )
     
