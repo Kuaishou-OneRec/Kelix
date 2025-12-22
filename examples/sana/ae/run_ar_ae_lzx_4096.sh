@@ -124,7 +124,6 @@ nohup mpirun --allow-run-as-root \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --keye-ar-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
