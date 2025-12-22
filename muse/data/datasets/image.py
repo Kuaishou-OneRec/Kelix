@@ -1114,40 +1114,9 @@ class Chat2ImageDataset(Token2ImageDataset):
                 pair["height"] = height
                 pair["width"] = width
 
-            print(f"pair={pair}")
+            print(f"sample={sample}\npair={pair}")
             return pair
         return None
-
-    def _collate_fn(
-        self,
-        batch: List[Dict[str, torch.Tensor]],
-    ) -> Dict[str, torch.Tensor]:
-        """Collate batch samples for chat-style processing.
-        
-        Args:
-            batch: List of processed samples
-        
-        Returns:
-            Collated batch dict
-            
-        Note:
-            Handles variable-length processor outputs by concatenating along sequence dimension.
-        """
-        result = {}
-        print(batch)
-        
-        # Handle image tensor (same for all samples)
-        if "image" in batch[0]:
-            result["image"] = torch.stack([s["image"] for s in batch])
-        
-        # Handle processor outputs - concatenate along sequence dimension
-        processor_keys = [key for key in batch[0].keys() if key not in ["image"]]
-        for key in processor_keys:
-            if all(key in s for s in batch):
-                # Concatenate along sequence dimension (dim=0)
-                result[key] = torch.cat([s[key] for s in batch], dim=0)
-        
-        return result
 
 
 class MultiScaleDatasetWrapper(IterableDataset):
