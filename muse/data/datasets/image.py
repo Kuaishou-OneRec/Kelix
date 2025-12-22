@@ -1055,7 +1055,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             condition_image = image
 
         # Get message from sample for chat template processing
-        messages = sample["meessage"]
+        messages = sample["message"]
 
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
