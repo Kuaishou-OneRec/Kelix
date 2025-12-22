@@ -438,12 +438,18 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
+        print(f"input_ids={input_ids.shape}")
+        print(f"pixel_values={pixel_values.shape}")
+        print(f"image_grid_thw={image_grid_thw.shape}")
+        print(f"cu_seqlens={cu_seqlens}")
+
         # Call KeyeARModel forward method
         outputs = tokenizer(
             tokens=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
-            position_ids=position_ids
+            position_ids=position_ids,
+            cu_seqlens=cu_seqlens,
         )
         
         # Extract embeddings from the output
@@ -1064,8 +1070,8 @@ def train():
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
-    image_tokenizer = load_image_tokenizer(
-        tokenizer_dir=args.image_tokenizer_dir,
+    image_tokenizer = load_keye_ar(
+        tokenizer_dir=args.keye_ar_dir,
         device=torch.cuda.current_device(),
         dtype=args.model_dtype
     )
@@ -1074,10 +1080,10 @@ def train():
     vis_processor = None
     if args.visualize_dir:
         vis_processor = AutoProcessor.from_pretrained(
-            args.image_tokenizer_dir,
+            args.keye_ar_dir,
             trust_remote_code=True
         )
-        print_rank_0(f"Loaded processor for visualization from {args.image_tokenizer_dir}")
+        print_rank_0(f"Loaded processor for visualization from {args.keye_ar_dir}")
 
     # Setup visualization model (for FSDP mode)
     # In FSDP mode, we need a separate model instance for inference
@@ -1147,9 +1153,9 @@ def train():
         print_rank_0(f"Set image_size of dataset to: {args.image_size}")
     
     # Set tokenizer_path from model_dir if not specified
-    if not dataset_config.get("processor_path") and args.image_tokenizer_dir:
-        dataset_config["processor_path"] = args.image_tokenizer_dir
-        print_rank_0(f"Set tokenizer_path of dataset to: {args.image_tokenizer_dir}")
+    if not dataset_config.get("processor_path") and args.keye_ar_dir:
+        dataset_config["processor_path"] = args.keye_ar_dir
+        print_rank_0(f"Set tokenizer_path of dataset to: {args.keye_ar_dir}")
     
     # Add distributed rank/world_size to dataset config for proper data sharding
     if dist.is_initialized():
@@ -1331,7 +1337,7 @@ def train():
                             device=torch.cuda.current_device(),
                             dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                         )
-
+            print(f"batch={batch}")
             scheduler.step()
             
             # # Update multi-scale weights based on training progress
