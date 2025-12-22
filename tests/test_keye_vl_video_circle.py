@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_video import modeling as muse_mod
-from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+from muse.config import KeyeTokenizerEnd2EndVideoConfig
 from muse.training.common import set_default_dtype
 
 # === 导入 Origin 模型 ===
@@ -206,6 +206,8 @@ def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dty
     """
     加载 Muse 模型
     """
+    from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+    
     logger.info("\n" + "="*60)
     logger.info("🚀 Loading Muse Model...")
     logger.info("="*60)
@@ -271,15 +273,17 @@ def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dty
         vq_sampling_mode="argmin",
     )
 
+    model_cfg = KeyeTokenizerEnd2EndVideoConfig(
+        qwen_config=qwen_cfg,
+        vision_config=vision_cfg,
+        tokenizer_config=tokenizer_cfg,
+        image_token_id=raw_cfg.get("image_token_id", 151655),
+        video_token_id=raw_cfg.get("video_token_id", 151656),
+        pool="sum",
+    )
+
     with set_default_dtype(dtype):
-        muse_model = muse_mod.KeyeTokenizerEnd2EndVideo(
-            qwen_config=qwen_cfg,
-            vision_config=vision_cfg,
-            tokenizer_config=tokenizer_cfg,
-            image_token_id=raw_cfg.get("image_token_id", 151655),
-            video_token_id=raw_cfg.get("video_token_id", 151656),
-            pool="sum"
-        ).to(device)
+        muse_model = muse_mod.KeyeTokenizerEnd2EndVideo(model_cfg).to(device)
 
     logger.info("📥 Loading Muse Weights...")
     state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")

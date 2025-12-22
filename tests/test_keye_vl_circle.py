@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
-from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+from muse.config import KeyeTokenizerEnd2EndImageConfig, KeyeTokenizerEnd2EndVideoConfig
 from muse.training.common import set_default_dtype
 
 # === 导入 Origin 模型 ===
@@ -152,51 +152,12 @@ def prepare_inputs_common(ckpt_path: str, device: str, dtype: torch.dtype):
     ).to(device)
 
     return inputs, processor, messages
-
-# def prepare_inputs_for_muse(inputs, device: str, dtype: torch.dtype):
-#     """
-#     为 Muse 模型准备输入
-#     """
-#     model_inputs = {
-#         "input_ids": inputs["input_ids"].to(device),
-#         "attention_mask": inputs["attention_mask"].to(device),
-#         "pixel_values": inputs["pixel_values"].to(device, dtype=dtype),
-#         "image_grid_thw": inputs["image_grid_thw"].to(device)
-#     }
-    
-#     # [Muse Specific] Muse Model 期望 pixel_values 是 [N, C, H, W]
-#     if model_inputs["pixel_values"].dim() == 5 and model_inputs["pixel_values"].shape[0] == 1:
-#         model_inputs["pixel_values"] = model_inputs["pixel_values"].squeeze(0)
-
-#     logger.info(f"   [Muse] Input IDs Shape: {model_inputs['input_ids'].shape}")
-#     logger.info(f"   [Muse] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
-#     logger.info(f"   [Muse] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
-    
-#     return model_inputs
-
-# def prepare_inputs_for_origin(inputs, device):
-#     """
-#     为 Origin 模型准备输入
-#     [关键对齐] 与新 HF 代码完全一致：直接 .to(device)，不转换 dtype
-#     """
-#     # 直接把整个 inputs 移到 device 上，保持原始 dtype（与新 HF 代码一致）
-#     model_inputs = inputs.to(device)
-
-#     logger.info(f"   [Origin] Input IDs Shape: {model_inputs['input_ids'].shape}")
-#     logger.info(f"   [Origin] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
-#     logger.info(f"   [Origin] Pixel Values Dtype: {model_inputs['pixel_values'].dtype}")
-#     logger.info(f"   [Origin] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
-    
-#     return model_inputs
-
-# =========================================================================
-# Model Loading Functions
-# =========================================================================
-
 def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dtype):
     """
     加载 Muse 模型
     """
+    from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+    
     logger.info("\n" + "="*60)
     logger.info("🚀 Loading Muse Model...")
     logger.info("="*60)
@@ -262,14 +223,16 @@ def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dty
         vq_sampling_mode="argmin",
     )
 
+    model_cfg = KeyeTokenizerEnd2EndImageConfig(
+        qwen_config=qwen_cfg,
+        vision_config=vision_cfg,
+        tokenizer_config=tokenizer_cfg,
+        image_token_id=raw_cfg.get("image_token_id", 151655),
+        pool="sum",
+    )
+
     with set_default_dtype(dtype):
-        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
-            qwen_config=qwen_cfg,
-            vision_config=vision_cfg,
-            tokenizer_config=tokenizer_cfg,
-            image_token_id=raw_cfg.get("image_token_id", 151655),
-            pool="sum"
-        ).to(device)
+        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(model_cfg).to(device)
 
     logger.info("📥 Loading Muse Weights...")
     state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")
