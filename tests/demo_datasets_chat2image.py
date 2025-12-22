@@ -248,7 +248,8 @@ def main():
             tmp_path = Path(tmp_dir)
             
             print("📁 Creating test data...")
-            parquet_path = create_test_parquet(tmp_path)
+            # parquet_path = create_test_parquet(tmp_path)
+            parquet_path = "/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json"
             
             print("🔧 Initializing Chat2ImageDataset...")
             dataset = Chat2ImageDataset(
