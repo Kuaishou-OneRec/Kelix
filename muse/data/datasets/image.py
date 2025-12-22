@@ -989,7 +989,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             return pair
         return None
 
-    def collate_fn(
+    def _collate_fn(
         self,
         batch: List[Dict[str, torch.Tensor]],
     ) -> Dict[str, torch.Tensor]:
