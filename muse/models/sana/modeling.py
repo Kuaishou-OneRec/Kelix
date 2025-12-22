@@ -27,6 +27,7 @@ Reference: https://github.com/NVlabs/Sana
 
 import math
 import logging
+from functools import partial
 from typing import Dict, Optional, Tuple, Any, List, Callable
 
 import numpy as np
@@ -565,10 +566,37 @@ class SanaModel(Model):
         return muse_state_dict
     
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
-        """Return initializer function for given parameter name."""
+        """Return initializer function for given parameter name.
+        
+        This follows the official SANA initialization scheme:
+        - RMSNorm weights: ones (matching default init)
+        - Timestep/caption embedding MLP: normal(std=0.02)
+        - Other linear weights: xavier_uniform
+        - Biases: zeros
+        """
+        # RMSNorm and LayerNorm scale weights should be ones
+        if ('norm' in name or 'attention_y_norm' in name) and name.endswith('.weight'):
+            def norm_init(tensor: torch.Tensor):
+                nn.init.ones_(tensor)
+                # Apply y_norm_scale_factor if this is attention_y_norm
+                if 'attention_y_norm' in name:
+                    tensor.mul_(self.config.y_norm_scale_factor)
+            return norm_init
+        
+        # Timestep embedding MLP: normal(std=0.02)
+        if 't_embedder.mlp' in name or 't_block' in name:
+            if name.endswith('.weight'):
+                return partial(nn.init.normal_, mean=0.0, std=0.02)
+        
+        # Caption embedding MLP: normal(std=0.02) 
+        if 'y_embedder.y_proj' in name:
+            if name.endswith('.weight'):
+                return partial(nn.init.normal_, mean=0.0, std=0.02)
+        
+        # Default initialization
         def default_init(tensor: torch.Tensor):
             if tensor.ndim >= 2:
                 nn.init.xavier_uniform_(tensor)
             else:
-                nn.init.zeros_(tensor)
+                nn.init.zeros_(tensor)  # biases
         return default_init

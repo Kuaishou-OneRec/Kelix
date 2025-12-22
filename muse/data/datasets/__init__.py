@@ -1,7 +1,11 @@
 from .base import DistributedDataset
 from .text import TextDataset
-from .image import Text2ImageDataset, Token2ImageDataset, \
-    MultiScaleDatasetWrapper
+from .image import (
+    Text2ImageDataset, 
+    Token2ImageDataset,
+    MultiScaleDatasetWrapper,
+    ResolutionBudgetScheduler,
+)
 
 # Backward compatibility - expose all classes
 __all__ = [
@@ -9,5 +13,6 @@ __all__ = [
     'TextDataset',
     'Text2ImageDataset',
     'Token2ImageDataset',
-    'MultiScaleDatasetWrapper'
+    'MultiScaleDatasetWrapper',
+    'ResolutionBudgetScheduler',
 ]
