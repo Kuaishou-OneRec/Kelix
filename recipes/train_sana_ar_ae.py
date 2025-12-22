@@ -649,7 +649,7 @@ def visualize_reconstruction(
     """
     from PIL import Image
     from diffusers import FlowMatchEulerDiscreteScheduler
-    
+    return
     print_rank_0(f"[Step {global_step}] Running visualization...")
     
     # Load and preprocess images
@@ -1212,6 +1212,7 @@ def train():
         
         print_rank_0("Multi-scale training enabled")
     else:
+        print(f"no multi scale", collate_fn)
         dataloader = DataLoader(
             dataset,
             batch_size=args.batch_size,
@@ -1351,7 +1352,7 @@ def train():
                 elif "image" in batch and vae is not None:
                     latents = vae_encode(vae, batch["image"])
                 else:
-                    raise ValueError("No latents or images in batch")
+                    raise ValueError(f"No latents or images in batch. batch keys={batch.keys()}, vae={type(vae)}")
 
             # 4. Text Encoder
             with record_function("TextEncoder"):

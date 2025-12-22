@@ -1184,7 +1184,10 @@ class Chat2ImageDataset(Token2ImageDataset):
             # Create cumulative sequence lengths: [0, seq_len1, seq_len1+seq_len2, ...]
             cu_seqlens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(dim=0)
             result["cu_seqlens"] = cu_seqlens
-        print(f"cu_seqlens=", cu_seqlens)
+
+        if "image" in batch[0]:
+            result["image"] = torch.stack([s["image"] for s in batch])
+            
         return result
     
 class MultiScaleDatasetWrapper(IterableDataset):
