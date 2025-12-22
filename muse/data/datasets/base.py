@@ -364,6 +364,7 @@ class DistributedDataset(IterableDataset):
     source_error_cnt = {}
     
     buffer = []
+    source_list = []  # Track data sources for each sample in buffer
     current_length = 0
     for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
@@ -431,12 +432,21 @@ class DistributedDataset(IterableDataset):
         if self.packing:
           new_sample_length = self.get_sample_length(new_inputs)
           if current_length + new_sample_length > self.max_length:
-            yield self.pack_sample(buffer)
+            packed_inputs = self.pack_sample(buffer)
+            # Add data_source info for monitoring
+            packed_inputs["data_source"] = source_list
+            yield packed_inputs
             buffer = []
+            source_list = []
             current_length = 0
           buffer.append(new_inputs)
+          source_list.append(source_name)
           current_length += new_sample_length
         else:
+          # For non-packing mode, add source info directly
+          new_inputs["data_source"] = [source_name]
           yield new_inputs
     if self.packing and len(buffer) > 0:
-      yield self.pack_sample(buffer)
+      packed_inputs = self.pack_sample(buffer)
+      packed_inputs["data_source"] = source_list
+      yield packed_inputs
