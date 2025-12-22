@@ -12,7 +12,7 @@ from typing import Dict, Any, List
 import torch.distributed as dist
 
 from muse.data.datasets.image import Chat2ImageDataset, Token2ImageDataset
-print(Token2ImageDataset.collate_fn); exit()
+
 Chat2ImageDataset = Token2ImageDataset
 # Real processor path for testing
 PROCESSOR_PATH = "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/"
@@ -258,7 +258,7 @@ def main():
                 processor_path=PROCESSOR_PATH,
                 num_workers=1
             )
-            
+            print(dataset.collate_fn); exit()
             print("📊 Dataset type: IterableDataset (use iterator, not indexing)")
             
             # Run demos
