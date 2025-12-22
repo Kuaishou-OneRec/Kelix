@@ -1138,7 +1138,7 @@ def train():
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Token2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
-    print(f"collate_fn={collate_fn}")
+
     # Store wrapper reference for step updates (used in training loop)
     multi_scale_wrapper = None
     
