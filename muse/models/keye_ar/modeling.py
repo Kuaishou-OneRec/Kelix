@@ -327,7 +327,6 @@ class UnifiedQwen3Model(Qwen3Model):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         input_image_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -344,7 +343,6 @@ class UnifiedQwen3Model(Qwen3Model):
             inputs_embeds: 输入嵌入
             use_cache: 是否使用缓存
             output_attentions: 是否输出注意力权重
-            output_hidden_states: 是否输出隐藏状态
             return_dict: 是否返回字典格式
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
@@ -365,7 +363,6 @@ class UnifiedQwen3Model(Qwen3Model):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
             **kwargs
@@ -450,9 +447,6 @@ class KeyeARModel(Model):
         
         # 视觉相关组件
         self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
-        
-        # 量化投影器
-        original_hidden_size = qwen_config.embed_dim
         
         # 主语言模型
         self.model = UnifiedQwen3Model(qwen_config=qwen_config, token_decoder_config=token_decoder_config, tokenizer_config=tokenizer_config)
@@ -564,19 +558,7 @@ class KeyeARModel(Model):
             for k, v in converted_visual_tokenizer_state_dict.items():
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
-                
-        # # 特殊处理：确保tok_embeddings.weight有正确的键名
-        # # Qwen3Model会将model.embed_tokens.weight转换为model.tok_embeddings.weight
-        # # 但KeyeARModel需要的是model.model.tok_embeddings.embed_tokens.weight
-        # if "model.tok_embeddings.weight" in converted_state_dict:
-        #     # 移动到model.model.tok_embeddings.embed_tokens.weight
-        #     weight = converted_state_dict.pop("model.tok_embeddings.weight")
-        #     converted_state_dict["model.model.tok_embeddings.embed_tokens.weight"] = weight
-            
-        # if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
-        #     print("delete model.model.token_head.token_embedding.weight")
-        #     del converted_state_dict['model.model.token_head.token_embedding.weight']
-            
+
         return converted_state_dict
 
     def expand_with_image_tokens(
