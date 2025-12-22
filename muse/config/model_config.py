@@ -547,39 +547,39 @@ class UnifiedQwen3Config(Qwen3Config):
         description="Token ID used to represent quantization end token."
     )
 
-    # Tokenizer configuration
+    # # Tokenizer configuration
     codebook_size: int = Field(default=8192, description="码本大小")
     n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
 
-    # Token head configuration
-    token_head_d_model: int = Field(
-        default=4096,
-        description="Dimensionality of the model for token head"
-    )
-    token_head_nheads: int = Field(
-        default=32,
-        description="Number of attention heads for token head"
-    )
-    token_head_num_layers: int = Field(
-        default=3,
-        description="Number of layers for token head"
-    )
-    token_head_dim_feedforward: int = Field(
-        default=11008,
-        description="Dimensionality of the feed-forward network for token head"
-    )
-    token_head_attention_function: Literal["eager", "flash_attention_2"] = Field(
-        default="eager",
-        description="Attention implementation to use for token head"
-    )
-    token_head_use_gradient_checkpointing: bool = Field(
-        default=True,
-        description="Whether to use gradient checkpointing for token head"
-    )
-    token_head_reduce: bool = Field(
-        default=True,
-        description="Whether to reduce for token head"
-    )
+    # # Token head configuration
+    # token_head_d_model: int = Field(
+    #     default=4096,
+    #     description="Dimensionality of the model for token head"
+    # )
+    # token_head_nheads: int = Field(
+    #     default=32,
+    #     description="Number of attention heads for token head"
+    # )
+    # token_head_num_layers: int = Field(
+    #     default=3,
+    #     description="Number of layers for token head"
+    # )
+    # token_head_dim_feedforward: int = Field(
+    #     default=11008,
+    #     description="Dimensionality of the feed-forward network for token head"
+    # )
+    # token_head_attention_function: Literal["eager", "flash_attention_2"] = Field(
+    #     default="eager",
+    #     description="Attention implementation to use for token head"
+    # )
+    # token_head_use_gradient_checkpointing: bool = Field(
+    #     default=True,
+    #     description="Whether to use gradient checkpointing for token head"
+    # )
+    # token_head_reduce: bool = Field(
+    #     default=True,
+    #     description="Whether to reduce for token head"
+    # )
 
     @model_validator(mode="after")
     def validate_pre_embedding_fields(cls, values: "UnifiedQwen3Config") -> "UnifiedQwen3Config":

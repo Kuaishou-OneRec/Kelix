@@ -109,7 +109,7 @@ def _build_keye_ar_config(hf_cfg: Dict[str, Any]) -> KeyeARConfig:
     q_eos_token = hf_cfg.get('q_eos_token')
     
     unified_qwen_config = UnifiedQwen3Config(
-        model_class="Qwen3Model",
+        model_class="UnifiedQwen3Model",
         vocab_size=vocab_size,
         embed_dim=hidden_size,
         num_layers=num_hidden_layers,
@@ -121,7 +121,7 @@ def _build_keye_ar_config(hf_cfg: Dict[str, Any]) -> KeyeARConfig:
         norm_eps=rms_norm_eps,
         attn_dropout=attention_dropout,
         tie_word_embeddings=tie_word_embeddings,
-        rope_theta=rope_theta,
+        base=rope_theta,
         max_seq_len=max_position_embeddings,
         image_token_id=image_token_id,
         pad_token_id=pad_token_id,
