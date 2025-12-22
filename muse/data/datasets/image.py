@@ -1132,8 +1132,6 @@ class Chat2ImageDataset(Token2ImageDataset):
             if height is not None and width is not None:
                 pair["height"] = height
                 pair["width"] = width
-            
-
 
             messages = json.loads(sample["messages"])
             image_dict = json.loads(sample["images"])
@@ -1149,7 +1147,36 @@ class Chat2ImageDataset(Token2ImageDataset):
             return pair
         return None
 
+    def collate_fn(
+        self,
+        batch: List[Dict[str, Any]],
+    ) -> Dict[str, torch.Tensor]:
+        """Collate batch samples.
+        
+        Args:
+            batch: List of processed samples
+        
+        Returns:
+            Collated batch dict
+            
+        Note:
+            For multi-scale training without AspectRatioBatchSampler,
+            images in a batch may have different sizes. We resize all
+            images to the first image's size for consistent batching.
+        """
+        # Here is the real process of batch.
+        result = {}
+        batch = [self._process_pair(sample) for sample in batch]
 
+        # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
+        result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
+        result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
+        
+        for key in ["input_ids", "attention_mask"]:
+            if key in batch[0]:
+                result[key] = torch.stack([s[key] for s in batch])        
+        return result
+    
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.
     
