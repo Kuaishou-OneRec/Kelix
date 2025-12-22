@@ -146,6 +146,7 @@ class ParquetReader(Reader):
       worker_id, _  = get_worker_info()
       for fn in tqdm(self.sources):
         try:
+          print(f"fn={fn}")
           parquet_file = load_parquet(fn)
         except Exception as e:
           print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
@@ -222,6 +223,7 @@ class DistributedDataset(IterableDataset):
   def _load_file_list(self) -> List[str]:
     """Load file list"""
     files = []
+    print(f"self.sources={self.sources}")
     if isinstance(self.sources, list):
         files = self.sources
     elif self.sources.endswith(".json"):
