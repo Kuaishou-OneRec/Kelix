@@ -384,11 +384,14 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
     return z
 
 def load_image_tokenizer(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
-    from muse.models.keye_tokenizer import KeyeImageTokenizer
+    # from muse.models.keye_tokenizer import KeyeImageTokenizer
+    # with set_default_dtype(dtype), torch.device(device):
+    #     tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
+    #     tokenizer.requires_grad_(False)
+    from muse.models.keye_ar import KeyeARModel
     with set_default_dtype(dtype), torch.device(device):
-        tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
+        tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
         tokenizer.requires_grad_(False)
-
     return tokenizer
 
 def tokenize_images(tokenizer,

@@ -284,9 +284,10 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     # 使用from_pretrained加载验证（参考qwen3转换脚本）
     print("Verifying model loading with from_pretrained...")
     try:
-        # 加载转换后的模型
-        loaded_model = KeyeARModel.from_pretrained(new_model_dir).to(dtype=dtype)
-        loaded_model = loaded_model.to(device)
+        # 加载转换后的模型（KeyeARModel.from_pretrained不支持torch_dtype参数）
+        loaded_model = KeyeARModel.from_pretrained(new_model_dir)
+        # 手动设置设备并转换精度
+        loaded_model = loaded_model.to(device=device, dtype=dtype)
         
         # 再次进行前向传播验证
         print("Performing forward pass with loaded model...")
