@@ -1005,6 +1005,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             Handles variable-length processor outputs by concatenating along sequence dimension.
         """
         result = {}
+        print(batch)
         
         # Handle image tensor (same for all samples)
         if "image" in batch[0]:
