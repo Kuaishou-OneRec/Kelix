@@ -1073,6 +1073,9 @@ class Chat2ImageDataset(Token2ImageDataset):
             return_tensors="pt",
         )
 
+        for key in ["input_ids", "attention_mask"]:
+            inputs[key] = inputs[key].squeeze(0)
+
         # Include all processor output fields in result
         for key, value in inputs.items():
             result[key] = value
@@ -1121,9 +1124,6 @@ class Chat2ImageDataset(Token2ImageDataset):
             if image in images:
                 pair["image"] = images[image]
             
-            # Include the message field from the original sample
-            # pair["message"] = sample.get("message")
-            
             metadata = json.loads(sample.get("metadata", '{}'))
             images_info = metadata.get("images_info", {})
             image_info = images_info.get(image, {})
@@ -1135,6 +1135,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
             messages = json.loads(sample["messages"])
             image_dict = json.loads(sample["images"])
+
             def call_back(x):
                 if not isinstance(x, dict): return
                 if x.get("type") in ("image_gen", "image"):
