@@ -374,6 +374,13 @@ def get_argument_parser():
     parser.add_argument("--freeze_navit_mlp_ar", action="store_true",
                         help="Freeze visual_tokenizer.mlp_AR parameters")
 
+    ############ Data Source Monitoring Args ############
+    parser.add_argument("--monitor_datasource_loss", action="store_true",
+                        help="Whether to monitor loss of each datasource")
+    
+    parser.add_argument("--monitor_datasource_cnt", action="store_true",
+                        help="Whether to monitor sample count of each datasource")
+
     return parser
 
 
@@ -885,6 +892,12 @@ def train():
         shift_labels=False
     )
 
+    # Initialize data source monitoring variables
+    local_acc_data_source_samples = collections.defaultdict(int)
+    total_data_source_tokens = collections.defaultdict(int)
+    batch_data_source_loss = collections.defaultdict(float)
+    batch_data_source_tokens = collections.defaultdict(int)
+
     print_rank_0("Starting training...")
     model.train()
     
@@ -910,6 +923,10 @@ def train():
                         )
             
             scheduler.step()
+
+            # Extract data source info (for monitoring)
+            data_source = batch.pop("data_source", None)  # dataset source list for current batch
+            sample_idx = batch.get("sample_idx", None)  # sample index for packing
 
             # Extract batch data for KeyeTokenizerEnd2EndImage
             input_ids = batch["input_ids"]
@@ -1003,6 +1020,32 @@ def train():
                     for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
                         getattr(metrics, f"perplexity_{i}").append(ppl)
                         getattr(metrics, f"codebook_usage_{i}").append(usage)
+            
+            # ============ Compute data source loss and sample count ============
+            if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
+                # WARN: assume batch_size = 1
+                local_sample_idx = get_local_sequence(sample_idx).squeeze()
+                unique_sample_idx = local_sample_idx.unique()
+                
+                for s_idx in unique_sample_idx:
+                    if s_idx < 0:
+                        continue
+                    
+                    local_loss_mask = get_local_sequence(loss_mask)[0]
+                    mask = (local_sample_idx == s_idx) * local_loss_mask
+                    
+                    # per_token_loss is aligned with shifted labels
+                    per_token_loss2 = per_token_loss[:-1]
+                    mask = mask[1:]
+                    sum_loss = per_token_loss2[mask > 0].sum()
+                    
+                    key = data_source[int(s_idx.item())]
+                    batch_data_source_loss[key] += sum_loss.item()
+                    batch_data_source_tokens[key] += mask.sum().item()
+            
+            if args.monitor_datasource_cnt and data_source is not None:
+                for data_source_name in data_source:
+                    local_acc_data_source_samples[data_source_name] += 1
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
@@ -1043,6 +1086,56 @@ def train():
             # Logging at specified intervals
             if scheduler.should_logging():
                 metrics.write_logs(scheduler.global_step)
+                
+                # Reduce data source metrics across all ranks (must be called on all ranks)
+                reduced_batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+                reduced_batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+                reduced_data_source_samples = dist_reduce_dict(local_acc_data_source_samples)
+                
+                # Log data source metrics (only on rank 0)
+                if dist.get_rank() == 0 and tb_writer is not None:
+                    # Log data source loss
+                    if args.monitor_datasource_loss:
+                        for key, loss_sum in reduced_batch_data_source_loss.items():
+                            tokens_count = reduced_batch_data_source_tokens.get(key, 0)
+                            if tokens_count > 0:
+                                tb_writer.add_scalar(
+                                    f"data_source_loss/{key}",
+                                    loss_sum / tokens_count,
+                                    global_step=scheduler.global_step,
+                                    new_style=True
+                                )
+                        
+                        # Accumulate to total_data_source_tokens
+                        for ds_key, ds_num_tokens in reduced_batch_data_source_tokens.items():
+                            total_data_source_tokens[ds_key] += ds_num_tokens
+                    
+                    # Log data source sample ratio
+                    if args.monitor_datasource_cnt:
+                        total_samples = sum(reduced_data_source_samples.values())
+                        if total_samples > 0:
+                            for key, samples in reduced_data_source_samples.items():
+                                tb_writer.add_scalar(
+                                    f"data_source_sample_ratio/{key}",
+                                    1.0 * samples / total_samples,
+                                    global_step=scheduler.global_step,
+                                    new_style=True
+                                )
+                        
+                        # Log data source token ratio
+                        total_tokens_all_sources = sum(reduced_batch_data_source_tokens.values())
+                        if total_tokens_all_sources > 0:
+                            for key, num_tokens in reduced_batch_data_source_tokens.items():
+                                tb_writer.add_scalar(
+                                    f"data_source_token_ratio/{key}",
+                                    1.0 * num_tokens / total_tokens_all_sources,
+                                    global_step=scheduler.global_step,
+                                    new_style=True
+                                )
+                
+                # Reset batch-level data source counters after logging
+                batch_data_source_loss.clear()
+                batch_data_source_tokens.clear()
 
             # Save checkpoint at specified intervals
             if scheduler.should_save_checkpoint():

@@ -113,7 +113,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/train_keye_tok_end2end_video_with_sourceloss.py \
+        bash -c "python3 recipes/train_keye_tok_end2end_video.py \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_tokenizer_end2end_video/run_exp1.6.8_stage2.json \
