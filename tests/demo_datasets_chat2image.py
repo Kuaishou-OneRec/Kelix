@@ -217,7 +217,7 @@ def main():
             num_workers=1
         )
         
-        print(f"📊 Dataset length: {len(dataset)}")
+        # print(f"📊 Dataset length: {len(dataset)}")
         
         # Run demos
         demo_single_samples(dataset)
