@@ -1161,6 +1161,3 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     self.scheduler.step()
                     break
 
-
-class Chat2ImageDataset(DistributedDataset):
-    pass
