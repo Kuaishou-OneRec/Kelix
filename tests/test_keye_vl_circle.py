@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
-from muse.config import KeyeTokenizerEnd2EndImageConfig, KeyeTokenizerEnd2EndVideoConfig
+from muse.config import KeyeTokenizerEnd2EndImageConfig
 from muse.training.common import set_default_dtype
 
 # === 导入 Origin 模型 ===
