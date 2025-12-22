@@ -1113,6 +1113,8 @@ class Chat2ImageDataset(Token2ImageDataset):
             if height is not None and width is not None:
                 pair["height"] = height
                 pair["width"] = width
+
+            print(f"pair={pair}")
             return pair
         return None
 
