@@ -608,8 +608,6 @@ class Text2ImageDataset(DistributedDataset):
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
-
-
 class Token2ImageDataset(DistributedDataset):
     """Dataset for visual token-to-image pairs.
     
@@ -875,6 +873,7 @@ class Token2ImageDataset(DistributedDataset):
 
         return {"image": image, "text": text}
 
+
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair.
         
@@ -1001,152 +1000,6 @@ class Token2ImageDataset(DistributedDataset):
         result["image"] = torch.stack([s["image"] for s in batch])
 
         return result
-
-
-class Chat2ImageDataset(Token2ImageDataset):
-    """Dataset for chat-style image generation with message-based processing.
-    
-    This dataset extends Token2ImageDataset to support chat-style message processing.
-    It uses the 'message' field from samples for apply_chat_template and includes
-    all processor output fields in the result.
-    
-    Args:
-        sources: Path(s) to parquet files or directory
-        image_size: Target image size (int or tuple)
-        processor_path: Path to processor
-        max_condition_length: Maximum condition sequence length
-        **kwargs: Additional args passed to DistributedDataset
-    """
-    
-    def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
-        """Process a single image-text pair using chat-style message processing.
-        
-        Args:
-            sample: Sample dict with 'image' and 'text' keys
-        
-        Returns:
-            Processed sample dict or None if processing fails
-        """
-        result = {}
-
-        # Load and process image
-        image_data = sample.get("image")
-        if image_data is None:
-            return None
-        
-        image = load_image(image_data)
-        if image is None:
-            return None
-        
-        # Convert to RGB
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-
-        if self.multi_scale:
-            target_h, target_w = sample["target_height"], sample["target_width"]
-            target_image = self._build_multiscale_transform((target_h, target_w))(image)
-            # Apply same Resize + CenterCrop but keep as PIL image for processor
-            condition_image = T.Compose([
-                T.Resize((target_h, target_w), interpolation=T.InterpolationMode.BILINEAR),
-                T.CenterCrop((target_h, target_w)),
-            ])(image)
-        else:
-            target_image = self.transform(image)
-            condition_image = image
-
-        # Get message from sample for chat template processing
-        messages = sample.get("message")
-
-        # Apply chat template using the message from sample
-        text = self.processor.apply_chat_template(
-            messages, 
-            tokenize=False
-        )
-
-        image_inputs, video_inputs = process_vision_info(messages)
-
-        # Process with processor and include ALL output fields
-        inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=False,
-            truncation=False,
-            return_tensors="pt",
-        )
-
-        # Include all processor output fields in result
-        for key, value in inputs.items():
-            result[key] = value
-        
-        # Add the target image
-        result["image"] = target_image
-        
-        return result
-
-    def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
-        """Process a single sample with message-based chat processing.
-        
-        Extracts image-text pair from sample and processes it using chat-style messages.
-        
-        Args:
-            sample: Raw sample dict from parquet
-        
-        Returns:
-            Processed sample dict or None if processing fails
-        """
-        pair = self.extract_image_text(sample)
-        if pair:
-            images = json.loads(sample.get("images", '{}'))
-            image = pair["image"]
-            if image in images:
-                pair["image"] = images[image]
-            
-            # Include the message field from the original sample
-            # pair["message"] = sample.get("message")
-            
-            metadata = json.loads(sample.get("metadata", '{}'))
-            images_info = metadata.get("images_info", {})
-            image_info = images_info.get(image, {})
-            height = image_info.get("height", None)
-            width = image_info.get("width", None)
-            if height is not None and width is not None:
-                pair["height"] = height
-                pair["width"] = width
-            return pair
-        return None
-
-    def _collate_fn(
-        self,
-        batch: List[Dict[str, torch.Tensor]],
-    ) -> Dict[str, torch.Tensor]:
-        """Collate batch samples for chat-style processing.
-        
-        Args:
-            batch: List of processed samples
-        
-        Returns:
-            Collated batch dict
-            
-        Note:
-            Handles variable-length processor outputs by concatenating along sequence dimension.
-        """
-        result = {}
-        print(batch)
-        
-        # Handle image tensor (same for all samples)
-        if "image" in batch[0]:
-            result["image"] = torch.stack([s["image"] for s in batch])
-        
-        # Handle processor outputs - concatenate along sequence dimension
-        processor_keys = [key for key in batch[0].keys() if key not in ["image"]]
-        for key in processor_keys:
-            if all(key in s for s in batch):
-                # Concatenate along sequence dimension (dim=0)
-                result[key] = torch.cat([s[key] for s in batch], dim=0)
-        
-        return result
-
 
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.
@@ -1288,4 +1141,4 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     yield batch
                     self.scheduler.step()
                     break
-
+            
