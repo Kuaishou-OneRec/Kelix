@@ -176,10 +176,13 @@ def get_argument_parser():
                         help="Pretrained VAE model path")
 
     ############ Image Tokenizer args ############
-    parser.add_argument("--image-tokenizer-dir", type=str,
+    # parser.add_argument("--image-tokenizer-dir", type=str,
+    #                     default=None,
+    #                     help="Image tokenizer model name")
+    parser.add_argument("--keye-ar-dir", type=str,
                         default=None,
-                        help="Image tokenizer model name")
-    
+                        help="keye ar model name")
+
     parser.add_argument("--max-condition-length", type=int, default=324,
                         help="Maximum condition sequence length")
 
@@ -383,21 +386,11 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
         z = vae.encode(images)[0]
         z = z * vae.config.scaling_factor
     return z
+def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
 
-def load_image_tokenizer(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
-    # from muse.models.keye_tokenizer import KeyeImageTokenizer
-    # with set_default_dtype(dtype), torch.device(device):
-    #     tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
-    #     tokenizer.requires_grad_(False)
-
-    # from muse.models.keye_ar import KeyeARModel
-    # with set_default_dtype(dtype), torch.device(device):
-    #     tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
-    #     tokenizer.requires_grad_(False)
-
-    from muse.models.keye_tokenizer import KeyeImageTokenizer
+    from muse.models.keye_ar import KeyeARModel
     with set_default_dtype(dtype), torch.device(device):
-        tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
+        tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
         tokenizer.requires_grad_(False)
 
     return tokenizer
@@ -406,58 +399,74 @@ def tokenize_images(tokenizer,
                     pixel_values: torch.Tensor,
                     image_grid_thw: torch.Tensor,
                     batch_size: int,
-                    max_condition_length: int) -> torch.Tensor:
-    """Tokenize images.
+                    max_condition_length: int,
+                    input_ids: Optional[torch.Tensor] = None,
+                    cu_seqlens: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Tokenize images using KeyeARModel.
     
     Args:
-        tokenizer: Image tokenizer
+        tokenizer: KeyeARModel instance
         pixel_values: Pixel values tensor [num_total_patches, ...]
         image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
         batch_size: Batch size
         max_condition_length: Maximum condition sequence length for padding
+        input_ids: Input token IDs [B, seq_len]
+        cu_seqlens: Cumulative sequence lengths for flash attention
     
     Returns:
-        fused_embeddings: [B, max_condition_length, embed_dim]
-        attention_mask: [B, 1, 1, max_condition_length]
+        embeddings: [B, max_condition_length, embed_dim]
     """
     with torch.no_grad():
-        # List of tensor: [num_total_patches, embed_dim]
-        embeddings: List[torch.Tensor] = tokenizer(
+        # Create dummy input_ids if not provided
+        if input_ids is None:
+            # Create dummy input_ids with image token
+            image_token_id = tokenizer.config.qwen_config.image_token_id
+            input_ids = torch.full((batch_size, 1), image_token_id, 
+                                  device=pixel_values.device, dtype=torch.long)
+        
+        # Create position_ids using cu_seqlens if provided
+        if cu_seqlens is not None:
+            # Calculate position_ids based on cu_seqlens
+            # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
+            position_ids = []
+            for i in range(len(cu_seqlens) - 1):
+                seq_len = cu_seqlens[i+1] - cu_seqlens[i]
+                pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
+                position_ids.append(pos_ids)
+            position_ids = torch.cat(position_ids, dim=0).unsqueeze(0)  # [1, total_seq_len]
+        else:
+            # Fallback: create position_ids from input_ids shape
+            position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+        
+        # Call KeyeARModel forward method
+        outputs = tokenizer(
+            tokens=input_ids,
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw
-        )["token_embeds"]
+            image_grid_thw=image_grid_thw,
+            position_ids=position_ids
+        )
         
-        _, embed_dim = embeddings.shape
+        # Extract embeddings from the output
+        # KeyeARModel returns a tuple where the first element is the hidden states
+        if isinstance(outputs, tuple):
+            embeddings = outputs[0]  # [B, seq_len, embed_dim]
+        else:
+            embeddings = outputs.last_hidden_state  # [B, seq_len, embed_dim]
         
-        # Split by image_grid_thw and pad to max_condition_length
-        # image_grid_thw: [B, 3] where each row is (t, h, w)
-        # 4=merge_length
-        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2] // 4).tolist()  # h * w for each image
+        # Handle padding to max_condition_length
+        current_seq_len = embeddings.shape[1]
+        embed_dim = embeddings.shape[2]
         
-        # Split fused_embeddings according to lengths
-        split_embeddings = torch.split(embeddings, lengths, dim=0)
-        
-        # Pad each to max_condition_length and stack
-        padded = []
-        for emb in split_embeddings:
-            seq_len = emb.shape[0]
-            if seq_len < max_condition_length:
-                padding = torch.zeros(max_condition_length - seq_len, embed_dim, 
-                                      device=emb.device, dtype=emb.dtype)
-                emb = torch.cat([emb, padding], dim=0)
-            else:
-                emb = emb[:max_condition_length]
-            padded.append(emb)
-        
-        embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
+        if current_seq_len < max_condition_length:
+            # Pad to max_condition_length
+            padding = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
+                                 device=embeddings.device, dtype=embeddings.dtype)
+            embeddings = torch.cat([embeddings, padding], dim=1)
+        elif current_seq_len > max_condition_length:
+            # Truncate to max_condition_length
+            embeddings = embeddings[:, :max_condition_length, :]
 
-    # Create attention mask based on actual lengths
-    attention_mask = torch.zeros(batch_size, max_condition_length, device=embeddings.device)
-    for i, length in enumerate(lengths):
-        attention_mask[i, :min(length, max_condition_length)] = 1
-    attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
-
-    return embeddings, attention_mask
+    return embeddings
 
 
 def freeze_params_by_pattern(model, patterns: List[str]) -> int:
@@ -668,12 +677,14 @@ def visualize_reconstruction(
     
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")
-    cond_embeds, cond_mask = tokenize_images(
+    cond_embeds = tokenize_images(
         tokenizer=image_tokenizer,
         pixel_values=pixel_values,
         image_grid_thw=image_grid_thw,
         batch_size=batch_size,
         max_condition_length=max_condition_length,
+        input_ids=None,  # No input_ids for visualization
+        cu_seqlens=None  # No cu_seqlens for visualization
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -690,10 +701,10 @@ def visualize_reconstruction(
         )
         uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
     uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
-    # Mask: mark the valid part of null embedding as 1
-    uncond_mask = torch.zeros(batch_size, max_condition_length, device=device)
-    uncond_mask[:, :seq_len] = 1
-    uncond_mask = uncond_mask[:, None, None, :]  # [B, 1, 1, L]
+    # Remove mask since it's not needed
+    # uncond_mask = torch.zeros(batch_size, max_condition_length, device=device)
+    # uncond_mask[:, :seq_len] = 1
+    # uncond_mask = uncond_mask[:, None, None, :]  # [B, 1, 1, L]
     
     # 3. DiT sampling with Euler scheduler
     print_rank_0(f"  Euler sampling ({num_sampling_steps} steps, cfg={cfg_scale})...")
@@ -1147,9 +1158,9 @@ def train():
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    dataset = Token2ImageDataset(**dataset_config)
+    dataset = Chat2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
-    print(f"collate_fn={collate_fn}")
+
     # Store wrapper reference for step updates (used in training loop)
     multi_scale_wrapper = None
     
@@ -1338,12 +1349,14 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                token_embeds, attention_mask = tokenize_images(
+                token_embeds = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
                     batch["image"].shape[0],
                     args.max_condition_length,
+                    input_ids=batch.get("input_ids"),
+                    cu_seqlens=batch.get("cu_seqlens")
                 )
 
             # 5. Forward + Loss Computation
@@ -1352,7 +1365,7 @@ def train():
                     model=model,
                     x_start=latents,
                     y=token_embeds.unsqueeze(1),
-                    mask=attention_mask,
+                    mask=None,  # Remove attention_mask since it's not needed
                 )
                 loss = loss_dict["loss"]
 
