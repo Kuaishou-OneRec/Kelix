@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 from PIL import Image
 from typing import Dict, Any, List
+import torch.distributed as dist
 
 from muse.data.datasets.image import Chat2ImageDataset
 
@@ -21,6 +22,28 @@ if not PROCESSOR_AVAILABLE:
     print(f"⚠️  Processor not found at {PROCESSOR_PATH}")
     print("Please update PROCESSOR_PATH to a valid processor location")
     exit(1)
+
+
+def init_distributed_for_test():
+    """Initialize distributed environment for testing."""
+    if not dist.is_initialized():
+        # Set environment variables for single-process distributed mode
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12355'
+        os.environ['RANK'] = '0'
+        os.environ['WORLD_SIZE'] = '1'
+        os.environ['LOCAL_RANK'] = '0'
+        
+        # Initialize process group
+        dist.init_process_group(backend='gloo', rank=0, world_size=1)
+        print("✅ Distributed environment initialized for testing")
+
+
+def cleanup_distributed():
+    """Clean up distributed environment."""
+    if dist.is_initialized():
+        dist.destroy_process_group()
+        print("✅ Distributed environment cleaned up")
 
 
 def create_test_image(width=100, height=100, color='red', mode='RGB'):
@@ -216,37 +239,45 @@ def main():
     print("🚀 Starting Chat2ImageDataset Demo")
     print("=" * 60)
     
-    # Create temporary directory for test data
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        
-        print("📁 Creating test data...")
-        parquet_path = create_test_parquet(tmp_path)
-        
-        print("🔧 Initializing Chat2ImageDataset...")
-        dataset = Chat2ImageDataset(
-            sources=[parquet_path],
-            image_size=256,
-            processor_path=PROCESSOR_PATH,
-            num_workers=1
-        )
-        
-        print("📊 Dataset type: IterableDataset (use iterator, not indexing)")
-        
-        # Run demos
-        demo_single_samples(dataset)
-        demo_with_collator(dataset)
-        demo_processor_outputs(dataset)
-        
-        print("\n" + "✅" * 30)
-        print("✅ Demo Completed Successfully!")
-        print("✅" * 30)
-        print("\n📝 Summary:")
-        print("   • IterableDataset: use iterator (for sample in dataset)")
-        print("   • Single samples show individual processor outputs")
-        print("   • Collator concatenates sequence-based fields along dim=0")
-        print("   • Image tensors are stacked along batch dimension")
-        print("   • All processor output fields are preserved")
+    # Initialize distributed environment for testing
+    init_distributed_for_test()
+    
+    try:
+        # Create temporary directory for test data
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            
+            print("📁 Creating test data...")
+            parquet_path = create_test_parquet(tmp_path)
+            
+            print("🔧 Initializing Chat2ImageDataset...")
+            dataset = Chat2ImageDataset(
+                sources=[parquet_path],
+                image_size=256,
+                processor_path=PROCESSOR_PATH,
+                num_workers=1
+            )
+            
+            print("📊 Dataset type: IterableDataset (use iterator, not indexing)")
+            
+            # Run demos
+            demo_single_samples(dataset)
+            demo_with_collator(dataset)
+            demo_processor_outputs(dataset)
+            
+            print("\n" + "✅" * 30)
+            print("✅ Demo Completed Successfully!")
+            print("✅" * 30)
+            print("\n📝 Summary:")
+            print("   • IterableDataset: use iterator (for sample in dataset)")
+            print("   • Single samples show individual processor outputs")
+            print("   • Collator concatenates sequence-based fields along dim=0")
+            print("   • Image tensors are stacked along batch dimension")
+            print("   • All processor output fields are preserved")
+    
+    finally:
+        # Clean up distributed environment
+        cleanup_distributed()
 
 
 if __name__ == "__main__":
