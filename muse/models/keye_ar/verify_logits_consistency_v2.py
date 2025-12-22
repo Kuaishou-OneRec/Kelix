@@ -123,7 +123,7 @@ num_layers=1,  # 默认值
     hidden_act = get_config_value(conf_data, 'hidden_act', 'silu', "conf_data")
     rms_norm_eps = get_config_value(conf_data, 'rms_norm_eps', 1e-6, "conf_data")
     attention_dropout = get_config_value(conf_data, 'attention_dropout', 0.0, "conf_data")
-    rope_theta = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
+    # rope_theta = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
     max_position_embeddings = get_config_value(conf_data, 'max_position_embeddings', 40960, "conf_data")
     tie_word_embeddings = get_config_value(conf_data, 'tie_word_embeddings', False, "conf_data")
     rope_base = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
@@ -133,7 +133,7 @@ num_layers=1,  # 默认值
     q_eos_token = conf_data.get('q_eos_token')
     
     unified_qwen_config = UnifiedQwen3Config(
-        model_class="Qwen3Model",  # 添加model_class字段
+        model_class="UnifiedQwen3Model",  # 添加model_class字段
         vocab_size=vocab_size,
         embed_dim=hidden_size,
         num_layers=num_hidden_layers,
@@ -152,10 +152,6 @@ num_layers=1,  # 默认值
         q_eos_token=q_eos_token,
         codebook_size=codebook_size,
         n_q_tokens=n_q_tokens,
-        # token_head_d_model=token_head_dim,
-        # token_head_nheads=token_head_nhead,
-        # token_head_dim_feedforward=token_head_intermediate_dim,
-        # token_head_num_layers=token_head_num_layers,
         attention_function="flash_attention_2",
     )
 

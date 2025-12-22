@@ -1,9 +1,19 @@
-from transformers import AutoProcessor
-from typing import Dict, Any
-import torch
+#!/usr/bin/env python3
+"""
+Convert Hugging Face Keye checkpoint to Muse KeyeAR checkpoint format.
+参考muse/models/keye_ar/verify_logits_consistency_v2.py中的模型加载逻辑
+"""
+
+import argparse
 import json
+import os
 import warnings
 from pathlib import Path
+from typing import Dict, Any
+
+import torch
+from transformers import AutoProcessor
+
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
 from muse.models.keye_ar.modeling import KeyeARModel
 from muse.training.common import set_default_dtype
@@ -121,17 +131,14 @@ def _build_keye_ar_config(hf_cfg: Dict[str, Any]) -> KeyeARConfig:
         norm_eps=rms_norm_eps,
         attn_dropout=attention_dropout,
         tie_word_embeddings=tie_word_embeddings,
-        base=rope_theta,
+        rope_base=rope_theta,
         max_seq_len=max_position_embeddings,
         image_token_id=image_token_id,
         pad_token_id=pad_token_id,
         q_eos_token=q_eos_token,
         codebook_size=codebook_size,
         n_q_tokens=n_q_tokens,
-        token_head_d_model=token_head_dim,
-        token_head_nheads=token_head_nhead,
-        token_head_dim_feedforward=token_head_intermediate_dim,
-        token_head_num_layers=token_head_num_layers,
+        attention_function="flash_attention_2",
     )
 
     # 构造KeyeARConfig
@@ -179,8 +186,34 @@ def load_safetensors_state_dict(model_dir):
     return state_dict
 
 
+def load_keye_for_conditional_generation(output_model_dir, device):
+    """加载KeyeForConditionalGeneration模型（参考verify_logits_consistency_v2.py）"""
+    try:
+        from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration
+    except ImportError:
+        raise ImportError("KeyeForConditionalGeneration not found, please check the import path")
+    
+    model = KeyeForConditionalGeneration.from_pretrained(
+        output_model_dir, 
+        _attn_implementation="flash_attention_2", 
+        torch_dtype=torch.bfloat16, 
+        low_cpu_mem_usage=True
+    )
+    model.config.output_one_token = model.output_one_token = False
+    model.token_head.use_flash_attn = True
+    model = model.to(device).bfloat16()
+    return model
+
+
 def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     """Convert a Hugging Face Keye checkpoint to a Muse KeyeAR checkpoint"""
+    
+    # 设置设备
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = torch.bfloat16
+    
+    print(f"Using device: {device}")
+    print(f"Using dtype: {dtype}")
     
     # 加载processor
     print(f"Loading processor from {hf_checkpoint_path}...")
@@ -200,24 +233,27 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     
     # 创建Muse模型实例
     print("Creating Muse model instance...")
-    with set_default_dtype(torch.bfloat16):
+    with set_default_dtype(dtype):
         model = KeyeARModel(config)
     
     # 加载Hugging Face权重
     print("Loading Hugging Face weights...")
-    hf_state_dict = load_safetensors_state_dict(hf_checkpoint_path)
-    
-    # 转换权重
-    print("Converting weights to Muse format...")
-    converted_state_dict = model.convert_hf_state_dict(hf_state_dict, tie_word_embeddings=False)
+    try:
+        # 方法1：从KeyeForConditionalGeneration加载权重（参考verify_logits_consistency_v2.py）
+        keye_model = load_keye_for_conditional_generation(hf_checkpoint_path, device)
+        keye_state_dict = keye_model.state_dict()
+        converted_state_dict = model.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
+    except Exception as e:
+        print(f"Failed to load from KeyeForConditionalGeneration: {e}")
+        print("Falling back to direct safetensors loading...")
+        
+        # 方法2：直接加载safetensors文件
+        hf_state_dict = load_safetensors_state_dict(hf_checkpoint_path)
+        converted_state_dict = model.convert_hf_state_dict(hf_state_dict, tie_word_embeddings=False)
     
     # 加载权重到Muse模型
     print("Loading converted weights...")
     model.load_state_dict(converted_state_dict, strict=True)
-    
-    # 设置设备
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dtype = torch.bfloat16
     
     # 将模型移到设备并设置精度
     model = model.to(device=device, dtype=dtype)
@@ -235,17 +271,74 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     
     print("Model conversion completed successfully!")
     
+    # 前向传播验证（参考qwen3转换脚本）
+    print("Performing forward pass verification...")
+    try:
+        # 简单的随机输入验证
+        batch_size, seq_len = 1, 64
+        input_ids = torch.randint(0, config.qwen_config.vocab_size, (batch_size, seq_len)).to(device)
+        position_ids = torch.arange(0, seq_len).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            outputs = model(tokens=input_ids, position_ids=position_ids)
+        
+        if hasattr(outputs, 'last_hidden_state'):
+            print(f"✓ Forward pass successful! Output shape: {outputs.last_hidden_state.shape}")
+        else:
+            print(f"✓ Forward pass successful! Output type: {type(outputs)}")
+            
+    except Exception as e:
+        print(f"⚠ Forward pass verification failed: {e}")
+        print("Continuing with model saving...")
+    
     # 保存转换后的模型
     print(f"Saving converted model to {new_model_dir}...")
+    Path(new_model_dir).mkdir(parents=True, exist_ok=True)
+    
     model.save_pretrained(new_model_dir)
     processor.save_pretrained(new_model_dir)
+    
+    # 保存配置
+    config_path = Path(new_model_dir) / "config.json"
+    with open(config_path, 'w') as f:
+        json.dump(config.to_dict(), f, indent=2)
     
     print("✓✓✓ SUCCESS: KeyeAR model conversion completed!")
 
 
-if __name__ == "__main__":
-    # 使用指定的路径进行转换
-    output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
-    new_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/muse_converted"
+def main():
+    parser = argparse.ArgumentParser(description="Convert Hugging Face Keye checkpoint to Muse format")
+    parser.add_argument(
+        "--hf-checkpoint-path",
+        type=str,
+        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted",
+        help="Path to Hugging Face checkpoint directory"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/muse_converted",
+        help="Output directory for Muse format checkpoint"
+    )
     
-    convert_hf_checkpoint(output_model_dir, new_model_dir)
+    args = parser.parse_args()
+    
+    print("=" * 60)
+    print("KeyeAR Hugging Face to Muse Conversion")
+    print("=" * 60)
+    print(f"Input checkpoint: {args.hf_checkpoint_path}")
+    print(f"Output directory: {args.output_dir}")
+    print("=" * 60)
+    
+    try:
+        convert_hf_checkpoint(
+            hf_checkpoint_path=args.hf_checkpoint_path,
+            new_model_dir=args.output_dir
+        )
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
