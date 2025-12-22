@@ -117,7 +117,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/train_ar_sana_ae.py \
+        bash -c "python3 recipes/train_sana_ar_ae.py \
                 --visualize-dir $VISUALIZE_DIR \
                 --visualize-per-step 30 \
                 --num-vis-images 10 \
