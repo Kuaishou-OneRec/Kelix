@@ -114,7 +114,7 @@ def demo_single_samples(dataset):
     
     print("🔍 Iterating through dataset samples individually:")
     
-    for i in range(min(2, len(dataset))):  # Show first 2 samples
+    for i in range(2):  # Show first 2 samples
         print(f"\n📦 Sample {i}:")
         sample = dataset[i]
         print_sample_info(sample, f"Sample {i} - Raw Output")
