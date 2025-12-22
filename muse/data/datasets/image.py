@@ -1062,7 +1062,8 @@ class Chat2ImageDataset(Token2ImageDataset):
             messages, 
             tokenize=False
         )
-
+        p = process_vision_info(messages)
+        print(p); exit()
         image_inputs, video_inputs = process_vision_info(messages)
 
         # Process with processor and include ALL output fields
