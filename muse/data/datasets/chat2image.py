@@ -179,7 +179,7 @@ class Chat2ImageDataset(Token2ImageDataset):
                 content = message["content"]
                 for el in content:
                     if 'image' not in el: continue
-                    el['image'] = resize_and_center_crop(el["image"], self.force_assistant_image_size, self.force_assistant_image_size)
+                    el['image'] = resize_and_center_crop(Image.open(el["image"]), self.force_assistant_image_size, self.force_assistant_image_size)
                     print(f"el['image']", el['image'])
 
         # Apply chat template using the message from sample
