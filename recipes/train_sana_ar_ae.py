@@ -1388,7 +1388,7 @@ def train():
                     vae=vae,
                     image_tokenizer=image_tokenizer,
                     processor=vis_processor,
-                    parquet_path=args.visualize_parquet,  # 改为parquet_path参数
+                    parquet_path=args.visualize_parquet_path,  # 改为parquet_path参数
                     dataset=dataset,  # 传入dataset用于处理方法
                     output_dir=args.output_dir,
                     global_step=0,
@@ -1567,7 +1567,7 @@ def train():
                             vae=vae,
                             image_tokenizer=image_tokenizer,
                             processor=vis_processor,
-                            parquet_path=args.visualize_parquet,  # 改为parquet_path参数
+                            parquet_path=args.visualize_parquet_path,  # 改为parquet_path参数
                             dataset=dataset,  # 传入dataset用于处理方法
                             output_dir=args.output_dir,
                             global_step=scheduler.global_step,
