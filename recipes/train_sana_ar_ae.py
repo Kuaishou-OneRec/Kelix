@@ -408,9 +408,9 @@ def tokenize_images(tokenizer,
         tokenizer: KeyeARModel instance
         pixel_values: Pixel values tensor [num_total_patches, ...]
         image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
-        batch_size: Batch size
+        batch_size: Batch size (number of packed sequences)
         max_condition_length: Maximum condition sequence length for padding
-        input_ids: Input token IDs [B, seq_len]
+        input_ids: Input token IDs [1, total_seq_len] (packed sequences)
         cu_seqlens: Cumulative sequence lengths for flash attention
     
     Returns:
@@ -419,12 +419,6 @@ def tokenize_images(tokenizer,
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
     with torch.no_grad():
-        # Create dummy input_ids if not provided
-        if input_ids is None:
-            # Create dummy input_ids with image token
-            image_token_id = tokenizer.config.qwen_config.image_token_id
-            input_ids = torch.full((batch_size, 1), image_token_id, 
-                                  device=pixel_values.device, dtype=torch.long)
         
         # Create position_ids using cu_seqlens if provided
         if cu_seqlens is not None:
@@ -466,24 +460,41 @@ def tokenize_images(tokenizer,
         vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
+        # input_ids shape is [1, total_seq_len] in packing case
         vision_start_mask = (input_ids == vision_start_id)
         vision_end_mask = (input_ids == vision_end_id)
         
-        # For each batch, find the start and end positions
+        # For packing case: input_ids shape is [1, total_seq_len]
+        # We need to find all vision_start_id and vision_end_id pairs in the sequence
         vision_embeddings_list = []
         vision_seq_lens = []
-        print(f"input_ids={input_ids}", f"vision_start_id={vision_start_id}")
-        print(input_ids.cpu().tolist())
-        for i in range(batch_size):
-            # Find the positions of vision_start_id and vision_end_id in this batch
-            start_positions = torch.nonzero(vision_start_mask[i], as_tuple=True)[0]
-            end_positions = torch.nonzero(vision_end_mask[i], as_tuple=True)[0]
+        
+        # Get the flat input_ids (remove batch dimension for packing case)
+        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
+        
+        # Find all start and end positions
+        start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
+        end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
+        
+        # Check if we have matching number of start and end positions
+        if len(start_positions) != len(end_positions):
+            raise ValueError(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens")
+        
+        # Extract embeddings for each vision segment
+        for start_pos, end_pos in zip(start_positions, end_positions):
+            # Check if start_pos comes before end_pos
+            if start_pos >= end_pos:
+                raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
             
-            start_pos = start_positions[0].item()
-            end_pos = end_positions[0].item()
-            vision_embeddings = embeddings[i, start_pos:end_pos+1, :]
+            # Extract embeddings for this segment
+            # embeddings shape is [1, total_seq_len, embed_dim] in packing case
+            vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
+        
+        # Check if we extracted the correct number of segments
+        if len(vision_embeddings_list) != batch_size:
+            raise ValueError(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
