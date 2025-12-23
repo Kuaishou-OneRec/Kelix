@@ -1079,7 +1079,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         )
 
         from .keye_vl_utils_v2 import process_vision_info
-        image_inputs, _, _ = process_vision_info(messages)
+        image_inputs, _= process_vision_info(messages)
 
         # Process with processor and include ALL output fields
         inputs = self.processor(
