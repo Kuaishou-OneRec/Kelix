@@ -473,6 +473,7 @@ def tokenize_images(tokenizer,
         vision_embeddings_list = []
         vision_seq_lens = []
         print(f"input_ids={input_ids}", f"vision_start_id={vision_start_id}")
+        print(input_ids.cpu().tolist())
         for i in range(batch_size):
             # Find the positions of vision_start_id and vision_end_id in this batch
             start_positions = torch.nonzero(vision_start_mask[i], as_tuple=True)[0]
