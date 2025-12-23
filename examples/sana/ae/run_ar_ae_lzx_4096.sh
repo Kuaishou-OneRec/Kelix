@@ -135,7 +135,7 @@ nohup mpirun --allow-run-as-root \
                 --beta1 0.9 \
                 --model-config-overrides caption_channels=4096 model_max_length=324 \
                 --beta2 0.999 \
-                --batch-size 32 \
+                --batch-size 4 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 100000 \
