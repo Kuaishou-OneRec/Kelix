@@ -807,6 +807,11 @@ def train():
         metrics.new(f"perplexity_{i}", dtype="float", reduce="mean")
         metrics.new(f"codebook_usage_{i}", dtype="float", reduce="mean")
     
+    # Add per-codebook loss metrics
+    for i in range(n_q_tokens):
+        metrics.new(f"codebook_loss_{i}", dtype="float", reduce="mean")
+        metrics.new(f"commitment_loss_{i}", dtype="float", reduce="mean")
+    
     # Add metrics for video codebook perplexity and usage
     metrics.new("video_avg_perplexity", dtype="float", reduce="mean")
     metrics.new("video_avg_codebook_usage", dtype="float", reduce="mean")
@@ -863,6 +868,19 @@ def train():
         metrics.logger.track(
             avg_usg.avg(window=logging_per_step)[::logging_per_step],
             name=f"codebook_usage_{i}", group="metrics")
+    
+    # Track per-codebook loss metrics
+    for i in range(n_q_tokens):
+        cb_loss_series = getattr(metrics, f"codebook_loss_{i}")
+        cm_loss_series = getattr(metrics, f"commitment_loss_{i}")
+        avg_cb_loss = cb_loss_series.avg(window=acc_steps)[::acc_steps][1:]
+        avg_cm_loss = cm_loss_series.avg(window=acc_steps)[::acc_steps][1:]
+        metrics.logger.track(
+            avg_cb_loss.avg(window=logging_per_step)[::logging_per_step],
+            name=f"codebook_loss_{i}", group="training")
+        metrics.logger.track(
+            avg_cm_loss.avg(window=logging_per_step)[::logging_per_step],
+            name=f"commitment_loss_{i}", group="training")
     
     # Track video perplexity and codebook usage metrics
     video_avg_perplexity = metrics.video_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
@@ -989,7 +1007,12 @@ def train():
 
             num_tokens = input_ids.numel()
             metrics.tokens.append(num_tokens)
-            metrics.samples.append(input_ids.shape[0])
+            if sample_idx is not None:
+                # 考虑 CP 和 Packing 的逻辑样本数
+                logical_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
+                metrics.samples.append(logical_samples)
+            else:
+                metrics.samples.append(input_ids.shape[0] / get_context_parallel_world_size())
 
             # ================================================ Forward pass ================================================
             with record_function("Forward"):
@@ -1023,15 +1046,16 @@ def train():
             lm_loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
             
             # Extract auxiliary losses from model output
-            codebook_loss = output.get("codebook_loss", torch.tensor(0.0))
-            commitment_loss = output.get("commitment_loss", torch.tensor(0.0))
+            codebook_loss_raw = output.get("codebook_loss", torch.tensor(0.0))
+            commitment_loss_raw = output.get("commitment_loss", torch.tensor(0.0))
             
-            if isinstance(codebook_loss, (list, tuple)):
-                # 如果是列表，求平均
-                codebook_loss = sum(codebook_loss) / len(codebook_loss)
-
-            if isinstance(commitment_loss, (list, tuple)):
-                commitment_loss = sum(commitment_loss) / len(commitment_loss)
+            # Keep original list for per-codebook metrics
+            codebook_loss_list = codebook_loss_raw if isinstance(codebook_loss_raw, (list, tuple)) else [codebook_loss_raw]
+            commitment_loss_list = commitment_loss_raw if isinstance(commitment_loss_raw, (list, tuple)) else [commitment_loss_raw]
+            
+            # Compute average for total loss
+            codebook_loss = sum(codebook_loss_list) / len(codebook_loss_list)
+            commitment_loss = sum(commitment_loss_list) / len(commitment_loss_list)
             
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             
@@ -1040,6 +1064,13 @@ def train():
             metrics.lm_loss.append(lm_loss.detach().item())
             metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
             metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
+            
+            # Record per-codebook loss metrics
+            for i, (cb_loss, cm_loss) in enumerate(zip(codebook_loss_list, commitment_loss_list)):
+                cb_val = cb_loss.detach().item() if isinstance(cb_loss, torch.Tensor) else cb_loss
+                cm_val = cm_loss.detach().item() if isinstance(cm_loss, torch.Tensor) else cm_loss
+                getattr(metrics, f"codebook_loss_{i}").append(cb_val)
+                getattr(metrics, f"commitment_loss_{i}").append(cm_val)
             
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
