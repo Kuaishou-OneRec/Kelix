@@ -1176,9 +1176,9 @@ def train():
         dtype=args.model_dtype
     )
     
-    # Load processor for visualization (only needed if visualize_dir is set)
+    # Load processor for visualization (only needed if visualize_parquet_path is set)
     vis_processor = None
-    if args.visualize_dir:
+    if args.visualize_parquet_path:
         vis_processor = AutoProcessor.from_pretrained(
             args.keye_ar_dir,
             trust_remote_code=True
@@ -1189,7 +1189,7 @@ def train():
     # In FSDP mode, we need a separate model instance for inference
     # because the training model has sharded weights
     model_for_vis = None
-    if args.visualize_dir and dist.get_rank() == 0:
+    if args.visualize_parquet_path and dist.get_rank() == 0:
         with set_default_dtype(args.model_dtype), torch.device("cpu"):
             model_for_vis = model_cls(model_config)
         print_rank_0("Created model instance for visualization (on CPU)")
@@ -1358,7 +1358,7 @@ def train():
         data_iter = iter([])
 
     # Step 0 visualization: show model state before any optimization
-    if args.visualize_dir:
+    if args.visualize_parquet_path:
         from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
         
         print_rank_0("Running step 0 visualization (before training)...")
@@ -1536,7 +1536,7 @@ def train():
 
             # Visualization: generate sample images every N steps
             # All ranks participate in get_model_state_dict, only rank 0 does visualization
-            if (args.visualize_dir and 
+            if (args.visualize_parquet_path and 
                 scheduler.global_step > 0 and 
                 scheduler.global_step % args.visualize_per_step == 0):
                 from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
