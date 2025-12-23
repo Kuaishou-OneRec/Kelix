@@ -25,6 +25,7 @@ the condition is from KeyeImageTokenizer.
 
 from typing import Dict, Any, Union, Optional, List, Tuple
 import os
+import traceback
 import torch
 import datetime
 import contextlib
@@ -501,7 +502,7 @@ def tokenize_images(tokenizer,
         max_vision_seq_len = max(vision_seq_lens)
         embed_dim = embeddings.shape[2]
         processed_embeddings = torch.zeros(batch_size, max_vision_seq_len, embed_dim,
-                                          device=embeddings.device, dtype=embeddings.dtype)
+                                            device=embeddings.device, dtype=embeddings.dtype)
         
         # Create attention mask: 1 for valid tokens, 0 for padding
         attention_mask = torch.zeros(batch_size, max_vision_seq_len,
@@ -619,6 +620,7 @@ def load_visualization_images(
         
         # Process samples using dataset's process method
         processed_samples = []
+        texts = []
         for _, row in df.iterrows():
             # Convert parquet row to sample format expected by dataset
             sample = {
@@ -630,6 +632,8 @@ def load_visualization_images(
             # Use dataset's process method
             processed_sample = dataset.process(sample)
             processed_samples.append(processed_sample)
+            text = sample["messages"][0]["content"]["text"]
+            texts.append(text)
         
         # Use dataset's collate_fn to batch the samples
         batch = dataset.collate_fn(processed_samples)
@@ -663,7 +667,8 @@ def load_visualization_images(
     
     except Exception as e:
         print_rank_0(f"Error loading parquet file {parquet_path}: {e}")
-        return None, None, None, None
+        traceback.print_exc()
+        return None, None, None, None, None
     
     # Prepare messages format for processor (keye_vl_utils format) - BASELINE LOGIC
     fake_messages = [{
@@ -703,7 +708,7 @@ def load_visualization_images(
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
     
-    return original_images, pixel_values, image_grid_thw, vae_input_images
+    return text, original_images, pixel_values, image_grid_thw, vae_input_images
 
 
 @torch.no_grad()
@@ -770,9 +775,16 @@ def visualize_reconstruction(
         print_rank_0("No images to visualize, skipping...")
         return
     
-    original_images, pixel_values, image_grid_thw, vae_input_images = result
+    texts, original_images, pixel_values, image_grid_thw, vae_input_images = result
     batch_size = len(original_images)
     
+    # Add text information to TensorBoard
+    if tb_writer is not None and texts:
+        for i, text in enumerate(texts):
+            # Truncate text if too long for TensorBoard display
+            truncated_text = text[:100] + "..." if len(text) > 100 else text
+            tb_writer.add_text(f"visualization/text_sample_{i}", truncated_text, global_step)
+
     # 1. VAE Reconstruction: encode -> decode
     print_rank_0("  VAE encoding...")
     latents = vae_encode(vae, vae_input_images)
@@ -897,9 +909,10 @@ def visualize_reconstruction(
         grid = torch.stack(all_images)  # [N*3, C, H, W]
         from torchvision.utils import make_grid
         grid_img = make_grid(grid, nrow=3, padding=2)  # 3 images per row
-        tb_writer.add_image(f"visualization/reconstruction", grid_img, global_step)
-    
-    print_rank_0(f"  Visualization saved to {vis_dir}")
+        tb_writer.add_image("visualization/comparison_grid", grid_img, global_step)
+        
+        # Add text information to TensorBoard (already done above)
+        print_rank_0(f"  Added {len(texts)} text samples to TensorBoard")
 
 
 def _init_profiler(output_dir, with_stack=False) -> None:
