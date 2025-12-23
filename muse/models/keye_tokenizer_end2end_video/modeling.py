@@ -220,7 +220,11 @@ class KeyeTokenizerEnd2EndVideo(Model):
                 continue
             
             # Check if it's a vision encoder parameter
-            is_vision = name.startswith("visual_tokenizer.visual.")
+            # Only visual_tokenizer.* uses vision_learning_rate
+            # This is consistent with recovlm's get_optimizer_grouped_parameters:
+            # n.startswith("visual") or n.startswith("vision_tower")
+            # quant_projector.* uses normal learning_rate (belongs to LLM group)
+            is_vision = name.startswith("visual_tokenizer.")
             
             if is_vision:
                 # Apply layer-wise learning rate decay
