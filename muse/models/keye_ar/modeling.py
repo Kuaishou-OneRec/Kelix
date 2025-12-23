@@ -142,9 +142,11 @@ class UnifiedTokenEmbedding(nn.Module):
     
 
 class UnifiedTransformerDecoder(TransformerDecoder):
-    def __init__(self, *args, token_head: UnifiedTokenDecoder, **kwargs):
+    def __init__(self, *args, token_head: UnifiedTokenDecoder, output_last_hidden_states_only: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self.token_head = token_head
+        self.output_last_hidden_states_only = output_last_hidden_states_only
+
     
     def forward(
         self,
@@ -317,6 +319,7 @@ class UnifiedQwen3Model(Qwen3Model):
             num_heads=self.model.num_heads,
             head_dim=self.model.head_dim,
             norm=self.model.norm,
+            output_last_hidden_states_only=qwen_config.output_last_hidden_states_only,
             output=nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size + tokenizer_config.codebook_size, bias=False),
             token_head=token_head
         )
@@ -464,7 +467,6 @@ class KeyeARModel(Model):
         # LM头
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
         self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
-        self.output_last_hidden_states_only = qwen_config.output_last_hidden_states_only
 
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],

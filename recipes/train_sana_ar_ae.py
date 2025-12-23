@@ -393,6 +393,7 @@ def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
     with set_default_dtype(dtype), torch.device(device):
         tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
         tokenizer.config.qwen_config.output_last_hidden_states_only = True
+        tokenizer.model.model.output_last_hidden_states_only = True
         tokenizer.requires_grad_(False)
 
     return tokenizer
