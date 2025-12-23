@@ -36,7 +36,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from transformers import AutoTokenizer, AutoProcessor
-from keye_vl_utils import process_vision_info
+from muse.data.datasets.keye_vl_utils_v2 import process_vision_info
 
 
 from muse.data.datasets.base import DistributedDataset, load_image

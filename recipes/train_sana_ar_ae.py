@@ -1025,6 +1025,7 @@ def train():
     # Create model
     with set_default_dtype(args.model_dtype), torch.device("meta"):
         print_rank_0(f"Creating model from config")
+        model.config.qwen_config.output_last_hidden_states_only = True
         model = model_cls(model_config)
         print_rank_0(f"Model instantiated: {type(model).__name__}")
 

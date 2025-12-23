@@ -1,12 +1,12 @@
 from .base import DistributedDataset
 from .text import TextDataset
 from .image import (
-    Chat2ImageDataset,
     Text2ImageDataset, 
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
     ResolutionBudgetScheduler,
 )
+from .chat2image import Chat2ImageDataset
 
 # Backward compatibility - expose all classes
 __all__ = [

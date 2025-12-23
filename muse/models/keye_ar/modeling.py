@@ -248,7 +248,10 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 input_pos=input_pos,
                 **kwargs,
             )
-        return [h]
+        
+        if self.output_last_hidden_states_only:
+            return h
+
         if len(self.layers) in self.output_hidden_states:
             hidden.append(h)
 
@@ -461,6 +464,7 @@ class KeyeARModel(Model):
         # LM头
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
         self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
+        self.output_last_hidden_states_only = qwen_config.output_last_hidden_states_only
 
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
