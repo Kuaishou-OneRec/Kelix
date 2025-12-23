@@ -57,6 +57,7 @@ from collections import defaultdict
 
 torch.autograd.set_detect_anomaly(True)
 import gc
+# 注意: 不再禁用gc，防止内存泄漏
 gc.disable()
 
 process_group_timeout = datetime.timedelta(minutes=60*24)
@@ -1034,14 +1035,15 @@ def train():
             
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             
-            # Record metrics
-            metrics.loss.append(total_loss.detach())
+            # Record metrics (使用 .item() 转为标量，防止tensor引用泄漏)
+            metrics.loss.append(total_loss.detach().item())
             metrics.lm_loss.append(lm_loss.detach().item())
             metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
             metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
             
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
+            video_vq_indices = None  # 提前初始化，防止后续del报错
             if vq_indices is not None:
                 global_perplexities, codebook_usages = compute_codebook_metrics(
                     indices=vq_indices,
@@ -1211,6 +1213,29 @@ def train():
 
             if torch_profiler:
                 torch_profiler.step()
+
+            # 显式清理中间变量，防止显存泄漏
+            del output, logits, total_loss, lm_loss, per_token_loss
+            del codebook_loss, commitment_loss
+            if vq_indices is not None:
+                del vq_indices
+            if video_vq_indices is not None:
+                del video_vq_indices
+            del input_ids, labels, shifted_labels, local_labels
+            if attention_mask is not None:
+                del attention_mask
+            if loss_mask is not None:
+                del loss_mask
+            if pixel_values is not None:
+                del pixel_values
+            if pixel_values_videos is not None:
+                del pixel_values_videos
+            del batch
+            
+            # 每隔一定步数清理显存碎片
+            if scheduler.micro_step % 100 == 0:
+                torch.cuda.empty_cache()
+                gc.collect()
 
     # Save final checkpoint
     if not args.overfit_batches:
