@@ -27,6 +27,8 @@ import random
 import json
 import logging
 import collections
+from PIL import Image, ImageDraw, ImageFont
+
 
 import torch
 import torch.nn as nn
@@ -36,7 +38,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from transformers import AutoTokenizer, AutoProcessor
-from keye_vl_utils import process_vision_info
+from muse.data.datasets.keye_vl_utils_v2 import process_vision_info
 
 
 from muse.data.datasets.base import DistributedDataset, load_image
@@ -1020,6 +1022,9 @@ class Chat2ImageDataset(Token2ImageDataset):
         max_condition_length: Maximum condition sequence length
         **kwargs: Additional args passed to DistributedDataset
     """
+    def __init__(self, *args, force_assistant_image_size=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.force_assistant_image_size = force_assistant_image_size
     
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair using chat-style message processing.
@@ -1059,12 +1064,21 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         # Get message from sample for chat template processing
         messages = sample["message"]
+        if self.force_assistant_image_size is not None:
+            for message in messages:
+                if message["role"] == "assistant":
+                    content = message["content"]
+                    for el in content:
+                        if el["type"] == "image":
+                            el["force_assistant_image_size"] = self.force_assistant_image_size
 
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
             messages, 
             tokenize=False
         )
+
+        from .keye_vl_utils_v2 import process_vision_info
         image_inputs, _, _ = process_vision_info(messages)
 
         # Process with processor and include ALL output fields
@@ -1084,6 +1098,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         result["image"] = target_image
         
         return result
+
 
     def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single sample with message-based chat processing.
