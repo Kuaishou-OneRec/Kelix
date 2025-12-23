@@ -53,7 +53,7 @@ from muse.data.utils import (
 from torch.utils.data import IterableDataset
 
 from muse.utils.common import print_rank_0
-from data.datasets.image import Token2ImageDataset
+from muse.data.datasets.image import Token2ImageDataset
 
 logger = logging.getLogger(__name__)
 
