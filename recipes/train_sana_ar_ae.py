@@ -23,7 +23,7 @@ the condition is from KeyeImageTokenizer.
 
 """
 
-from typing import Dict, Any, Union, Optional, List
+from typing import Dict, Any, Union, Optional, List, Tuple
 import os
 import torch
 import datetime
