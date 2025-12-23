@@ -116,7 +116,7 @@ nohup mpirun --allow-run-as-root \
         bash -c "python3 recipes/train_keye_tok_end2end_video.py \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/keye_tokenizer_end2end_video/run_exp1.6.8_stage2.json \
+                --dataset-config examples/keye_tokenizer_end2end_video/run_exp1.6.8_stage1.json \
                 --lr 2e-4 \
                 --vision_lr 2e-5 \
                 --min_lr 1e-7 \
