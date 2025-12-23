@@ -455,10 +455,10 @@ def tokenize_images(tokenizer,
         
         # Extract embeddings from the output
         # KeyeARModel returns a tuple where the first element is the hidden states
-        if isinstance(outputs, tuple):
-            embeddings = outputs[0]  # [B, seq_len, embed_dim]
-        else:
-            embeddings = outputs.last_hidden_state  # [B, seq_len, embed_dim]
+        # if isinstance(outputs, tuple):
+        #     embeddings = outputs[0]  # [B, seq_len, embed_dim]
+        # else:
+        embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
