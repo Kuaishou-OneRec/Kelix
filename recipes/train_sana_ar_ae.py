@@ -342,8 +342,8 @@ def get_argument_parser():
     parser.add_argument("--num-sampling-steps", type=int, default=20,
                         help="Number of sampling steps for validation")
     
-    parser.add_argument("--visualize-dir", type=str, default=None,
-                        help="Directory containing images for reconstruction visualization")
+    parser.add_argument("--visualize-parquet-path", type=str, default=None,
+                        help="Parquet file path containing images for reconstruction visualization")
     
     parser.add_argument("--visualize-per-step", type=int, default=1000,
                         help="Visualize reconstruction every N steps")
@@ -391,6 +391,7 @@ def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
     from muse.models.keye_ar import KeyeARModel
     with set_default_dtype(dtype), torch.device(device):
         tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
+        tokenizer.config.qwen_config.output_last_hidden_states_only = True
         tokenizer.requires_grad_(False)
 
     return tokenizer
@@ -571,7 +572,8 @@ def freeze_params_by_pattern(model, patterns: List[str]) -> int:
 
 
 def load_visualization_images(
-    dataset,
+    parquet_path: str,  # 改为接收parquet_path参数
+    dataset,  # 保留dataset参数用于处理方法
     processor,
     image_size: int,
     max_condition_length: int,
@@ -579,10 +581,11 @@ def load_visualization_images(
     dtype: torch.dtype,
     num_images: Optional[int] = None
 ) -> tuple:
-    """Load and preprocess images from dataset for visualization.
+    """Load and preprocess images from parquet file for visualization.
     
     Args:
-        dataset: Chat2ImageDataset instance containing samples
+        parquet_path: Path to parquet file containing samples
+        dataset: Chat2ImageDataset instance for processing methods
         processor: AutoProcessor instance for image preprocessing
         image_size: Target image size
         max_condition_length: Maximum condition sequence length for image tokenizer
@@ -599,55 +602,68 @@ def load_visualization_images(
     """
     from PIL import Image
     from torchvision import transforms
+    import pandas as pd
+    import json
     
-    # Get samples from dataset using process and collate_fn
-    if num_images is not None:
-        indices = list(range(min(num_images, len(dataset))))
-    else:
-        indices = list(range(len(dataset)))
+    # Read parquet file
+    try:
+        df = pd.read_parquet(parquet_path)
+        if num_images is not None:
+            df = df.head(num_images)
+        
+        if df.empty:
+            print_rank_0(f"Warning: No samples found in {parquet_path}")
+            return None, None, None, None
+        
+        print_rank_0(f"Loading {len(df)} samples from {parquet_path}")
+        
+        # Process samples using dataset's process method
+        processed_samples = []
+        for _, row in df.iterrows():
+            # Convert parquet row to sample format expected by dataset
+            sample = {
+                "__key__": row.get("__key__", ""),
+                "messages": json.loads(row["messages"]) if isinstance(row["messages"], str) else row["messages"],
+                "images": json.loads(row["images"]) if isinstance(row["images"], str) else row["images"],
+                "source": row.get("source", "")
+            }
+            # Use dataset's process method
+            processed_sample = dataset.process(sample)
+            processed_samples.append(processed_sample)
+        
+        # Use dataset's collate_fn to batch the samples
+        batch = dataset.collate_fn(processed_samples)
+        
+        # Extract original images from the batch
+        original_images = []
+        for i in range(len(df)):
+            # Get the image from the batch (assuming it's in 'image' field)
+            if 'image' in batch:
+                img_tensor = batch['image'][i]
+                # Convert tensor back to PIL image for visualization
+                img = transforms.ToPILImage()(img_tensor.cpu())
+                original_images.append(img)
+            else:
+                # Fallback: try to get from pixel_values if available
+                if 'pixel_values' in batch:
+                    # This is more complex as pixel_values are processed, so we'll use the baseline approach
+                    # For now, we'll use the baseline approach
+                    break
+        
+        # If we couldn't extract original images from batch, use baseline approach
+        if not original_images:
+            # Use baseline approach: create fake messages and process images
+            # This maintains the original vae_input_images generation logic
+            fake_original_images = []
+            for i in range(len(df)):
+                # Create a dummy image of the correct size
+                img = Image.new('RGB', (image_size, image_size), color='white')
+                fake_original_images.append(img)
+            original_images = fake_original_images
     
-    if not indices:
-        print_rank_0(f"Warning: No samples found in dataset")
+    except Exception as e:
+        print_rank_0(f"Error loading parquet file {parquet_path}: {e}")
         return None, None, None, None
-    
-    print_rank_0(f"Loading {len(indices)} samples from dataset")
-    
-    # Process individual samples using dataset's process method
-    processed_samples = []
-    for idx in indices:
-        sample = dataset[idx]  # Get raw sample
-        processed_sample = dataset.process(sample)  # Use dataset's process method
-        processed_samples.append(processed_sample)
-    
-    # Use dataset's collate_fn to batch the samples
-    batch = dataset.collate_fn(processed_samples)
-    
-    # Extract original images from the batch
-    original_images = []
-    for i in range(len(indices)):
-        # Get the image from the batch (assuming it's in 'image' field)
-        if 'image' in batch:
-            img_tensor = batch['image'][i]
-            # Convert tensor back to PIL image for visualization
-            img = transforms.ToPILImage()(img_tensor.cpu())
-            original_images.append(img)
-        else:
-            # Fallback: try to get from pixel_values if available
-            if 'pixel_values' in batch:
-                # This is more complex as pixel_values are processed, so we'll use the original processing
-                # For now, we'll use the baseline approach
-                break
-    
-    # If we couldn't extract original images from batch, use baseline approach
-    if not original_images:
-        # Use baseline approach: create fake messages and process images
-        # This maintains the original vae_input_images generation logic
-        fake_original_images = []
-        for i in range(len(indices)):
-            # Create a dummy image of the correct size
-            img = Image.new('RGB', (image_size, image_size), color='white')
-            fake_original_images.append(img)
-        original_images = fake_original_images
     
     # Prepare messages format for processor (keye_vl_utils format) - BASELINE LOGIC
     fake_messages = [{
@@ -690,14 +706,14 @@ def load_visualization_images(
     return original_images, pixel_values, image_grid_thw, vae_input_images
 
 
-
 @torch.no_grad()
 def visualize_reconstruction(
     model,
     vae,
     image_tokenizer,
     processor,
-    dataset,  # Changed from image_dir to dataset
+    parquet_path: str,  # 改为parquet_path参数
+    dataset,  # 保留dataset参数用于处理方法
     output_dir: str,
     global_step: int,
     cfg_scale: float,
@@ -719,7 +735,8 @@ def visualize_reconstruction(
         vae: VAE model
         image_tokenizer: Image tokenizer
         processor: AutoProcessor for image preprocessing
-        dataset: Chat2ImageDataset instance containing samples (changed from image_dir)
+        parquet_path: Path to parquet file containing samples (changed from image_dir)
+        dataset: Chat2ImageDataset instance for processing methods
         output_dir: Directory to save visualization results
         global_step: Current training step
         cfg_scale: CFG scale for sampling
@@ -737,9 +754,10 @@ def visualize_reconstruction(
     
     print_rank_0(f"[Step {global_step}] Running visualization...")
     
-    # Load and preprocess images from dataset
+    # Load and preprocess images from parquet file
     result = load_visualization_images(
-        dataset=dataset,  # Changed from image_dir to dataset
+        parquet_path=parquet_path,  # 改为parquet_path
+        dataset=dataset,  # 传入dataset用于处理方法
         processor=processor,
         image_size=image_size,
         max_condition_length=max_condition_length,
@@ -1049,7 +1067,6 @@ def train():
     # Create model
     with set_default_dtype(args.model_dtype), torch.device("meta"):
         print_rank_0(f"Creating model from config")
-        model_config.qwen_config.output_last_hidden_states_only = True
         model = model_cls(model_config)
         print_rank_0(f"Model instantiated: {type(model).__name__}")
 
@@ -1245,7 +1262,6 @@ def train():
         dataset_config["rank"] = dist.get_rank()
         dataset_config["world_size"] = dist.get_world_size()
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
-
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Chat2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
@@ -1372,7 +1388,8 @@ def train():
                     vae=vae,
                     image_tokenizer=image_tokenizer,
                     processor=vis_processor,
-                    image_dir=args.visualize_dir,
+                    parquet_path=args.visualize_parquet,  # 改为parquet_path参数
+                    dataset=dataset,  # 传入dataset用于处理方法
                     output_dir=args.output_dir,
                     global_step=0,
                     cfg_scale=args.cfg_scale,
@@ -1550,7 +1567,8 @@ def train():
                             vae=vae,
                             image_tokenizer=image_tokenizer,
                             processor=vis_processor,
-                            image_dir=args.visualize_dir,
+                            parquet_path=args.visualize_parquet,  # 改为parquet_path参数
+                            dataset=dataset,  # 传入dataset用于处理方法
                             output_dir=args.output_dir,
                             global_step=scheduler.global_step,
                             cfg_scale=args.cfg_scale,
