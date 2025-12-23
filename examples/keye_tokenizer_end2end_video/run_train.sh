@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # Model and output directories - modify as needed
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/MuseV2/keye_tok_e2e/test_video_1
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/video/stage1
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -27,7 +27,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="keye_tokenizer_end2end_image_train_video"
+comment="keye_tokenizer_end2end_image_train_video_stage1"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -123,7 +123,7 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --max-length 10000 \
+                --max-length 20000 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 1000 \
                 --logging_per_step 10 \
@@ -132,6 +132,9 @@ nohup mpirun --allow-run-as-root \
                 --context-parallel-size 1 \
                 --use-flash-attention-2 \
                 --fp32-weight \
+                --freeze_navit \
+                --freeze_llm \
+                --freeze_navit_mlp_ar \
                 --codebook_loss_weight 1.0 \
                 --commitment_loss_weight 0.25 \
                 --seed 19260817 \
