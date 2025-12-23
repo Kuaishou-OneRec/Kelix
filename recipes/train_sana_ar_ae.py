@@ -392,7 +392,8 @@ def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
     from muse.models.keye_ar import KeyeARModel
     with set_default_dtype(dtype), torch.device(device):
         tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
-        print(f"tokenizer={tokenizer}")
+        if torch.distributed.get_rank() == 0:
+            print(f"tokenizer={tokenizer}")
         tokenizer.config.qwen_config.output_last_hidden_states_only = True
         tokenizer.model.model.output_last_hidden_states_only = True
         tokenizer.requires_grad_(False)
