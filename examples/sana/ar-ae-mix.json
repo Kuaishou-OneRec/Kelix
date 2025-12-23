@@ -5,7 +5,6 @@
     "max_condition_length": 324,
     "center_crop": true,
     "force_assistant_image_size": 504,
-    "packing": false,
-    
-  }
+    "packing": false
+}
   
