@@ -401,7 +401,7 @@ def tokenize_images(tokenizer,
                     batch_size: int,
                     max_condition_length: int,
                     input_ids: Optional[torch.Tensor] = None,
-                    cu_seqlens: Optional[torch.Tensor] = None) -> torch.Tensor:
+                    cu_seqlens: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
     Args:
@@ -414,7 +414,9 @@ def tokenize_images(tokenizer,
         cu_seqlens: Cumulative sequence lengths for flash attention
     
     Returns:
-        embeddings: [B, max_condition_length, embed_dim]
+        Tuple of (embeddings, attention_mask):
+        - embeddings: [B, max_condition_length, embed_dim]
+        - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
     with torch.no_grad():
         # Create dummy input_ids if not provided
@@ -459,20 +461,64 @@ def tokenize_images(tokenizer,
         else:
             embeddings = outputs.last_hidden_state  # [B, seq_len, embed_dim]
         
-        # Handle padding to max_condition_length
-        current_seq_len = embeddings.shape[1]
-        embed_dim = embeddings.shape[2]
+        # Extract embeddings between vision_start_id and vision_end_id
+        vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
+        vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
         
+        # Find the positions of vision_start_id and vision_end_id in input_ids
+        vision_start_mask = (input_ids == vision_start_id)
+        vision_end_mask = (input_ids == vision_end_id)
+        
+        # For each batch, find the start and end positions
+        vision_embeddings_list = []
+        vision_seq_lens = []
+        for i in range(batch_size):
+            # Find the positions of vision_start_id and vision_end_id in this batch
+            start_positions = torch.nonzero(vision_start_mask[i], as_tuple=True)[0]
+            end_positions = torch.nonzero(vision_end_mask[i], as_tuple=True)[0]
+            
+            start_pos = start_positions[0].item()
+            end_pos = end_positions[0].item()
+            vision_embeddings = embeddings[i, start_pos:end_pos+1, :]
+            vision_embeddings_list.append(vision_embeddings)
+            vision_seq_lens.append(vision_embeddings.shape[0])
+        
+        # Stack the embeddings and handle variable sequence lengths
+        max_vision_seq_len = max(vision_seq_lens)
+        embed_dim = embeddings.shape[2]
+        processed_embeddings = torch.zeros(batch_size, max_vision_seq_len, embed_dim,
+                                          device=embeddings.device, dtype=embeddings.dtype)
+        
+        # Create attention mask: 1 for valid tokens, 0 for padding
+        attention_mask = torch.zeros(batch_size, max_vision_seq_len,
+                                   device=embeddings.device, dtype=torch.long)
+        
+        for i, emb in enumerate(vision_embeddings_list):
+            seq_len = emb.shape[0]
+            processed_embeddings[i, :seq_len, :] = emb
+            attention_mask[i, :seq_len] = 1
+        
+        # Handle padding to max_condition_length
+        current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
             # Pad to max_condition_length
-            padding = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
-                                 device=embeddings.device, dtype=embeddings.dtype)
-            embeddings = torch.cat([embeddings, padding], dim=1)
+            padding_embeddings = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
+                                           device=processed_embeddings.device, dtype=processed_embeddings.dtype)
+            processed_embeddings = torch.cat([processed_embeddings, padding_embeddings], dim=1)
+            
+            # Extend attention mask with zeros for padding
+            padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
+                                     device=attention_mask.device, dtype=attention_mask.dtype)
+            attention_mask = torch.cat([attention_mask, padding_mask], dim=1)
         elif current_seq_len > max_condition_length:
             # Truncate to max_condition_length
-            embeddings = embeddings[:, :max_condition_length, :]
+            processed_embeddings = processed_embeddings[:, :max_condition_length, :]
+            attention_mask = attention_mask[:, :max_condition_length]
 
-    return embeddings
+        # Reshape attention_mask to [B, 1, 1, max_condition_length]
+        attention_mask = attention_mask[:, None, None, :]
+
+    return processed_embeddings, attention_mask
 
 
 def freeze_params_by_pattern(model, patterns: List[str]) -> int:
@@ -482,7 +528,7 @@ def freeze_params_by_pattern(model, patterns: List[str]) -> int:
     1. Normal mode: freeze params containing any pattern
        E.g., ['y_embedder', 'cross_attn'] freezes params containing these substrings
     2. Inverse mode (^ prefix): freeze all EXCEPT params matching patterns
-       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params containing these
+       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params matching patterns
     
     Args:
         model: The model to freeze parameters in
@@ -1059,7 +1105,6 @@ def train():
     total_params = sum(p.numel() for p in model.parameters())
     trainable_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print_rank_0(f"Total params: {total_params:,}, Trainable: {trainable_count:,} ({100*trainable_count/total_params:.2f}%)")
-
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable
     vae = None
@@ -1356,7 +1401,7 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                token_embeds = tokenize_images(
+                token_embeds, attention_mask = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
@@ -1372,7 +1417,7 @@ def train():
                     model=model,
                     x_start=latents,
                     y=token_embeds.unsqueeze(1),
-                    mask=None,  # Remove attention_mask since it's not needed
+                    mask=attention_mask,  # Use attention_mask instead of None
                 )
                 loss = loss_dict["loss"]
 

@@ -547,6 +547,16 @@ class UnifiedQwen3Config(Qwen3Config):
         description="Token ID used to represent quantization end token."
     )
 
+    vision_start_token_id: Optional[int] = Field(
+        default=151652,
+        description="Token ID used to represent the start of an image token sequence."
+    )
+
+    vision_end_token_id: Optional[int] = Field(
+        default=151653,
+        description="Token ID used to represent the end of an image token sequence."
+    )
+
     # # Tokenizer configuration
     codebook_size: int = Field(default=8192, description="码本大小")
     n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
