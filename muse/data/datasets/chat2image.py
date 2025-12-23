@@ -117,6 +117,25 @@ class Chat2ImageDataset(Token2ImageDataset):
         processor_path: Path to processor
         max_condition_length: Maximum condition sequence length
         **kwargs: Additional args passed to DistributedDataset
+    
+    each sample shows as
+    {
+        "__key__": 000000000, 
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Draw a cat."},
+                ]
+            },
+            {"role": "assistant", "content": [
+                {"type": "image", "image": "0.jpg"}
+            ]},
+        ],
+        "images": {"0.jpg": "/path/to/image/0.jpg"},
+        "source": "kwai_video",
+        ...
+    }
     """
     def __init__(self, *args, force_assistant_image_size=None, **kwargs):
         super().__init__(*args, **kwargs)
