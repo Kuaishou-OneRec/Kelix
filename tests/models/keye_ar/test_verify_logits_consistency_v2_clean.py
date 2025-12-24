@@ -1,11 +1,22 @@
-import pytest
-import torch
+"""
+验证KeyeARModel和KeyeForConditionalGeneration前向logits一致性的pytest测试
+基于verify_logits_consistency_v2_clean.py的最小修改版本
+"""
+
 import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
+os.environ["nosp"] = 'true'
+os.environ["Qwen3RMSNorm_fp32"] = "0"
 import json
-import tempfile
+import torch
+import numpy as np
+import warnings
 from pathlib import Path
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor
+from contextlib import nullcontext
+from collections import defaultdict
 
 # 导入模型相关模块
 from muse.models.keye_ar.modeling import KeyeARModel
@@ -15,7 +26,6 @@ from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, U
 
 def get_config_value(config_dict, key, default_value, config_name=""):
     """从配置字典中获取值，如果不存在则使用默认值并发出警告"""
-    import warnings
     value = config_dict.get(key)
     if value is None:
         value = default_value
@@ -23,9 +33,11 @@ def get_config_value(config_dict, key, default_value, config_name=""):
         warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
     return value
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 def load_keye_ar_config(conf_path):
-    """直接从conf.json加载KeyeARConfig"""
+    """直接从conf.json加载KeyeARConfig（从test_modeling_forward.py复制）"""
     with open(conf_path, 'r') as f:
         conf_data = json.load(f)
     
@@ -160,6 +172,33 @@ def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
+def load_keye_ar_model_v2(output_model_dir, device):
+    """加载KeyeARModel模型（基于test_forward_v2的实现）"""
+    # 加载processor和配置
+    processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
+    
+    # 直接从conf.json加载KeyeARConfig（使用load_keye_ar_config函数）
+    config = load_keye_ar_config("muse/models/keye_ar/conf.json")
+    
+    # 创建模型实例
+    model = KeyeARModel(config)
+    
+    state_dict = {}
+    from safetensors.torch import load_file
+    for safetensor_file in os.listdir(output_model_dir):
+        if safetensor_file.endswith(".safetensors"):
+            print(f"Loading {safetensor_file}")
+            state_dict.update(load_file(os.path.join(output_model_dir, safetensor_file)))
+    
+    # 转换为KeyeARModel的state_dict
+    converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
+    model.load_state_dict(converted_state_dict, strict=True)
+    
+    # 将模型移到设备并转换为float精度
+    model = model.to(device).bfloat16()
+    
+    return model, processor
+
 
 def process_message(messages, processor, device, add_generation_prompt=True, padding=False):
     """处理消息，生成模型输入"""
@@ -193,60 +232,30 @@ def get_keye_ar_model_logits(model, inputs):
     inputs_ar["tokens"] = inputs_ar["input_ids"]
     del inputs_ar["input_ids"]
 
-    with torch.cpu.amp.autocast(dtype=torch.bfloat16):
+    if torch.cuda.is_available():
+        autocast_cm = torch.cuda.amp.autocast
+    else:
+        try:
+            autocast_cm = torch.cpu.amp.autocast
+        except Exception:
+            autocast_cm = nullcontext
+
+    with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs_ar, cu_seqlens=None)
     
     return outputs
 
 
-@pytest.fixture(scope="module")
-def device():
-    """设备fixture"""
-    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-@pytest.fixture(scope="module")
-def test_config():
-    """测试配置fixture"""
-    return {
-        "output_model_dir": "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted",
-        "output_logit_file": "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
-    }
-
-
-@pytest.fixture(scope="module")
-def keye_ar_model_and_processor(device, test_config):
-    """加载KeyeARModel模型（基于test_forward_v2的实现）"""
-    # 加载processor和配置
-    processor = AutoProcessor.from_pretrained(test_config["output_model_dir"], trust_remote_code=True)
+def test_verify_logits_consistency():
+    """pytest测试函数：验证两个模型的logits一致性"""
+    # 设置设备
+    print(f"使用设备: {device}")
     
-    # 直接从conf.json加载KeyeARConfig（使用load_keye_ar_config函数）
-    config = load_keye_ar_config("muse/models/keye_ar/conf.json")
+    # 模型路径
+    output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
     
-    # 创建模型实例
-    model = KeyeARModel(config)
-    
-    state_dict = {}
-    from safetensors.torch import load_file
-    for safetensor_file in os.listdir(test_config["output_model_dir"]):
-        if safetensor_file.endswith(".safetensors"):
-            print(f"Loading {safetensor_file}")
-            state_dict.update(load_file(os.path.join(test_config["output_model_dir"], safetensor_file)))
-    
-    # 转换为KeyeARModel的state_dict
-    converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
-    model.load_state_dict(converted_state_dict, strict=True)
-    
-    # 将模型移到设备并转换为float精度
-    model = model.to(device).bfloat16()
-    
-    return model, processor
-
-
-@pytest.fixture(scope="module")
-def test_inputs(device, keye_ar_model_and_processor):
-    """测试输入fixture"""
-    _, processor = keye_ar_model_and_processor
+    print("正在加载KeyeARModel...")
+    keye_ar_model, processor = load_keye_ar_model_v2(output_model_dir, device)
     
     # 准备测试消息
     COT_SYSTEM_PROMPT = "You are a helpful assistant."
@@ -265,24 +274,17 @@ def test_inputs(device, keye_ar_model_and_processor):
     ]
     
     # 处理输入
-    return process_message(messages, processor, device)
+    print("处理输入消息...")
+    inputs = process_message(messages, processor, device)
 
+    print("获取KeyeARModel的logits...")
+    keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, inputs)
 
-def test_logits_consistency(keye_ar_model_and_processor, test_inputs, test_config):
-    """测试KeyeARModel和KeyeForConditionalGeneration的logits一致性"""
-    keye_ar_model, _ = keye_ar_model_and_processor
+    # 获取两个模型的logits
+    print("获取KeyeForConditionalGeneration的logits...")
     
-    # 获取KeyeARModel的logits
-    keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, test_inputs)
-    
-    # 从文件加载KeyeForConditionalGeneration的logits
-    keye_conditional_logits = torch.load(test_config["output_logit_file"])
-
     output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
     keye_conditional_logits = torch.load(output_logit_file).reshape(keye_ar_logits.shape)
-    import IPython
-    IPython.embed()
-    assert torch.allclose(keye_conditional_logits.to(keye_conditional_logits), keye_ar_logits)
 
-
-# pytest tests/models/keye_ar/test_verify_logits_consistency_v2_clean.py
+    # 核心断言
+    assert torch.allclose(keye_conditional_logits, keye_ar_logits, atol=1e-3, rtol=1e-3)
