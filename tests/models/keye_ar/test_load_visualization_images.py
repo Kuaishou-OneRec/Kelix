@@ -88,7 +88,7 @@ def load_visualization_images(
             }
             # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
             print(f"messages={sample['messages']}")
-            print(f"sample={sample}")
+            print(f"sample({type(sample)})={sample}")
             # Use dataset's process method
             processed_sample = dataset.process(sample)
             processed_samples.append(processed_sample)
