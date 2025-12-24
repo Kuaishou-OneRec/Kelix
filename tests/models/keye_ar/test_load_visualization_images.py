@@ -91,7 +91,7 @@ def load_visualization_images(
             # Use dataset's process method
             processed_sample = dataset.process(sample)
             processed_samples.append(processed_sample)
-            text = sample["messages"][0]["content"]["text"]
+            text = sample["messages"][0]["content"][0]["text"]
             texts.append(text)
         
         # Use dataset's collate_fn to batch the samples
