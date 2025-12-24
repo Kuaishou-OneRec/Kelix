@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # Model and output directories - modify as needed
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1_with_shuffle
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
