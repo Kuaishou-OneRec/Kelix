@@ -82,8 +82,8 @@ def load_visualization_images(
             # Convert parquet row to sample format expected by dataset
             sample = {
                 "__key__": row.get("__key__", ""),
-                "messages": json.loads(row["messages"]) if isinstance(row["messages"], str) else row["messages"],
-                "images": json.loads(row["images"]) if isinstance(row["images"], str) else row["images"],
+                "messages": row["messages"],
+                "images": row["images"],
                 "source": row.get("source", "")
             }
             # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
