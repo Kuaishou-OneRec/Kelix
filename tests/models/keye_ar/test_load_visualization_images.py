@@ -85,6 +85,7 @@ def load_visualization_images(
                 "images": json.loads(row["images"]) if isinstance(row["images"], str) else row["images"],
                 "source": row.get("source", "")
             }
+            print(f"messages={sample['messages']}")
             # Use dataset's process method
             processed_sample = dataset.process(sample)
             processed_samples.append(processed_sample)
