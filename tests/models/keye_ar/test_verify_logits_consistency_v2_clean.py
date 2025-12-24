@@ -272,7 +272,7 @@ def test_logits_consistency(keye_ar_model_and_processor, test_inputs, test_confi
     keye_conditional_logits = torch.load(test_config["output_logit_file"])
     
     # 主要的断言：验证两个模型的logits是否一致
-    assert torch.allclose(keye_conditional_logits, keye_ar_logits, atol=1e-3, rtol=1e-3)
+    assert torch.allclose(keye_conditional_logits.to(keye_ar_logits).reshape(keye_ar_logits.shape), keye_ar_logits)
 
 
 
