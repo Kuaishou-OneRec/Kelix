@@ -845,7 +845,7 @@ Parsed JSON content or empty list if parsing fails
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
-                    print(f"content={content}")
+                    print(f"content={content}", type(print))
                     if isinstance(content, str):
                         text = content
                     elif isinstance(content, list):
@@ -853,8 +853,10 @@ Parsed JSON content or empty list if parsing fails
                         for block in content:
                             if block["type"] == "text":
                                 text = block["text"]
+                                print(f"find text={text}")
                                 break
                 elif turn["role"] == "assistant":
+                    print(f"assstt={content}", type(print))
                     content = turn["content"]
                     # Already validated: exactly 1 image block
                     for block in content:
@@ -863,6 +865,7 @@ Parsed JSON content or empty list if parsing fails
                         # type=image_gen 
                         if block["type"] == "image" or block["type"] == "image_gen":
                             image = block["image"]
+                            print(f"find image={image}")
                             break
 
         if segments:
