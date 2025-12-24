@@ -5,7 +5,6 @@ import pandas as pd
 import json
 import torch
 from PIL import Image
-from muse.config import load_config
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -16,7 +15,9 @@ import traceback
 from muse.data.datasets.chat2image import Chat2ImageDataset
 # 从muse.config.dataset_config导入DatasetConfig
 from muse.config.dataset_config import DatasetConfig
-# 从muse.utils.common导入set_default_dtype
+# 从muse.config导入load_config函数，与训练代码保持一致
+from muse.config import load_config
+from muse.utils.common import set_default_dtype
 from muse.training.common import (
     set_default_dtype,
     get_torch_dtype,
@@ -85,6 +86,7 @@ def load_visualization_images(
                 "images": json.loads(row["images"]) if isinstance(row["images"], str) else row["images"],
                 "source": row.get("source", "")
             }
+            # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
             print(f"messages={sample['messages']}")
             # Use dataset's process method
             processed_sample = dataset.process(sample)
