@@ -1826,7 +1826,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast_video(ChatCompletionVisi
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
-
+    self.shuffle_window = shuffle_window
     if base_model_dir:
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
         self.img_start_token = "<|vision_start|>"
