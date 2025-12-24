@@ -638,42 +638,8 @@ def load_visualization_images(
     # Use dataset's collate_fn to batch the samples
     batch = dataset.collate_fn(processed_samples)
     
-    # Extract original images from the batch
-    original_images = []
-    for i in range(len(df)):
-        img_tensor = batch['image'][i]
-        # Convert tensor back to PIL image for visualization
-        img = transforms.ToPILImage()(img_tensor.cpu())
-            
-    # Prepare messages format for processor (keye_vl_utils format) - BASELINE LOGIC
-    fake_messages = [{
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "image": img,
-                "min_pixels": 4 * 28 * 28,
-                "max_pixels": max_condition_length * 28 * 28
-            } for img in original_images],
-    }]
-    text = processor.apply_chat_template(
-        fake_messages,
-        tokenize=False
-    )
-    # Process using keye_vl_utils
-    image_inputs, _, _ = process_vision_info(fake_messages)
-    
-    # Use processor to get pixel_values and image_grid_thw - BASELINE LOGIC
-    inputs = processor(
-        text=text,
-        images=image_inputs,
-        padding=False,
-        truncation=False,
-        return_tensors="pt",
-    )
-    
-    pixel_values = inputs["pixel_values"].to(device=device, dtype=dtype)
-    image_grid_thw = inputs["image_grid_thw"].to(device=device)
+    pixel_values = batch["pixel_values"].to(device=device, dtype=dtype)
+    image_grid_thw = batch["image_grid_thw"].to(device=device)
     
     # Prepare images for VAE (normalize to [-1, 1]) - BASELINE LOGIC
     vae_transform = transforms.Compose([
@@ -682,7 +648,7 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    return text, original_images, pixel_values, image_grid_thw, vae_input_images, inputs["input_ids"]
+    return text, original_images, pixel_values, image_grid_thw, vae_input_images, batch["input_ids"]
 
 
 @torch.no_grad()
