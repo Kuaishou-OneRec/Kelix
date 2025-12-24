@@ -238,7 +238,7 @@ def get_keye_ar_model_logits(model, inputs):
     inputs_ar["position_ids"] = torch.arange(0, inputs_ar["input_ids"].size(1)).unsqueeze(0).to(inputs_ar["input_ids"].device)
     inputs_ar["tokens"] = inputs_ar["input_ids"]
     del inputs_ar["input_ids"]
-    
+
     if torch.cuda.is_available():
         autocast_cm = torch.cuda.amp.autocast
     else:
@@ -294,10 +294,9 @@ def main():
     
     
     output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
-    keye_conditional_logits = torch.load(output_logit_file)
-    import IPython
-    IPython.embed()
-    assert torch.allclose(keye_conditional_logits.to(keye_ar_logits).reshape(keye_ar_logits.shape), keye_ar_logits)
+    keye_conditional_logits = torch.load(output_logit_file).reshape(keye_ar_logits.shape)
+
+    assert torch.allclose(keye_conditional_logits, keye_ar_logits)
     
     
 

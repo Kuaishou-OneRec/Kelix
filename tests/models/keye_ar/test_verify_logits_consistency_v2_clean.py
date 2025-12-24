@@ -268,12 +268,12 @@ def test_logits_consistency(keye_ar_model_and_processor, test_inputs, test_confi
     keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, test_inputs)
     
     # 从文件加载KeyeForConditionalGeneration的logits
-    # 注意：这里假设文件已经存在，实际测试中可能需要创建或mock这个文件
     keye_conditional_logits = torch.load(test_config["output_logit_file"])
-    
-    # 主要的断言：验证两个模型的logits是否一致
-    assert torch.allclose(keye_conditional_logits.to(keye_ar_logits).reshape(keye_ar_logits.shape), keye_ar_logits)
 
+    output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
+    keye_conditional_logits = torch.load(output_logit_file).reshape(keye_ar_logits.shape)
+
+    assert torch.allclose(keye_conditional_logits, keye_ar_logits)
 
 
 # pytest tests/models/keye_ar/test_verify_logits_consistency_v2_clean.py
