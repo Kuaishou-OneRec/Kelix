@@ -19,5 +19,5 @@
     "video_total_pixels": 154140672,
     "max_sample_length": 20000,
     "train_video": true,
-    "shuffle_window": 10
+    "shuffle_window": 1
 }
