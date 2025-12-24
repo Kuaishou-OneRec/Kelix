@@ -160,6 +160,7 @@ def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
+
 def process_message(messages, processor, device, add_generation_prompt=True, padding=False):
     """处理消息，生成模型输入"""
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt)
@@ -215,19 +216,26 @@ def test_config():
 
 @pytest.fixture(scope="module")
 def keye_ar_model_and_processor(device, test_config):
-    """加载KeyeARModel和processor的fixture"""
+    """加载KeyeARModel模型（基于test_forward_v2的实现）"""
     # 加载processor和配置
-    processor = AutoProcessor.from_pretrained(test_config["output_model_dir"], trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
     
-    # 直接从conf.json加载KeyeARConfig
+    # 直接从conf.json加载KeyeARConfig（使用load_keye_ar_config函数）
     config = load_keye_ar_config("muse/models/keye_ar/conf.json")
     
     # 创建模型实例
     model = KeyeARModel(config)
     
-    # 加载权重（这里简化处理，实际测试可能需要mock或使用测试权重）
-    # 由于这是测试，我们可能只需要模型结构而不需要实际权重
-    # 或者可以使用一个小的测试权重文件
+    state_dict = {}
+    from safetensors.torch import load_file
+    for safetensor_file in os.listdir(test_config["output_model_dir"]):
+        if safetensor_file.endswith(".safetensors"):
+            print(f"Loading {safetensor_file}")
+            state_dict.update(load_file(os.path.join(output_model_dir, safetensor_file)))
+    
+    # 转换为KeyeARModel的state_dict
+    converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
+    model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为float精度
     model = model.to(device).bfloat16()
