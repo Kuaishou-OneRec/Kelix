@@ -280,8 +280,9 @@ def test_logits_consistency(keye_ar_model_and_processor, test_inputs, test_confi
 
     output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
     keye_conditional_logits = torch.load(output_logit_file).reshape(keye_ar_logits.shape)
-
-    assert torch.allclose(keye_conditional_logits, keye_ar_logits)
+    import IPython
+    IPython.embed()
+    assert torch.allclose(keye_conditional_logits.to(keye_conditional_logits), keye_ar_logits)
 
 
 # pytest tests/models/keye_ar/test_verify_logits_consistency_v2_clean.py
