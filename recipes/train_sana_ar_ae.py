@@ -798,11 +798,11 @@ def visualize_reconstruction(
     print_rank_0("  Getting condition embeddings...")
     cond_embeds, cond_mask = tokenize_images(
         tokenizer=image_tokenizer,
-        pixel_values=pixel_values,
-        image_grid_thw=image_grid_thw,
+        pixel_values=pixel_values.to(device=device),
+        image_grid_thw=image_grid_thw.to(device=device),
         batch_size=batch_size,
         max_condition_length=max_condition_length,
-        input_ids=input_ids
+        input_ids=input_ids.to(device=device)
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
