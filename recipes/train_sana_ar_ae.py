@@ -578,9 +578,7 @@ def freeze_params_by_pattern(model, patterns: List[str]) -> int:
 def load_visualization_images(
     parquet_path: str,  # 改为接收parquet_path参数
     dataset,  # 保留dataset参数用于处理方法
-    processor,
     image_size: int,
-    max_condition_length: int,
     device: torch.device,
     dtype: torch.dtype,
     num_images: Optional[int] = None

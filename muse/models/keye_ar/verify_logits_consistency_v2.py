@@ -552,6 +552,7 @@ def compare_layer_outputs(hook1, hook2, model1=None, model2=None, tolerance=1e-5
 
 def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
     """获取KeyeForConditionalGeneration的logits（ground truth）"""
+    
     if layer_hook:
         layer_hook.clear_outputs()
     
@@ -704,8 +705,16 @@ def main():
 
         # 获取两个模型的logits
         print("获取KeyeForConditionalGeneration的logits...")
-        keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs, conditional_hook)
         
+        
+        output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
+        if not os.path.exists(output_logit_file):
+            torch.save(keye_conditional_logits, output_logit_file)
+        else:
+            keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs, conditional_hook)
+            print("已存在输出文件，跳过保存")
+            torch.save(keye_conditional_logits, output_logit_file)
+
         # 比较logits
         logits_success = compare_logits(
             keye_conditional_logits.reshape(keye_ar_logits.shape), 
