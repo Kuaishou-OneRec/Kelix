@@ -762,11 +762,15 @@ def train():
         if args.batch_size is not None and args.batch_size != 1:
             print_rank_0(f"Warning: batch_size arg is {args.batch_size}, but ignored (forced to 1) because dataset handles packing.")
 
+        # 优先使用 dataset_config 中的 num_workers，否则使用命令行参数
+        dataloader_num_workers = dataset_config.get("num_workers", args.num_workers)
+        print_rank_0(f"DataLoader num_workers: {dataloader_num_workers}")
+        
         dataloader = DataLoader(
             dataset,
             batch_size=1,  # Each sample is already batched in ChatCompletionVisionDataset
             shuffle=False,
-            num_workers=args.num_workers,
+            num_workers=dataloader_num_workers,
             collate_fn=lambda x: x[0]  # Unwrap single-element list
         )
 

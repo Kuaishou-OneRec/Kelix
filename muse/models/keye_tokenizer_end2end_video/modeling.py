@@ -135,6 +135,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.pool = pool
+        print(f'maosiyang: self.pool={self.pool}')
         self.amplifier = amplifier
         self.vocab_size = qwen_config.vocab_size
         # Note: lm_head is inside self.model.model.output (TransformerDecoder.output)
