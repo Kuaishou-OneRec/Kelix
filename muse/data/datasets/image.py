@@ -834,7 +834,7 @@ Parsed JSON content or empty list if parsing fails
                 "image": image,
                 "text": text
             }
-        
+        print(F"3334333", sample)
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
         print(f"111_messages={messages}", type(messages))
