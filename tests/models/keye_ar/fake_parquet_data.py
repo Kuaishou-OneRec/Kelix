@@ -68,7 +68,8 @@ if __name__ == "__main__":
     # 配置参数
     INPUT_FILE = '/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet'
     OUTPUT_DIR = '/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/generated_repeated_files'  # 你可以修改这个输出目录
-    
+    JONS_FILE = '/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/generated_repeated_files.json'
+
     # 执行处理
     process_parquet_file(
         input_path=INPUT_FILE,
@@ -76,3 +77,5 @@ if __name__ == "__main__":
         num_rows=1000,  # 每个文件1000行
         num_files=100   # 生成100个文件
     )
+
+    all_files = [os.path.join(OUTPUT_DIR, f) for f in os.listdir(OUTPUT_DIR)]
