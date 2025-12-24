@@ -18,7 +18,6 @@ from muse.data.datasets.chat2image import Chat2ImageDataset
 from muse.config.dataset_config import DatasetConfig
 # 从muse.config导入load_config函数，与训练代码保持一致
 from muse.config import load_config
-from muse.utils.common import set_default_dtype
 from muse.training.common import (
     set_default_dtype,
     get_torch_dtype,
