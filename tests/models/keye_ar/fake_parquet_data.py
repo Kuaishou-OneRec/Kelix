@@ -79,3 +79,5 @@ if __name__ == "__main__":
     )
 
     all_files = [os.path.join(OUTPUT_DIR, f) for f in os.listdir(OUTPUT_DIR)]
+    with open(JONS_FILE, 'w') as f:
+        json.dump(all_files, f, indent=4)
