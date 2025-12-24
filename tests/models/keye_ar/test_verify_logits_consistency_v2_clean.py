@@ -218,7 +218,7 @@ def test_config():
 def keye_ar_model_and_processor(device, test_config):
     """加载KeyeARModel模型（基于test_forward_v2的实现）"""
     # 加载processor和配置
-    processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(test_config["output_model_dir"], trust_remote_code=True)
     
     # 直接从conf.json加载KeyeARConfig（使用load_keye_ar_config函数）
     config = load_keye_ar_config("muse/models/keye_ar/conf.json")
@@ -231,7 +231,7 @@ def keye_ar_model_and_processor(device, test_config):
     for safetensor_file in os.listdir(test_config["output_model_dir"]):
         if safetensor_file.endswith(".safetensors"):
             print(f"Loading {safetensor_file}")
-            state_dict.update(load_file(os.path.join(output_model_dir, safetensor_file)))
+            state_dict.update(load_file(os.path.join(test_config["output_model_dir"], safetensor_file)))
     
     # 转换为KeyeARModel的state_dict
     converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
