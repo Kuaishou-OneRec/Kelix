@@ -93,7 +93,7 @@ def load_visualization_images(
             processed_sample = dataset.process(sample)
             print(f"processed_sample={processed_sample}")
             processed_samples.append(processed_sample)
-            text = sample["messages"][0]["content"][0]["text"]
+            text = processed_sample["text"]
             texts.append(text)
         
         print(f"processed_samples={processed_samples}")
