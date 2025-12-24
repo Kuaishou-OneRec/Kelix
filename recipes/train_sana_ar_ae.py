@@ -439,10 +439,10 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
-        print(f"input_ids={input_ids.shape}")
-        print(f"pixel_values={pixel_values.shape}")
-        print(f"image_grid_thw={image_grid_thw.shape}")
-        print(f"cu_seqlens={cu_seqlens}")
+        # print(f"input_ids={input_ids.shape}")
+        # print(f"pixel_values={pixel_values.shape}")
+        # print(f"image_grid_thw={image_grid_thw.shape}")
+        # print(f"cu_seqlens={cu_seqlens}")
 
         # Call KeyeARModel forward method
         outputs = tokenizer(
@@ -1393,7 +1393,7 @@ def train():
                             device=torch.cuda.current_device(),
                             dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                         )
-            print(f"batch={batch}")
+            # print(f"batch={batch}")
             scheduler.step()
             
             # # Update multi-scale weights based on training progress
