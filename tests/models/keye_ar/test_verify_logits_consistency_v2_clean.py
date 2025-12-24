@@ -287,4 +287,4 @@ def test_verify_logits_consistency():
     keye_conditional_logits = torch.load(output_logit_file).reshape(keye_ar_logits.shape)
 
     # 核心断言
-    assert torch.allclose(keye_conditional_logits, keye_ar_logits, atol=1e-3, rtol=1e-3)
+    assert torch.allclose(keye_conditional_logits.to(keye_ar_logits), keye_ar_logits)
