@@ -209,10 +209,11 @@ def process_im_message(processor, image):
 def load_keye_for_conditional_generation(output_model_dir, device):
     """加载KeyeForConditionalGeneration模型（ground truth）"""
     state_dict = {}
+    from safetensors.torch import load_file
     for safetensor_file in os.listdir(output_model_dir):
         if safetensor_file.endswith(".safetensors"):
             print(f"Loading {safetensor_file}")
-            state_dict.update(torch.load(os.path.join(output_model_dir, safetensor_file)))
+            state_dict.update(load_file(os.path.join(output_model_dir, safetensor_file)))
 
     model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
@@ -239,10 +240,11 @@ def load_keye_ar_model_v2(output_model_dir, device):
     model = KeyeARModel(config)
     
     state_dict = {}
+    from safetensors.torch import load_file
     for safetensor_file in os.listdir(output_model_dir):
         if safetensor_file.endswith(".safetensors"):
             print(f"Loading {safetensor_file}")
-            state_dict.update(torch.load(os.path.join(output_model_dir, safetensor_file)))
+            state_dict.update(load_file(os.path.join(output_model_dir, safetensor_file)))
     
     # 转换为KeyeARModel的state_dict
     converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
