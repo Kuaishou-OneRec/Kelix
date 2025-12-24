@@ -849,7 +849,6 @@ Parsed JSON content or empty list if parsing fails
                         for block in content:
                             if block["type"] == "text":
                                 text = block["text"]
-                                print(f"find text={text}")
                                 break
                 elif turn["role"] == "assistant":
                     content = turn["content"]
@@ -860,7 +859,6 @@ Parsed JSON content or empty list if parsing fails
                         # type=image_gen 
                         if block["type"] == "image" or block["type"] == "image_gen":
                             image = block["image"]
-                            print(f"find image={image}")
                             break
 
         if segments:

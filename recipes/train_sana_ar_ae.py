@@ -723,7 +723,7 @@ def visualize_reconstruction(
         for i, text in enumerate(texts):
             # Truncate text if too long for TensorBoard display
             truncated_text = text[:100] + "..." if len(text) > 100 else text
-            print(f"truncated_text={truncated_text}")
+            # print(f"truncated_text={truncated_text}")
             tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
     # 1. VAE Reconstruction: encode -> decode
