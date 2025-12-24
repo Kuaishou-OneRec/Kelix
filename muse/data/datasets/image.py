@@ -834,18 +834,14 @@ Parsed JSON content or empty list if parsing fails
                 "image": image,
                 "text": text
             }
-        print(F"3334333", sample)
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
-        print(f"111_messages={messages}", type(messages))
         if messages:
             # Validate messages format
             self._validate_messages(messages)
-            print(f"messagesmessages={messages}")
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
-                    print(f"content={content}", type(print))
                     if isinstance(content, str):
                         text = content
                     elif isinstance(content, list):
@@ -856,7 +852,6 @@ Parsed JSON content or empty list if parsing fails
                                 print(f"find text={text}")
                                 break
                 elif turn["role"] == "assistant":
-                    print(f"assstt={content}", type(print))
                     content = turn["content"]
                     # Already validated: exactly 1 image block
                     for block in content:
@@ -875,7 +870,7 @@ Parsed JSON content or empty list if parsing fails
             # First segment is text, second is image (validated)
             text = segments[0]["text"]
             image = segments[1]["image"]
-        print("rrrr",{"image": image, "text": text})
+
         if image is None or text is None:
             return None
 

@@ -180,7 +180,6 @@ class Chat2ImageDataset(Token2ImageDataset):
                 for el in content:
                     if 'image' not in el: continue
                     el['image'] = resize_and_center_crop(Image.open(el["image"]), self.force_assistant_image_size, self.force_assistant_image_size)
-                    print(f"el['image']", el['image'])
 
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
@@ -242,7 +241,7 @@ class Chat2ImageDataset(Token2ImageDataset):
                     recursive_traverse(value, call_back_function)
 
         pair = self.extract_image_text(sample)
-        print(f"pair={pair}")
+
         if pair:
             images = json.loads(sample.get("images", '{}'))
             image = pair["image"]
@@ -268,7 +267,6 @@ class Chat2ImageDataset(Token2ImageDataset):
 
             recursive_traverse(messages, call_back)
             pair["message"] = messages
-            print(f"pppp", pair)
             return pair
         return None
 
@@ -292,7 +290,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         # Here is the real process of batch.
         result = {}
         batch = [self._process_pair(sample) for sample in batch]
-        print(f"collate={len(batch)}")
+
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
