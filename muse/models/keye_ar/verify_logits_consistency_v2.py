@@ -710,8 +710,8 @@ def main():
         
         
         output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
-        if not os.path.exists(output_logit_file):
-            torch.save(keye_conditional_logits, output_logit_file)
+        if os.path.exists(output_logit_file):
+            keye_conditional_logits = torch.load(output_logit_file)
         else:
             keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs, conditional_hook)
             print("已存在输出文件，跳过保存")
