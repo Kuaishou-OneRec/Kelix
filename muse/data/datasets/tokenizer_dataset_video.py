@@ -1628,14 +1628,16 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
           if np.random.rand() < 0.01:
             logger.warning(f"Failed to parse json field {key} in sample {sample.get('uuid', sample.get('__key__', 'unknown'))}: {e}")
 
-    if "messages" in sample and sample["messages"] is None:
-      del sample["messages"]
-    if "message" in sample and sample["message"] is None:
-      del sample["message"]
+    # Handle None and NaN values for messages/message fields
+    for key in ["messages", "message"]:
+      if key in sample:
+        if sample[key] is None or (isinstance(sample[key], float) and np.isnan(sample[key])):
+          del sample[key]
+
     # 2. 验证 messages/segments 格式
     messages = sample.get("messages") or sample.get("message")
     segments = sample.get("segments")
-    
+
     if messages is not None:
       if isinstance(messages, np.ndarray):
         sample["messages"] = messages.tolist()
