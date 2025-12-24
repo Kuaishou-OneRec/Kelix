@@ -598,6 +598,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
                train_video: bool = True,
                process_vision_info_args: Dict[str, Any] = {},
                use_slowfast: bool = False,
+               shuffle_window: int = 5,
                **kargs):
     """
     datasource_config: 默认覆盖全局配置
@@ -687,6 +688,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
         sources=sources,
         packing=True, # Always enable packing for this dataset as per requirement
         max_length=max_length, # Passing original max_length, adjust internally if needed
+        shuffle_window=shuffle_window,
         **kargs
     )
     
@@ -1709,6 +1711,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast_video(ChatCompletionVisi
                process_vision_info_args={"image_factor":28},
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
+               shuffle_window: int = 5,
                **kwargs
                ):
     """
@@ -1815,6 +1818,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast_video(ChatCompletionVisi
         use_flops_balance=self.use_flops_balance,
         process_vision_info_args=process_vision_info_args,
         use_slowfast=True, 
+        shuffle_window=shuffle_window,
         **kwargs
     )
     # self.sources = sources # Handled by super
