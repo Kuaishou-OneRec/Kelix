@@ -465,12 +465,12 @@ class DistributedDataset(IterableDataset):
     
     # Timeout handler for stuck samples
     def timeout_handler(signum, frame):
-      raise TimeoutError("Sample processing timeout (60 secs)")
-    
+      raise TimeoutError("Sample processing timeout (120 secs)")
+
     # Error tracking per data source
     source_sample_cnt = {}
     source_error_cnt = {}
-    
+
     buffer = []
     source_list = []  # Track data sources for each sample in buffer
     current_length = 0
@@ -487,14 +487,14 @@ class DistributedDataset(IterableDataset):
             sample_url = sample.get("__url__", sample.get("__file__", ""))
         except:
           pass
-        
+
         source_sample_cnt.setdefault(source_name, 0)
         source_sample_cnt[source_name] += 1
-        
+
         try:
           # Set timeout for processing (Unix-only, gracefully skip on Windows)
           signal.signal(signal.SIGALRM, timeout_handler)
-          signal.alarm(60)
+          signal.alarm(120)  # 增加到5分钟超时
           
           new_inputs = self.process(sample)
           
