@@ -607,68 +607,44 @@ def load_visualization_images(
     from PIL import Image
     from torchvision import transforms
     import pandas as pd
-    import json
-    # Read parquet file
-    try:
-        df = pd.read_parquet(parquet_path)
-        if num_images is not None:
-            df = df.head(num_images)
-        
-        if df.empty:
-            print(f"Warning: No samples found in {parquet_path}")
-            return None, None, None, None
-        
-        print(f"Loading {len(df)} samples from {parquet_path}")
-        
-        # Process samples using dataset's process method
-        processed_samples = []
-        texts = []
-        for _, row in df.iterrows():
-            # Convert parquet row to sample format expected by dataset
-            sample = row.to_dict()
-            # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
-            # Use dataset's process method
-            processed_sample = dataset.process(sample)
-            processed_samples.append(processed_sample)
-            text = processed_sample["text"]
-            texts.append(text)
-        
 
-        # Use dataset's collate_fn to batch the samples
-        batch = dataset.collate_fn(processed_samples)
-        
-        # Extract original images from the batch
-        original_images = []
-        for i in range(len(df)):
-            # Get the image from the batch (assuming it's in 'image' field)
-            if 'image' in batch:
-                img_tensor = batch['image'][i]
-                # Convert tensor back to PIL image for visualization
-                img = transforms.ToPILImage()(img_tensor.cpu())
-                original_images.append(img)
-            else:
-                # Fallback: try to get from pixel_values if available
-                if 'pixel_values' in batch:
-                    # This is more complex as pixel_values are processed, so we'll use the baseline approach
-                    # For now, we'll use the baseline approach
-                    break
-        
-        # If we couldn't extract original images from batch, use baseline approach
-        if not original_images:
-            # Use baseline approach: create fake messages and process images
-            # This maintains the original vae_input_images generation logic
-            fake_original_images = []
-            for i in range(len(df)):
-                # Create a dummy image of the correct size
-                img = Image.new('RGB', (image_size, image_size), color='white')
-                fake_original_images.append(img)
-            original_images = fake_original_images
+    # Read parquet file
+    df = pd.read_parquet(parquet_path)
+    if num_images is not None:
+        df = df.head(num_images)
     
-    except Exception as e:
-        print(f"Error loading parquet file {parquet_path}: {e}")
-        traceback.print_exc()
-        return None, None, None, None, None, None
     
+    print(f"Loading {len(df)} samples from {parquet_path}")
+    
+    # Process samples using dataset's process method
+    processed_samples = []
+    texts = []
+    original_images = []
+    for _, row in df.iterrows():
+        # Convert parquet row to sample format expected by dataset
+        sample = row.to_dict()
+        # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
+        # Use dataset's process method
+        processed_sample = dataset.process(sample)
+        processed_samples.append(processed_sample)
+        text = processed_sample["text"]
+        texts.append(text)
+
+        img = Image.open(processed_sample["image"]).convert('RGB')
+        img = img.resize((image_size, image_size), Image.Resampling.LANCZOS)
+        original_images.append(img)
+    
+
+    # Use dataset's collate_fn to batch the samples
+    batch = dataset.collate_fn(processed_samples)
+    
+    # Extract original images from the batch
+    original_images = []
+    for i in range(len(df)):
+        img_tensor = batch['image'][i]
+        # Convert tensor back to PIL image for visualization
+        img = transforms.ToPILImage()(img_tensor.cpu())
+            
     # Prepare messages format for processor (keye_vl_utils format) - BASELINE LOGIC
     fake_messages = [{
         "role": "user",
@@ -781,7 +757,8 @@ def visualize_reconstruction(
         for i, text in enumerate(texts):
             # Truncate text if too long for TensorBoard display
             truncated_text = text[:100] + "..." if len(text) > 100 else text
-            tb_writer.add_text(f"visualization/text_sample_{i}", truncated_text, global_step)
+            print(f"truncated_text={truncated_text}")
+            tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
     # 1. VAE Reconstruction: encode -> decode
     print_rank_0("  VAE encoding...")
