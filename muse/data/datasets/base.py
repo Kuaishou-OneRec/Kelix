@@ -493,11 +493,8 @@ class DistributedDataset(IterableDataset):
         
         try:
           # Set timeout for processing (Unix-only, gracefully skip on Windows)
-          try:
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(60)
-          except (AttributeError, ValueError):
-            pass  # SIGALRM not available on Windows
+          signal.signal(signal.SIGALRM, timeout_handler)
+          signal.alarm(60)
           
           new_inputs = self.process(sample)
           

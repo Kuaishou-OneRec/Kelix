@@ -484,12 +484,12 @@ def train():
     
     # Determine training mode and get model_class
     if args.model_dir:
-        # Continue pretrain mode: get model_class from model_dir/muse_config.json
+        # Continue pretrain mode: get model_class from model_dir/config.json
         model_config_path = Path(args.model_dir) / "muse_config.json"
         if not model_config_path.exists():
             raise FileNotFoundError(
                 f"Config file not found: {model_config_path}. "
-                f"Cannot continue pretrain without muse_config.json in {args.model_dir}"
+                f"Cannot continue pretrain without config.json in {args.model_dir}"
             )
         model_config = load_config(model_config_path)
     elif args.model_config:
@@ -783,7 +783,7 @@ def train():
     if dist.get_rank() == 0:
         stdout_logger = Logger("stdout", [StdoutBackend()])
         csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
-        tb_logger = Logger("tb", [TensorBoardBackend(os.path.join(args.output_dir, "log"))])
+        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
         loggers = [stdout_logger, csv_logger, tb_logger]
     else:
         loggers = []
