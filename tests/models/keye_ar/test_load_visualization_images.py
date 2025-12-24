@@ -6,6 +6,7 @@ import json
 import torch
 from PIL import Image
 from pathlib import Path
+from muse.training.common import set_default_dtype
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../")))
