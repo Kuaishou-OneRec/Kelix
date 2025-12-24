@@ -242,6 +242,7 @@ class Chat2ImageDataset(Token2ImageDataset):
                     recursive_traverse(value, call_back_function)
 
         pair = self.extract_image_text(sample)
+        print(f"pair={pair}")
         if pair:
             images = json.loads(sample.get("images", '{}'))
             image = pair["image"]
