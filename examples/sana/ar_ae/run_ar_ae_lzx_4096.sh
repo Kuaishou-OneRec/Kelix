@@ -129,7 +129,7 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_ae/ar-ae-mix_v2.json \
-                --learning-rate 1e-4 \
+                --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 512 \
