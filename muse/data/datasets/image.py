@@ -837,7 +837,7 @@ Parsed JSON content or empty list if parsing fails
         
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
-        
+        print(f"111_messages={messages}")
         if messages:
             # Validate messages format
             self._validate_messages(messages)
