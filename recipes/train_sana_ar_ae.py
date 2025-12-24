@@ -722,7 +722,7 @@ def visualize_reconstruction(
     if tb_writer is not None and texts:
         for i, text in enumerate(texts):
             # Truncate text if too long for TensorBoard display
-            truncated_text = text[:100] + "..." if len(text) > 100 else text
+            truncated_text = text[:200] + "..." if len(text) > 200 else text
             # print(f"truncated_text={truncated_text}")
             tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
