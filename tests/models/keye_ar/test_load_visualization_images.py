@@ -174,58 +174,10 @@ def load_visualization_images(
 
 
 
-
-
 def create_test_image(width=512, height=512, color='red', mode='RGB'):
     """创建一个测试PIL Image."""
     return Image.new(mode, (width, height), color=color)
 
-def create_test_parquet(tmp_path, image_size=512):
-    """创建一个测试parquet文件，符合实际训练数据格式."""
-    parquet_path = tmp_path / "test_visualization.parquet"
-    
-    # 创建测试图像并保存
-    images_dir = tmp_path / "images"
-    images_dir.mkdir()
-    
-    # 创建模拟数据
-    data = []
-    for i in range(2):  # 创建2个样本
-        # 保存测试图像
-        img = create_test_image(width=image_size, height=image_size, color='blue')
-        img_path = images_dir / f"image_{i}.jpg"
-        img.save(img_path)
-        
-        # 创建符合Chat2ImageDataset预期的样本结构
-        sample = {
-            "__key__": f"sample_{i}",
-            # messages字段需要与实际训练数据格式一致
-            "messages": json.dumps([
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"这是第{i}张图像的描述"}
-                    ]
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "image", "image": str(img_path)}
-                    ]
-                }
-            ]),
-            # images字段需要与实际训练数据格式一致
-            "images": json.dumps({
-                str(img_path): str(img_path)
-            }),
-            "source": "test_source"
-        }
-        data.append(sample)
-    
-    df = pd.DataFrame(data)
-    df.to_parquet(parquet_path, index=False)
-    
-    return parquet_path, tmp_path
 
 def test_load_visualization_images_with_real_env():
     """使用实际训练环境的模型和处理器测试load_visualization_images函数."""
@@ -239,7 +191,7 @@ def test_load_visualization_images_with_real_env():
             KEYE_AR_DIR = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
             MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/"
             MODEL_CONFIG = "/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json"
-            VISUALIZE_PARQUET_PATH = "/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet"# str(parquet_path)
+            VISUALIZE_PARQUET_PATH = parquet_path = "/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet"# str(parquet_path)
             IMAGE_SIZE = 512
             MAX_CONDITION_LENGTH = 324
             NUM_VIS_IMAGES = 2
