@@ -238,8 +238,16 @@ def get_keye_ar_model_logits(model, inputs):
     inputs_ar["position_ids"] = torch.arange(0, inputs_ar["input_ids"].size(1)).unsqueeze(0).to(inputs_ar["input_ids"].device)
     inputs_ar["tokens"] = inputs_ar["input_ids"]
     del inputs_ar["input_ids"]
+    
+    if torch.cuda.is_available():
+        autocast_cm = torch.cuda.amp.autocast
+    else:
+        try:
+            autocast_cm = torch.cpu.amp.autocast
+        except Exception:
+            autocast_cm = nullcontext
 
-    with torch.cpu.amp.autocast(dtype=torch.bfloat16):
+    with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs_ar, cu_seqlens=None) #= torch.tensor([0,66]).cuda())
     
     return outputs
