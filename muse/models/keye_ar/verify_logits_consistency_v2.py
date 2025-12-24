@@ -1,6 +1,8 @@
 """
 验证KeyeARModel和KeyeForConditionalGeneration前向logits一致性的脚本
 基于test_forward_v2的实现，使用load_keye_ar_config函数初始化KeyeARModel
+
+debug_for_muse=1 PYTHONPATH=. python3 muse/models/keye_ar/verify_logits_consistency_v2.py
 """
 
 import os
