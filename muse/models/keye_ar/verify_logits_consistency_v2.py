@@ -208,12 +208,19 @@ def process_im_message(processor, image):
 
 def load_keye_for_conditional_generation(output_model_dir, device):
     """加载KeyeForConditionalGeneration模型（ground truth）"""
+    state_dict = {}
+    for safetensor_file in os.listdir(output_model_dir):
+        if safetensor_file.endswith(".safetensors"):
+            print(f"Loading {safetensor_file}")
+            state_dict.update(torch.load(os.path.join(output_model_dir, safetensor_file)))
+
     model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
         torch_dtype=torch.bfloat16, 
         low_cpu_mem_usage=True
     )
+    model.load_state_dict(state_dict, strict=True)
     model.config.output_one_token = model.output_one_token = False
     model.token_head.use_flash_attn = True
     model = model.to(device).bfloat16()
@@ -231,18 +238,14 @@ def load_keye_ar_model_v2(output_model_dir, device):
     # 创建模型实例
     model = KeyeARModel(config)
     
-    # 从KeyeForConditionalGeneration获取state_dict并转换
-    keye_model = KeyeForConditionalGeneration.from_pretrained(
-        output_model_dir, 
-        _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.bfloat16, 
-        low_cpu_mem_usage=True
-    )
-    # 获取KeyeForConditionalGeneration的state_dict
-    keye_state_dict = keye_model.state_dict()
+    state_dict = {}
+    for safetensor_file in os.listdir(output_model_dir):
+        if safetensor_file.endswith(".safetensors"):
+            print(f"Loading {safetensor_file}")
+            state_dict.update(torch.load(os.path.join(output_model_dir, safetensor_file)))
     
     # 转换为KeyeARModel的state_dict
-    converted_state_dict = model.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
+    converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
     model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为float精度
