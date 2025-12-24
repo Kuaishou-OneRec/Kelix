@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import torch
 from PIL import Image
+from muse.config import load_config
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -241,18 +242,24 @@ def test_load_visualization_images_with_real_env():
             device = torch.device("cpu")  # 或者使用"cuda"如果可用
             dtype = torch.float32
             
-            # 1. 加载实际的数据集配置
+            # 1. 加载model_config获取model_class_name，与训练代码保持一致
+            model_config = load_config(MODEL_CONFIG)
+            model_class_name = model_config.model_class
+            print(f"从model_config获取的model_class_name: {model_class_name}")
+            
+            # 2. 加载实际的数据集配置
             # 从examples/sana/ar-ae-mix.json加载配置
             dataset_config_path = Path("examples/sana/ar-ae-mix.json")
             with open(dataset_config_path, "r") as f:
                 dataset_config_dict = json.load(f)
             
-            # 更新数据集配置
+            # 更新数据集配置，与训练代码保持一致
             dataset_config_dict.update({
                 "sources": [str(parquet_path)],
                 "image_size": IMAGE_SIZE,
                 "max_condition_length": MAX_CONDITION_LENGTH,
-                "processor_path": MODEL_DIR,  # 使用MODEL_DIR作为processor路径
+                "processor_path": KEYE_AR_DIR,  # 改为使用KEYE_AR_DIR，与训练代码保持一致
+                "model_class": model_class_name,  # 添加model_class字段，与训练代码保持一致
                 "num_workers": 1,
                 "center_crop": True,
                 "packing": False
@@ -260,13 +267,12 @@ def test_load_visualization_images_with_real_env():
             
             print(f"使用数据集配置: {dataset_config_dict}")
             
-            # 2. 初始化实际的数据集
+            # 3. 初始化实际的数据集
             dataset = Chat2ImageDataset(**dataset_config_dict)
             
-            # 3. 加载实际的处理器
-            # 从train_sana_ar_ae.py的load_keye_ar函数中获取灵感
+            # 4. 加载实际的处理器，从KEYE_AR_DIR加载，与训练代码保持一致
             from transformers import AutoProcessor
-            processor = AutoProcessor.from_pretrained(MODEL_DIR, trust_remote_code=True)
+            processor = AutoProcessor.from_pretrained(KEYE_AR_DIR, trust_remote_code=True)
             
             print(f"加载的处理器: {processor}")
             
