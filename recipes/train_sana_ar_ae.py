@@ -608,7 +608,6 @@ def load_visualization_images(
     from torchvision import transforms
     import pandas as pd
     import json
-    print(f"load_visualization_images={load_visualization_images}")
     # Read parquet file
     try:
         df = pd.read_parquet(parquet_path)
@@ -616,28 +615,25 @@ def load_visualization_images(
             df = df.head(num_images)
         
         if df.empty:
-            print_rank_0(f"Warning: No samples found in {parquet_path}")
+            print(f"Warning: No samples found in {parquet_path}")
             return None, None, None, None
         
-        print_rank_0(f"Loading {len(df)} samples from {parquet_path}")
+        print(f"Loading {len(df)} samples from {parquet_path}")
         
         # Process samples using dataset's process method
         processed_samples = []
         texts = []
         for _, row in df.iterrows():
             # Convert parquet row to sample format expected by dataset
-            sample = {
-                "__key__": row.get("__key__", ""),
-                "messages": json.loads(row["messages"]) if isinstance(row["messages"], str) else row["messages"],
-                "images": json.loads(row["images"]) if isinstance(row["images"], str) else row["images"],
-                "source": row.get("source", "")
-            }
+            sample = row.to_dict()
+            # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
             # Use dataset's process method
             processed_sample = dataset.process(sample)
             processed_samples.append(processed_sample)
-            text = sample["messages"][0]["content"]["text"]
+            text = processed_sample["text"]
             texts.append(text)
         
+
         # Use dataset's collate_fn to batch the samples
         batch = dataset.collate_fn(processed_samples)
         
@@ -669,7 +665,7 @@ def load_visualization_images(
             original_images = fake_original_images
     
     except Exception as e:
-        print_rank_0(f"Error loading parquet file {parquet_path}: {e}")
+        print(f"Error loading parquet file {parquet_path}: {e}")
         traceback.print_exc()
         return None, None, None, None, None
     
@@ -710,7 +706,6 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    print(f"return_text={text}")
     return text, original_images, pixel_values, image_grid_thw, vae_input_images
 
 

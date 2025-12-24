@@ -62,7 +62,6 @@ def load_visualization_images(
     from torchvision import transforms
     import pandas as pd
     import json
-    print(f"load_visualization_images={load_visualization_images}")
     # Read parquet file
     try:
         df = pd.read_parquet(parquet_path)
@@ -161,7 +160,6 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    print(f"return_text={text}")
     return text, original_images, pixel_values, image_grid_thw, vae_input_images
 
 
