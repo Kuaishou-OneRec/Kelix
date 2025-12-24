@@ -288,7 +288,7 @@ def main():
     output_logit_file = "/mmu_mllm_hdd_2/lingzhixin/model_verification/muse_v2/verify_logits_consistency_v2/keye_conditional_generation.pt"
     keye_conditional_logits = torch.load(output_logit_file)
     
-    assert torch.allclose(keye_conditional_logits, keye_ar_logits, atol=1e-3, rtol=1e-3)
+    assert torch.allclose(keye_conditional_logits.to(keye_ar_logits), keye_ar_logits, atol=1e-3, rtol=1e-3)
     
     
 
