@@ -648,7 +648,7 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    return text, original_images, pixel_values, image_grid_thw, vae_input_images, batch["input_ids"]
+    return texts, original_images, pixel_values, image_grid_thw, vae_input_images, batch["input_ids"]
 
 
 @torch.no_grad()
