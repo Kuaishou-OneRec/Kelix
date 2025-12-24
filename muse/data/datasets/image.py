@@ -875,7 +875,7 @@ Parsed JSON content or empty list if parsing fails
             # First segment is text, second is image (validated)
             text = segments[0]["text"]
             image = segments[1]["image"]
-        
+        print("rrrr",{"image": image, "text": text})
         if image is None or text is None:
             return None
 
