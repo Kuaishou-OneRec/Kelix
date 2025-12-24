@@ -667,7 +667,7 @@ def load_visualization_images(
     except Exception as e:
         print(f"Error loading parquet file {parquet_path}: {e}")
         traceback.print_exc()
-        return None, None, None, None, None
+        return None, None, None, None, None, None
     
     # Prepare messages format for processor (keye_vl_utils format) - BASELINE LOGIC
     fake_messages = [{
@@ -706,7 +706,7 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    return text, original_images, pixel_values, image_grid_thw, vae_input_images
+    return text, original_images, pixel_values, image_grid_thw, vae_input_images, inputs["input_ids"]
 
 
 @torch.no_grad()
@@ -773,7 +773,7 @@ def visualize_reconstruction(
         print_rank_0("No images to visualize, skipping...")
         return
     
-    texts, original_images, pixel_values, image_grid_thw, vae_input_images = result
+    texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
     batch_size = len(original_images)
     
     # Add text information to TensorBoard
@@ -802,6 +802,7 @@ def visualize_reconstruction(
         image_grid_thw=image_grid_thw,
         batch_size=batch_size,
         max_condition_length=max_condition_length,
+        input_ids=input_ids
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
