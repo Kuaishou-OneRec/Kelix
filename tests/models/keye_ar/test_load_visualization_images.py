@@ -16,7 +16,12 @@ from muse.data.datasets.chat2image import Chat2ImageDataset
 # 从muse.config.dataset_config导入DatasetConfig
 from muse.config.dataset_config import DatasetConfig
 # 从muse.utils.common导入set_default_dtype
-from muse.utils.common import set_default_dtype
+from muse.training.common import (
+    set_default_dtype,
+    get_torch_dtype,
+    clip_grad_by_value, 
+    compute_fsdp_zero2_grad_norm
+)
 from keye_vl_utils import process_vision_info
 from typing import Optional, List, Union, Any
 
