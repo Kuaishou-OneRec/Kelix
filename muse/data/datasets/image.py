@@ -841,10 +841,11 @@ Parsed JSON content or empty list if parsing fails
         if messages:
             # Validate messages format
             self._validate_messages(messages)
-            
+            print(f"messagesmessages={messages}")
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
+                    print(f"content={content}")
                     if isinstance(content, str):
                         text = content
                     elif isinstance(content, list):
