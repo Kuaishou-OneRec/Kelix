@@ -532,6 +532,7 @@ class DistributedDataset(IterableDataset):
               f"DistributedDataset process sample error. "
               f"{source_name=}, {error_ratio=:.4f}, {sample_key=}, {sample_url=}\n"
               f"errmsg={traceback.format_exc()}"
+              f"sample={sample}"
             )
           continue  # Skip bad sample and continue
         
