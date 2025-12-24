@@ -80,23 +80,14 @@ def load_visualization_images(
         texts = []
         for _, row in df.iterrows():
             # Convert parquet row to sample format expected by dataset
-            sample = {
-                "__key__": row.get("__key__", ""),
-                "messages": row["messages"],
-                "images": row["images"],
-                "source": row.get("source", "")
-            }
+            sample = row.to_dict()
             # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
-            print(f"messages={sample['messages']}")
-            print(f"sample({type(sample)})={sample}")
             # Use dataset's process method
             processed_sample = dataset.process(sample)
-            print(f"processed_sample={processed_sample}")
             processed_samples.append(processed_sample)
             text = processed_sample["text"]
             texts.append(text)
         
-        print(f"processed_samples={processed_samples}")
 
         # Use dataset's collate_fn to batch the samples
         batch = dataset.collate_fn(processed_samples)
