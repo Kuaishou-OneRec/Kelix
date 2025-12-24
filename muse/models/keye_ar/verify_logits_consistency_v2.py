@@ -722,6 +722,7 @@ def main():
             print("已存在输出文件，跳过保存")
             torch.save(keye_conditional_logits, output_logit_file)
 
+        keye_conditional_logits = keye_conditional_logits.reshape(keye_ar_logits.shape)
         import IPython
         IPython.embed()
         # 比较logits
