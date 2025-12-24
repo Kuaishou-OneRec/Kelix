@@ -268,6 +268,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
             recursive_traverse(messages, call_back)
             pair["message"] = messages
+            print(f"pppp", pair)
             return pair
         return None
 

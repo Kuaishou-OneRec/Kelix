@@ -91,6 +91,7 @@ def load_visualization_images(
             print(f"sample({type(sample)})={sample}")
             # Use dataset's process method
             processed_sample = dataset.process(sample)
+            print(f"processed_sample={processed_sample}")
             processed_samples.append(processed_sample)
             text = sample["messages"][0]["content"][0]["text"]
             texts.append(text)
