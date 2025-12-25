@@ -1453,6 +1453,7 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
+                continue
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
