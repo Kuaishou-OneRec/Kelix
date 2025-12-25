@@ -1238,12 +1238,6 @@ def train():
         num_training_steps=args.num_training_steps,
         min_lr=args.min_lr
     )
-
-    for step in range(10000):
-        print(f"step={step}, lr={lr_scheduler.get_last_lr()[0]:.6f}")
-        lr_scheduler.step()
-    exit()
-
     # Create loss function
     loss_fn = FlowMatchingLoss(
         num_timesteps=args.num_timesteps,
