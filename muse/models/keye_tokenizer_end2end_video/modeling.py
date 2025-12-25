@@ -750,6 +750,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
                 attention_mask=attention_mask,
             )
             position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
+            print("maosiyangdebug:::", position_ids.cpu().tolist())
         else:
             raise ValueError("position id wrong!")
 
