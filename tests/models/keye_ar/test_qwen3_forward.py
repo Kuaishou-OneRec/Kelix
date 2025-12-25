@@ -238,8 +238,17 @@ def generate(
             
             # 应用top-k采样
             if top_k is not None:
-                next_token_logits = next_token_logits.topk(top_k, dim=-1).values
+                # 修复：将非top-k的logits设置为负无穷，而不是只保留top-k的值
+                # 这样可以保持原始的token索引信息
+                top_k_logits, _ = next_token_logits.topk(top_k, dim=-1)
+                # 创建掩码：将低于top-k阈值的logits设为负无穷
+                next_token_logits = torch.where(
+                    next_token_logits >= top_k_logits[:, -1:], 
+                    next_token_logits, 
+                    -float("inf")
+                )
             print(f"top_next_token_logits: {next_token_logits}")
+            
             # 应用top-p采样 (nucleus sampling)
             if top_p is not None:
                 sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
