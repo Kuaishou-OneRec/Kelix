@@ -31,23 +31,18 @@ def main():
     for idx, source_file in enumerate(source_parquets):
         logger.info(f"正在处理第 {idx + 1}/{len(source_parquets)} 个文件: {source_file}")
         
-        try:
-            # 读取文件的前2行
-            df = pq.read_parquet(source_file, nrows=2).to_pandas()
-            logger.info(f"成功读取 {len(df)} 行数据")
-            
-            # 检查是否有数据
-            if not df.empty:
-                # 添加源文件标识列（可选）
-                df['source_file'] = source_file
-                # 添加到列表
-                all_data.append(df)
-            else:
-                logger.warning(f"文件 {source_file} 为空")
-                
-        except Exception as e:
-            logger.error(f"处理文件 {source_file} 时出错: {str(e)}")
-            continue
+        # 读取文件的前2行
+        df = pq.read_parquet(source_file, nrows=2).to_pandas()
+        logger.info(f"成功读取 {len(df)} 行数据")
+        
+        # 检查是否有数据
+        if not df.empty:
+            # 添加源文件标识列（可选）
+            df['source_file'] = source_file
+            # 添加到列表
+            all_data.append(df)
+        else:
+            logger.warning(f"文件 {source_file} 为空")
     
     # 检查是否有数据
     if not all_data:
