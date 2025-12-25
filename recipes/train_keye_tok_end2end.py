@@ -936,6 +936,7 @@ def train():
             image_grid_thw = batch.get("image_grid_thw", None)
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
+            position_ids = batch.get("position_ids", None)
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -957,6 +958,7 @@ def train():
                 output = model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
+                    position_ids=position_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
                     pixel_values_videos=pixel_values_videos,

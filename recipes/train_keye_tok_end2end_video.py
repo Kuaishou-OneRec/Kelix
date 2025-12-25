@@ -991,6 +991,7 @@ def train():
             image_grid_thw = batch.get("image_grid_thw", None)
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
+            position_ids = batch.get("position_ids", None)
 
             # Debug: Check if batch contains video data
             if pixel_values_videos is not None:
@@ -1023,6 +1024,7 @@ def train():
                 output = model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
+                    position_ids=position_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
                     pixel_values_videos=pixel_values_videos,
