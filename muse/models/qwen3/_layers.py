@@ -121,7 +121,7 @@ class Qwen3Attention(nn.Module):
         self.pos_embeddings = pos_embeddings
 
         self._attention_function = get_attention_function(attention_function)
-
+        print(f"Using attention function: {attention_function}")
         # this flag indicates whether to update the kv-cache during forward
         # passes. when disabled, we can have the cache setup but still
         # perform normal forward passes
@@ -224,6 +224,7 @@ class Qwen3Attention(nn.Module):
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
+        print(f"self.cache_enabled={self.cache_enabled}", f"attention={self.attention_function}")
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(

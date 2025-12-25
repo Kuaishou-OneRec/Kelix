@@ -275,18 +275,20 @@ def generate(
     try:
         # 预热阶段 - 处理输入序列，填充KV缓存
         with torch.no_grad():
-            # 使用完整的model()调用，不传入attention mask
-            model(generated, **kwargs)
+            # 创建预热阶段的位置id (从0到input_seq_len-1)
+            prefill_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+            # 使用完整的model()调用，并提供正确的input_pos
+            model(generated, input_pos=prefill_pos, **kwargs)
 
         # 自回归生成阶段
         for step in range(input_seq_len, max_length):
             with torch.no_grad():
                 # 当前的token是生成序列的最后一个token
                 current_token = generated[:, -1:]
-                # 计算当前的位置id
+                # 计算当前的位置id (应该是step，因为是接着输入序列之后的位置)
                 current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
 
-                # 前向传播 - 使用完整的model()调用，不传入attention mask
+                # 前向传播 - 使用完整的model()调用，提供当前位置id
                 logits = model(current_token, input_pos=current_pos, **kwargs)
 
                 # 采样下一个token
