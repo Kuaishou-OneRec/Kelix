@@ -23,7 +23,7 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.2
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/run_ar_dit_lzx_4096_v2
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/run_ar_dit_lzx_4096_v2_512im
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
