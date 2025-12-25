@@ -205,10 +205,8 @@ class Qwen3Attention(nn.Module):
         """
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
-
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
-
 
         # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
@@ -217,7 +215,6 @@ class Qwen3Attention(nn.Module):
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
-        q_before_norm = q
         # Qwen3 applies QK-norm before the RoPE, which is different from most of the models.
         # Normalize q
         if self.q_norm is not None:
@@ -226,7 +223,6 @@ class Qwen3Attention(nn.Module):
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
-
 
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
@@ -286,7 +282,6 @@ class Qwen3Attention(nn.Module):
             training=self.training,
             **kwargs,
         )
-
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
