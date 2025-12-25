@@ -896,7 +896,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
       )
 
     if self.use_slowfast:
-      inputs["position_ids"] = get_rope_index_slowfast(
+      inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
           video_grid_thw=inputs.get("video_grid_thw", None),
@@ -908,7 +908,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
           vision_start_token_id=self.vision_start_token_id,
       )
     else:
-      inputs["position_ids"] = get_rope_index(
+      inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
         inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw"),
         video_grid_thw=inputs.get("video_grid_thw"),
@@ -1062,7 +1062,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
           vision_start_token_id=self.vision_start_token_id,
       )
     else:
-      inputs["position_ids"] = get_rope_index(
+      inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
         inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw"),
         video_grid_thw=inputs.get("video_grid_thw"),
@@ -1080,7 +1080,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
     inputs = self.processor.tokenizer(text)
     inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
+    inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
       inputs["input_ids"],
       spatial_merge_size=self.spatial_merge_size,
       image_token_id=self.image_token_id,
@@ -1149,7 +1149,7 @@ class ChatCompletionVisionDataset_video(DistributedDataset):
 
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
+    inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
         inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw"),
         video_grid_thw=inputs.get("video_grid_thw"),
@@ -2170,7 +2170,7 @@ class SlowFastVisionPadder:
             "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
+        inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),
@@ -2214,7 +2214,7 @@ class SlowFastVisionPadder:
             "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
+        inputs["position_ids"] = get_rope_index_slowfast_video_tok_3d(
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),
