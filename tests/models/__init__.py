@@ -1,4 +1,1 @@
-"""
-Reference HuggingFace-compatible models used for comparison tests.
-"""
-
+# Tests for model implementations

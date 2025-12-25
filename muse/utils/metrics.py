@@ -282,6 +282,10 @@ class Logger:
                 if latest_value is None:
                     continue
                 
+                # Convert tensor to scalar if needed (safety check)
+                if isinstance(latest_value, torch.Tensor):
+                    latest_value = latest_value.item()
+                
                 # Organize by group
                 if group not in values:
                     values[group] = {}
@@ -1404,7 +1408,7 @@ class Series(list, BaseSeries):
         result = super().__getitem__(key)
         return result
     
-    def append(self, x: Union[int, float, None, Scalar]):
+    def append(self, x: Union[int, float, None, Scalar, "torch.Tensor"]):
         """
         Append a value to the series.
         
@@ -1412,8 +1416,13 @@ class Series(list, BaseSeries):
         None is allowed as missing value.
         
         Args:
-            x: Value to append. None means missing value.
-               For timestamp dtype, None means current time.
+            x: Value to append. Can be:
+               - int/float: Direct scalar value
+               - None: Missing value (for timestamp dtype, means current time)
+               - Scalar: Wrapper object, value will be extracted
+               - torch.Tensor: GPU tensor, stored as-is to avoid CPU-GPU sync.
+                 Will be converted to scalar in step() when distributed reduction
+                 or logging occurs.
         
         Example:
             >>> metrics = Metrics()
@@ -1422,6 +1431,8 @@ class Series(list, BaseSeries):
             >>> 
             >>> # Can append once (will be for next step)
             >>> metrics.loss.append(1.0)
+            >>> # Or append a tensor (no sync until step())
+            >>> metrics.loss.append(loss.detach())
             >>> 
             >>> # Call step() to finalize the step
             >>> metrics.step()
@@ -1434,8 +1445,14 @@ class Series(list, BaseSeries):
         if isinstance(x, Scalar):
             x = x.value
         
-        # Type conversion (None stays as None)
-        if x is not None:
+        # Check if it's a tensor - store as-is to avoid sync
+        # Conversion to scalar will happen in step() or when logging
+        if isinstance(x, torch.Tensor):
+            # Detach to avoid holding computation graph
+            x = x.detach()
+            # Don't call .item() here - defer to step() for batch sync
+        elif x is not None:
+            # Type conversion for non-tensor values (None stays as None)
             if self.dtype == "int":
                 x = int(x)
             elif self.dtype == "float" or self.dtype == "timestamp":
@@ -1836,6 +1853,30 @@ class Series(list, BaseSeries):
         return self - self.shift(periods)
 
 
+def _tensor_to_scalar(x):
+    """
+    Convert a value to Python scalar, handling tensors.
+    
+    This function defers .item() calls until they are absolutely needed
+    (e.g., during distributed reduction or logging), avoiding unnecessary
+    CPU-GPU synchronization during the hot path.
+    
+    Args:
+        x: Value that may be a tensor, Scalar, or Python scalar
+        
+    Returns:
+        Python scalar (int or float) or None
+    """
+    if x is None:
+        return None
+    if isinstance(x, torch.Tensor):
+        # This is where the sync happens - but only once per step
+        return x.item()
+    if isinstance(x, Scalar):
+        return x.value
+    return x
+
+
 class Metrics:
     """
     Main metrics management system for training workflows with shared index.
@@ -1850,6 +1891,8 @@ class Metrics:
     - Automatic alignment: series must sync with current index
     - Missing values handling when series don't have data for a step
     - Multiple data types (int, float, timestamp)
+    - **Deferred tensor-to-scalar conversion**: tensors are converted to scalars
+      only during step(), avoiding CPU-GPU sync in the training hot path
     
     Example:
         >>> metrics = Metrics()
@@ -2076,10 +2119,13 @@ class Metrics:
             pg = self._process_group
             
             # 1. Collect local values from all series
+            # Convert tensors to scalars here - this is where sync happens (once per step)
             local_values = {}
             for name, series in self._series.items():
                 if len(series) > current_index_pos:
-                    local_values[name] = series[current_index_pos]
+                    raw_val = series[current_index_pos]
+                    # Convert tensor to scalar (deferred sync point)
+                    local_values[name] = _tensor_to_scalar(raw_val)
                 else:
                     local_values[name] = None
             
@@ -2133,7 +2179,14 @@ class Metrics:
         else:
             # === Single process mode ===
             for name, series in self._series.items():
-                if len(series) <= current_index_pos:
+                if len(series) > current_index_pos:
+                    # Convert any tensor values to scalars (deferred sync point)
+                    raw_val = series[current_index_pos]
+                    scalar_val = _tensor_to_scalar(raw_val)
+                    if isinstance(raw_val, torch.Tensor):
+                        # Replace tensor with scalar value
+                        series[current_index_pos] = scalar_val
+                elif len(series) <= current_index_pos:
                     fill_val = series._get_fill_value()
                     super(Series, series).append(fill_val)
                 

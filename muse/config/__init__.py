@@ -28,7 +28,9 @@ from muse.config.model_config import (
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
+    SanaConfig
 )
+
 from muse.config.dataset_config import DatasetConfig
 from muse.config.training_config import (
     TrainingConfig,
@@ -57,6 +59,8 @@ __all__ = [
     "SiglipVisionConfig",
     "KeyeVisionConfig",
     "KeyeTokenizerConfig",
+    "SanaConfig",
+    
     # Dataset config
     "DatasetConfig",
     
