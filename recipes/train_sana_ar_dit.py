@@ -1205,6 +1205,7 @@ def train():
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
+    print(f"args.learning_rate={args.learning_rate}")
     optimizer = torch.optim.AdamW(
         model.get_optimizer_grouped_parameters(
             learning_rate=args.learning_rate,
