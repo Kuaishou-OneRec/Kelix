@@ -306,9 +306,9 @@ def main():
             if input_ids is not None:
                 total_tokens += input_ids.numel()
         
-        # Print summary
+        # Print per-rank summary
         log("\n" + "="*80)
-        log("SUMMARY")
+        log(f"PER-RANK SUMMARY (Rank {rank})")
         log("="*80)
         log(f"Total batches analyzed: {batch_idx + 1}")
         log(f"Total logical samples (accumulated): {total_samples}")
@@ -319,6 +319,51 @@ def main():
         log(f"Total tokens: {total_tokens}")
         log(f"Average tokens per batch: {total_tokens / (batch_idx + 1):.2f}")
         log("="*80)
+        
+        # Synchronize all ranks before global summary
+        dist.barrier()
+        
+        # Gather statistics from all ranks for global summary
+        local_stats = torch.tensor([
+            float(batch_idx + 1),  # num_batches
+            float(total_samples),   # total_samples
+            float(total_tokens),    # total_tokens
+        ], device=torch.cuda.current_device())
+        
+        # All-reduce to sum across all ranks
+        global_stats = local_stats.clone()
+        dist.all_reduce(global_stats, op=dist.ReduceOp.SUM)
+        
+        # Gather per-rank samples for detailed view (only on rank 0)
+        all_samples = [torch.tensor([0.0], device=torch.cuda.current_device()) for _ in range(world_size)]
+        dist.all_gather(all_samples, torch.tensor([float(total_samples)], device=torch.cuda.current_device()))
+        
+        all_tokens = [torch.tensor([0.0], device=torch.cuda.current_device()) for _ in range(world_size)]
+        dist.all_gather(all_tokens, torch.tensor([float(total_tokens)], device=torch.cuda.current_device()))
+        
+        all_batches = [torch.tensor([0.0], device=torch.cuda.current_device()) for _ in range(world_size)]
+        dist.all_gather(all_batches, torch.tensor([float(batch_idx + 1)], device=torch.cuda.current_device()))
+        
+        # Print global summary only on rank 0
+        if rank == 0:
+            print("\n" + "="*80, flush=True)
+            print("GLOBAL SUMMARY (All Ranks Combined)", flush=True)
+            print("="*80, flush=True)
+            print(f"World size: {world_size}", flush=True)
+            print(f"\nPer-rank breakdown:", flush=True)
+            for r in range(world_size):
+                print(f"  Rank {r}: {int(all_batches[r].item())} batches, "
+                      f"{int(all_samples[r].item())} samples, "
+                      f"{int(all_tokens[r].item())} tokens", flush=True)
+            print(f"\nGlobal totals:", flush=True)
+            print(f"  Total batches (all ranks): {int(global_stats[0].item())}", flush=True)
+            print(f"  Total samples (all ranks): {int(global_stats[1].item())}", flush=True)
+            print(f"  Total tokens (all ranks): {int(global_stats[2].item())}", flush=True)
+            print(f"  Average samples per rank: {global_stats[1].item() / world_size:.2f}", flush=True)
+            print(f"  Average tokens per rank: {global_stats[2].item() / world_size:.2f}", flush=True)
+            print("="*80, flush=True)
+        
+        dist.barrier()
         
     except Exception as e:
         log(f"\nError during iteration: {e}")
