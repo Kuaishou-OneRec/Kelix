@@ -268,9 +268,9 @@ class Qwen3Attention(nn.Module):
                 # kv_cache.update返回的形状是 [b, n_kv, current_seq_len, h_d]
                 print(f"kv cache updated, k.shape={k.shape}, v.shape={v.shape}")
                 # 将k和v转置回来以匹配后续处理的期望形状
-                #k = k.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
-                #v = v.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
-
+                k = k.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
+                v = v.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
+                print(f"kv cache transposed, k.shape={k.shape}, v.shape={v.shape}")
         # If needed, expand the key and value tensors to have the same shape
         # as the query tensor by copying values across the relevant dim
         # k,v shape: [b, s, n_kv, h_d] -> [b, s, n_h, h_d]
