@@ -222,6 +222,7 @@ class Qwen3Attention(nn.Module):
 
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
+            print(f"input_pos={input_pos}")
             q = self.pos_embeddings(q, input_pos=input_pos)
 
         # print(f"self.cache_enabled={self.cache_enabled}", f"attention={self._attention_function}")
