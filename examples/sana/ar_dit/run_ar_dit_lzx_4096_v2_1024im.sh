@@ -128,7 +128,7 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2.json \
+                --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
