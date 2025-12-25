@@ -114,7 +114,7 @@ def demo_qwen3_forward():
     
     # 设置生成参数
     generate_params = {
-        "max_new_tokens": 40,
+        "max_new_tokens": 20,
         "temperature": 0.8,
         "top_k": 1,
         "top_p": 0.95,
@@ -124,7 +124,7 @@ def demo_qwen3_forward():
     print(f"Qwen3 baseline generation:")
     outputs = transformers_model.generate(
             model_inputs["input_ids"],
-            max_new_tokens=40,
+            max_new_tokens=20,
             do_sample=False,
         )
     print(f"Qwen3 baseline outputs: {outputs}")
