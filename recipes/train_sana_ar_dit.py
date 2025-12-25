@@ -1239,9 +1239,10 @@ def train():
         min_lr=args.min_lr
     )
 
-    for step in range(1000):
+    for step in range(10000):
         print(f"step={step}, lr={lr_scheduler.get_last_lr()[0]:.6f}")
         lr_scheduler.step()
+    exit()
 
     # Create loss function
     loss_fn = FlowMatchingLoss(
