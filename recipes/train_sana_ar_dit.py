@@ -362,6 +362,58 @@ def get_argument_parser():
     return parser
 
 
+class VisReconstructionLoader:
+    """Visualize DiT reconstruction results."""
+    loaded = None
+    
+    @classmethod
+    def __call__(cls,
+                 parquet_path: str,
+                 dataset,
+                 image_size: int,
+                 device: torch.device,
+                 dtype: torch.dtype,
+                 num_images: Optional[int] = None,
+                 tb_writer=None,
+                 vae=None
+                 ):
+        if cls.loaded: return cls.loaded
+
+        # Load and preprocess images from parquet file
+        result = load_visualization_images(
+            parquet_path=parquet_path,  # 改为parquet_path
+            dataset=dataset,  # 传入dataset用于处理方法
+            image_size=image_size,
+            device=device,
+            dtype=dtype,
+            num_images=num_images,
+        )
+        
+        texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
+        batch_size = len(original_images)
+        
+        # Add text information to TensorBoard
+        if tb_writer is not None and texts:
+            for i, text in enumerate(texts):
+                # Truncate text if too long for TensorBoard display
+                truncated_text = text[:200] + "..." if len(text) > 200 else text
+                # print(f"truncated_text={truncated_text}")
+                tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
+
+        # 1. VAE Reconstruction: encode -> decode
+        print_rank_0("  VAE encoding...")
+        latents = vae_encode(vae, vae_input_images)
+        latent_channels = latents.shape[1]
+        latent_size = latents.shape[2]
+        
+        print_rank_0("  VAE decoding (reconstruction)...")
+        vae_recon_latents = latents / vae.config.scaling_factor
+        vae_recon_images = vae.decode(vae_recon_latents).sample
+        vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
+
+        cls.loaded = (texts, original_images, pixel_values, image_grid_thw, vae_input_images, vae_recon_images, input_ids)
+        return cls.loaded
+
 def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
     """Load VAE model from diffusers.
     
@@ -654,7 +706,6 @@ def visualize_reconstruction(
     model,
     vae,
     image_tokenizer,
-    processor,
     parquet_path: str,  # 改为parquet_path参数
     dataset,  # 保留dataset参数用于处理方法
     output_dir: str,
@@ -695,44 +746,51 @@ def visualize_reconstruction(
     from PIL import Image
     from diffusers import FlowMatchEulerDiscreteScheduler
     
-    print_rank_0(f"[Step {global_step}] Running visualization...")
+    # print_rank_0(f"[Step {global_step}] Running visualization...")
     
-    # Load and preprocess images from parquet file
-    result = load_visualization_images(
-        parquet_path=parquet_path,  # 改为parquet_path
-        dataset=dataset,  # 传入dataset用于处理方法
-        image_size=image_size,
-        device=device,
-        dtype=dtype,
-        num_images=num_images,
-    )
+    # # Load and preprocess images from parquet file
+    # result = load_visualization_images(
+    #     parquet_path=parquet_path,  # 改为parquet_path
+    #     dataset=dataset,  # 传入dataset用于处理方法
+    #     image_size=image_size,
+    #     device=device,
+    #     dtype=dtype,
+    #     num_images=num_images,
+    # )
     
-    if result[0] is None:
-        print_rank_0("No images to visualize, skipping...")
-        return
+    # texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
+    # batch_size = len(original_images)
     
-    texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
-    batch_size = len(original_images)
-    
-    # Add text information to TensorBoard
-    if tb_writer is not None and texts:
-        for i, text in enumerate(texts):
-            # Truncate text if too long for TensorBoard display
-            truncated_text = text[:200] + "..." if len(text) > 200 else text
-            # print(f"truncated_text={truncated_text}")
-            tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
+    # # Add text information to TensorBoard
+    # if tb_writer is not None and texts:
+    #     for i, text in enumerate(texts):
+    #         # Truncate text if too long for TensorBoard display
+    #         truncated_text = text[:200] + "..." if len(text) > 200 else text
+    #         # print(f"truncated_text={truncated_text}")
+    #         tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
-    # 1. VAE Reconstruction: encode -> decode
-    print_rank_0("  VAE encoding...")
-    latents = vae_encode(vae, vae_input_images)
-    latent_channels = latents.shape[1]
-    latent_size = latents.shape[2]
+    # # 1. VAE Reconstruction: encode -> decode
+    # print_rank_0("  VAE encoding...")
+    # latents = vae_encode(vae, vae_input_images)
+    # latent_channels = latents.shape[1]
+    # latent_size = latents.shape[2]
     
-    print_rank_0("  VAE decoding (reconstruction)...")
-    vae_recon_latents = latents / vae.config.scaling_factor
-    vae_recon_images = vae.decode(vae_recon_latents).sample
-    vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
+    # print_rank_0("  VAE decoding (reconstruction)...")
+    # vae_recon_latents = latents / vae.config.scaling_factor
+    # vae_recon_images = vae.decode(vae_recon_latents).sample
+    # vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
     
+    texts, original_images, pixel_values, image_grid_thw, vae_input_images, vae_recon_images, input_ids, batch_size, latent_channels, latent_size, latent_size \
+          = VisReconstructionLoader()(
+               parquet_path,
+               dataset,
+               image_size,
+               device,
+               dtype,
+               num_images,
+               tb_writer,
+               vae
+          )
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")
     cond_embeds, cond_mask = tokenize_images(
@@ -1338,7 +1396,6 @@ def train():
                     model=model_for_vis,
                     vae=vae,
                     image_tokenizer=image_tokenizer,
-                    processor=vis_processor,
                     parquet_path=args.visualize_parquet_path,  # 改为parquet_path参数
                     dataset=dataset,  # 传入dataset用于处理方法
                     output_dir=args.output_dir,
@@ -1374,12 +1431,7 @@ def train():
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
 
-            for k, v in batch.items():
-                if torch.is_tensor(v):
-                    try:
-                        print(f"dataset: {k}: {v.shape}/{v.dtype}")
-                    except Exception:
-                        print(f"dataset: {k}: {v.shape}/{v}")
+
 
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
@@ -1517,7 +1569,6 @@ def train():
                             model=model_for_vis,
                             vae=vae,
                             image_tokenizer=image_tokenizer,
-                            processor=vis_processor,
                             parquet_path=args.visualize_parquet_path,  # 改为parquet_path参数
                             dataset=dataset,  # 传入dataset用于处理方法
                             output_dir=args.output_dir,
