@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 100 \
                 --keye-ar-dir $KEYE_AR_DIR \
-                --num-vis-images 12 \
+                --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 324 \
@@ -146,6 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --fp32-weight \
                 --fp32-reduce \
                 --seed 19260817 \
+                --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --multi-scale \
                 --enable-profile \
