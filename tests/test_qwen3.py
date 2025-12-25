@@ -599,7 +599,9 @@ def test_checkpint():
         max_diff = logits_diff.max().item()
         mean_diff = logits_diff.mean().item()
         median_diff = logits_diff.median().item()
-        
+
+        print(f"argsmax={hf_logits.argmax(-1)}/{logits.argmax(-1)}")
+
         # Calculate relative differences
         hf_abs = hf_logits.abs()
         relative_diff = logits_diff / (hf_abs + 1e-8)  # Add small epsilon to avoid division by zero
