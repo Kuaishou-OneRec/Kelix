@@ -522,3 +522,162 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
+
+
+class UnifiedQwen3Config(Qwen3Config):
+    """Configuration for UnifiedQwen3 model architecture.
+    
+    This configuration extends Qwen3Config with additional fields for unified autoregressive vision-language models.
+    """
+    
+    # Pre-embedding configuration for vision tokens
+    pre_embedding_size: Optional[int] = Field(
+        default=None,
+        description="Size of the pre-embedding layer for vision tokens. "
+                    "If None, uses direct embedding lookup."
+    )
+    pre_embedding_tokens: Optional[int] = Field(
+        default=None,
+        description="Number of tokens in the pre-embedding vocabulary. "
+                    "Only used when pre_embedding_size is not None."
+    )
+
+    # Token IDs for special tokens
+    image_token_id: Optional[int] = Field(
+        default=None,
+        description="Token ID used to represent image placeholders in the text sequence."
+    )
+    pad_token_id: Optional[int] = Field(
+        default=None,
+        description="Token ID used for padding."
+    )
+    q_eos_token: Optional[int] = Field(
+        default=None,
+        description="Token ID used to represent quantization end token."
+    )
+
+    vision_start_token_id: Optional[int] = Field(
+        default=151652,
+        description="Token ID used to represent the start of an image token sequence."
+    )
+
+    vision_end_token_id: Optional[int] = Field(
+        default=151653,
+        description="Token ID used to represent the end of an image token sequence."
+    )
+
+    output_last_hidden_states_only: bool = Field(
+        default=False,
+        description="Whether to output only the last hidden states of the model."
+    )
+
+    # # Tokenizer configuration
+    codebook_size: int = Field(default=8192, description="码本大小")
+    n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
+
+    @model_validator(mode="after")
+    def validate_pre_embedding_fields(cls, values: "UnifiedQwen3Config") -> "UnifiedQwen3Config":
+        """Validate that pre_embedding_tokens is provided when pre_embedding_size is set."""
+        if values.pre_embedding_size is not None and values.pre_embedding_tokens is None:
+            raise ValueError(
+                "pre_embedding_tokens must be provided when pre_embedding_size is set."
+            )
+        return values
+
+
+class UnifiedTokenDecoderConfig(ModelConfig):
+    """Configuration for UnifiedTokenDecoder model architecture.
+    
+    This configuration defines the parameters for the UnifiedTokenDecoder,
+    which is a transformer-based decoder for autoregressive token generation.
+    """
+    
+    # Model identification
+    model_class: str = Field(
+        default="UnifiedTokenDecoder",
+        description="Model class name (e.g., 'UnifiedTokenDecoder')"
+    )
+    
+    # Core model dimensions
+    vocab_size: int = Field(
+        default=8192,
+        description="Vocabulary size for the token decoder"
+    )
+    max_pos_length: int = Field(
+        default=65537,
+        description="Maximum sequence length"
+    )
+    max_length: int = Field(
+        default=9,
+        description="Maximum sequence length"
+    )
+    d_model: int = Field(
+        default=512,
+        description="Hidden dimension size"
+    )
+    eos_token: int = Field(
+        default=151681,
+        description="End-of-sequence token ID"
+    )
+    
+    # Transformer architecture
+    nhead: int = Field(
+        default=4,
+        description="Number of attention heads"
+    )
+    num_layers: int = Field(
+        default=1,
+        description="Number of transformer layers"
+    )
+    dim_feedforward: int = Field(
+        default=1024,
+        description="Dimension of the feedforward network"
+    )
+    
+    # Additional configuration
+    use_gradient_checkpointing: bool = Field(
+        default=True,
+        description="Whether to use gradient checkpointing"
+    )
+    input_dim: Optional[int] = Field(
+        default=None,
+        description="Input dimension (used when reduce=True)"
+    )
+    reduce: bool = Field(
+        default=True,
+        description="Whether to apply dimensionality reduction"
+    )
+    attention_function: Literal["eager", "flash_attention_2"] = Field(
+        default="eager",
+        description="Attention implementation to use"
+    )
+
+
+class KeyeARConfig(ModelConfig):
+    """Configuration for KeyeAR model architecture.
+    
+    This configuration defines the parameters for the KeyeAR model,
+    which is an autoregressive vision-language model based on Qwen3 architecture.
+    """
+    
+    # Model identification
+    model_class: str = Field(
+        default="KeyeARModel",
+        description="Model class name (e.g., 'KeyeARModel')"
+    )
+    
+    # Core model configurations
+    qwen_config: UnifiedQwen3Config = Field(
+        default_factory=UnifiedQwen3Config,
+        description="Configuration for the Qwen3 model component"
+    )
+    tokenizer_config: KeyeTokenizerConfig = Field(
+        default_factory=KeyeTokenizerConfig,
+        description="Configuration for the visual tokenizer component"
+    )
+    token_decoder_config: UnifiedTokenDecoderConfig = Field(
+        default_factory=UnifiedTokenDecoderConfig,
+        description="Configuration for the token decoder component"
+    )
+
+
