@@ -82,7 +82,7 @@ def demo_qwen3_forward():
     # 加载Hugging Face模型和tokenizer
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, trust_remote_code=True)
 
-    transformers_model = AutoModelForCausalLM.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
+    transformers_model = AutoModelForCausalLM.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base').to(device).bfloat16()
     transformers_model.eval()
 
     
