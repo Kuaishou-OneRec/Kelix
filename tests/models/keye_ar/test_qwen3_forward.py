@@ -1,5 +1,5 @@
 """
-Qwen3模型前向计算的demo，基于test_qwen3.py的参数加载逻辑
+Qwen3模型前向计算的demo，严格参考tests/test_qwen3.py的参数加载逻辑
 """
 
 import os
@@ -68,7 +68,7 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
 
 def demo_qwen3_forward():
     """
-    Qwen3模型前向计算的demo
+    Qwen3模型前向计算的demo，严格参考tests/test_qwen3.py的实现
     """
     print("=" * 60)
     print("Qwen3模型前向计算Demo")
@@ -97,11 +97,6 @@ def demo_qwen3_forward():
         trust_remote_code=True
     )
     
-    # 获取设备和数据类型
-    device = next(hf_model.parameters()).device
-    dtype = next(hf_model.parameters()).dtype
-    print(f"模型设备: {device}, 数据类型: {dtype}")
-    
     # 准备输入文本
     prompt = "Give me a short introduction to large language model."
     messages = [
@@ -115,7 +110,7 @@ def demo_qwen3_forward():
         add_generation_prompt=True,
         enable_thinking=True
     )
-    model_inputs = tokenizer([text], return_tensors="pt").to(device)
+    model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
     print(f"输入文本: {text}")
     print(f"输入token数量: {model_inputs['input_ids'].shape[1]}")
     
@@ -126,6 +121,11 @@ def demo_qwen3_forward():
     # 构建Muse模型配置
     muse_config = _build_qwen3_config(hf_config_dict)
     print(f"Muse模型配置构建完成，层数: {muse_config.num_layers}")
+    
+    # 获取设备和数据类型
+    device = next(hf_model.parameters()).device
+    dtype = next(hf_model.parameters()).dtype
+    print(f"模型设备: {device}, 数据类型: {dtype}")
     
     # 创建Muse模型实例
     model_dtype = torch.bfloat16 if dtype == torch.bfloat16 else torch.float32
@@ -141,33 +141,12 @@ def demo_qwen3_forward():
         converted_state_dict, strict=False
     )
     
-    # 检查权重加载情况
-    print(f"权重加载结果:")
-    print(f"  缺失的键: {len(missing_keys)}")
-    print(f"  意外的键: {len(unexpected_keys)}")
-    
-    if missing_keys:
-        print(f"  部分缺失键示例: {missing_keys[:5]}")
-    if unexpected_keys:
-        print(f"  部分意外键示例: {unexpected_keys[:5]}")
-    
     # 将模型移动到设备
     muse_model = muse_model.to(device).to(dtype)
     print(f"Muse模型已移动到设备: {device}，数据类型: {dtype}")
     
     # 进行前向计算
     print("\n进行模型前向计算...")
-    
-    # Muse模型的输入格式调整
-    muse_inputs = model_inputs.copy()
-    if "token_type_ids" in muse_inputs:
-        del muse_inputs["token_type_ids"]
-    
-    # 添加position_ids（如果需要）
-    if "position_ids" not in muse_inputs:
-        seq_length = muse_inputs["input_ids"].shape[1]
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
-        muse_inputs["position_ids"] = position_ids
     
     # 设置为评估模式
     hf_model.eval()
@@ -178,10 +157,14 @@ def demo_qwen3_forward():
         hf_outputs = hf_model(**model_inputs)
         hf_logits = hf_outputs.logits
     
-    # Muse模型前向计算
+    # Muse模型前向计算 - 严格参考test_qwen3.py，使用tokens参数
     with torch.no_grad():
-        muse_outputs = muse_model(**muse_inputs)
-        muse_logits = muse_outputs
+        muse_inputs = {"tokens": model_inputs["input_ids"]}
+        muse_logits = muse_model(**muse_inputs)
+    
+    # 确保logits在相同的设备和数据类型上
+    hf_logits = hf_logits.to(device=device, dtype=dtype)
+    muse_logits = muse_logits.to(device=device, dtype=dtype)
     
     # 比较logits
     print("\nLogits比较结果:")
@@ -199,18 +182,13 @@ def demo_qwen3_forward():
             print("✅ Logits匹配度符合要求！")
         else:
             print("⚠️ Logits差异较大")
-    
-    # 生成示例文本
-    print("\n生成示例文本:")
-    with torch.no_grad():
-        generated_ids = muse_model.generate(
-            **muse_inputs,
-            max_new_tokens=50,
-            temperature=0.7,
-            top_p=0.95
-        )
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"生成结果: {generated_text}")
+    else:
+        print("⚠️ Logits形状不匹配")
+        min_seq_len = min(hf_logits.shape[1], muse_logits.shape[1])
+        hf_logits = hf_logits[:, :min_seq_len, :]
+        muse_logits = muse_logits[:, :min_seq_len, :]
+        logits_diff = (hf_logits - muse_logits).abs()
+        print(f"对齐后Logits最大差异: {logits_diff.max().item():.6e}")
     
     print("\n" + "=" * 60)
     print("Qwen3前向计算Demo完成")
