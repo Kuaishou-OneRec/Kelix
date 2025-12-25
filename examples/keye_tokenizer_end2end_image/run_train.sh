@@ -139,6 +139,9 @@ nohup mpirun --allow-run-as-root \
                 --prefetch-params-in-forward \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
+                --freeze_navit \
+                --freeze_llm \
+                --freeze_navit_mlp_ar \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
