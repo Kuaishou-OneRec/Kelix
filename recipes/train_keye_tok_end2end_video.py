@@ -105,7 +105,7 @@ from muse.utils.common import (
     to_device,
     dist_reduce_dict
 )
-from muse.data.datasets import ChatCompletionVisionDataset_video,ChatCompletionVisionDataset_keye_vitrope_slowfast_video
+from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast_video
 
 from muse.config import load_config
 
