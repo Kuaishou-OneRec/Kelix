@@ -111,7 +111,7 @@ def demo_qwen3_forward():
     
     # 设置生成参数
     generate_params = {
-        "max_length": 200,
+        "max_length": 5,
         "temperature": 0.8,
         "top_k": 1,
         "top_p": 0.95,

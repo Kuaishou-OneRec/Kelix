@@ -1468,14 +1468,15 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
+            continue
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
-            # metrics.loss.append(loss.detach())
+            metrics.loss.append(loss.detach())
 
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
-            continue # step time ???
+            # continue # step time 3sec
             # 7. Gradient Clipping
             with record_function("GradClip"):
                 clip_grad_by_value(model, args.clip_range)
