@@ -21,7 +21,8 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana_v2/multi_scale/exp1
+# 修复 exp3.11 的 bug，将 token embeddings 的h,w除以2，因为token embeddings是2x2 patch合并的
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana_v2/multi_scale/exp3.13
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -118,7 +119,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ae.py \
                 --visualize-dir $VISUALIZE_DIR \
-                --visualize-per-step 30 \
+                --visualize-per-step 100 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
@@ -126,17 +127,17 @@ nohup mpirun --allow-run-as-root \
                 --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/ae-mix.json \
-                --learning-rate 1e-4 \
+                --dataset-config examples/sana/ketu.json \
+                --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 512 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1 \
+                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True cross_attn_x_norm=True use_position_scale=True \
                 --multi-scale \
-                --resolution-budgets "256:32,512:32,768:16,1024:8" \
-                --resolution-start-weights "0.5,0.3,0.1,0.1" \
-                --resolution-end-weights "0.1,0.1,0.3,0.5" \
+                --resolution-budgets "512:32,1024:16" \
+                --resolution-start-weights "0.8,0.2" \
+                --resolution-end-weights "0.2,0.8" \
                 --max-resolution-level 1024 \
                 --beta2 0.999 \
                 --batch-size 32 \

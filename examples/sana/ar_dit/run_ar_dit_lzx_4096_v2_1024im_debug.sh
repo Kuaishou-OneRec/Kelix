@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/train_sana_ar_dit.py \
+        bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 100 \
                 --keye-ar-dir $KEYE_AR_DIR \

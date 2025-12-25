@@ -32,6 +32,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from muse.layers.position_embeddings import Roraty2DPositionalEmbeddings
+
 
 def get_same_padding(kernel_size: int) -> int:
     """Calculate same padding for given kernel size."""
@@ -366,6 +368,7 @@ class MultiHeadCrossAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
         qk_norm: bool = False,
+        use_rope: bool = False,
     ):
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
@@ -373,6 +376,7 @@ class MultiHeadCrossAttention(nn.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
+        self.use_rope = use_rope
         
         self.q_linear = nn.Linear(d_model, d_model)
         self.to_k = nn.Linear(d_model, d_model)
@@ -388,6 +392,12 @@ class MultiHeadCrossAttention(nn.Module):
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
         
+        # 2D RoPE for cross attention (when use_rope=True)
+        if use_rope:
+            self.pos_embeddings = Roraty2DPositionalEmbeddings(self.head_dim)
+        else:
+            self.pos_embeddings = None
+        
         # Check for xformers availability
         self._xformers_available = False
         try:
@@ -402,6 +412,8 @@ class MultiHeadCrossAttention(nn.Module):
         x: torch.Tensor,
         cond: torch.Tensor,
         mask=None,
+        x_input_pos=None,
+        cond_input_pos=None,
     ) -> torch.Tensor:
         """Forward pass.
         
@@ -409,6 +421,9 @@ class MultiHeadCrossAttention(nn.Module):
             x: Query tensor [B, N, C] (image tokens)
             cond: Key/Value tensor [1, L*B, C] (packed) or [B, L, C] (text tokens)
             mask: List of y_lens (xformers style) or attention mask tensor
+            x_input_pos: 2D position ids for query, dict {"height": h_ids, "width": w_ids}
+                or tuple (height_ids, width_ids)
+            cond_input_pos: 2D position ids for key/value, same format as x_input_pos
         
         Returns:
             Output tensor [B, N, C]
@@ -422,6 +437,12 @@ class MultiHeadCrossAttention(nn.Module):
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
+        
+        # Apply 2D RoPE using Roraty2DPositionalEmbeddings
+        if self.pos_embeddings is not None and x_input_pos is not None:
+            q = self.pos_embeddings(q, input_pos=x_input_pos)
+        if self.pos_embeddings is not None and cond_input_pos is not None:
+            k = self.pos_embeddings(k, input_pos=cond_input_pos)
         
         if self._xformers_available:
             # Use xformers memory efficient attention with block diagonal mask
@@ -456,6 +477,7 @@ class MultiHeadCrossAttention(nn.Module):
         x = self.proj_drop(x)
         
         return x
+    
 
 
 class FlashAttention(nn.Module):
@@ -769,11 +791,15 @@ class SanaMSBlock(nn.Module):
         linear_head_dim: int = 32,
         cross_norm: bool = False,
         cross_attn_type: str = "flash",
+        use_cross_attn_rope: bool = False,
+        cross_attn_x_norm: bool = False,
     ):
         super().__init__()
         self.hidden_size = hidden_size
+        self.head_dim = hidden_size // num_heads  # Store for RoPE computation
+        self.use_cross_attn_rope = use_cross_attn_rope
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        
+
         # Self-attention
         if attn_type == "flash":
             self.attn = FlashAttention(
@@ -793,14 +819,21 @@ class SanaMSBlock(nn.Module):
             )
         else:
             raise ValueError(f"Unknown attention type: {attn_type}")
-        
+
         # Cross-attention
         self.cross_attn = MultiHeadCrossAttention(
             hidden_size,
             num_heads,
             qk_norm=cross_norm,
+            use_rope=use_cross_attn_rope,
         )
         
+        # Optional norm before cross attention
+        if cross_attn_x_norm:
+            self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        else:
+            self.norm_cross = None
+
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         
         # FFN
@@ -851,8 +884,14 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
-        # Cross-attention
-        x = x + self.cross_attn(x, y, mask)
+        
+        # Cross-attention with optional x norm and 2D RoPE
+        # x_input_pos and cond_input_pos are passed from model forward
+        x_for_cross = self.norm_cross(x) if self.norm_cross is not None else x
+        x = x + self.cross_attn(
+            x_for_cross, y, mask,
+            x_input_pos=kwargs.get("x_input_pos", None),
+            cond_input_pos=kwargs.get("cond_input_pos", None))
         
         # FFN with modulation
         x = x + self.drop_path(

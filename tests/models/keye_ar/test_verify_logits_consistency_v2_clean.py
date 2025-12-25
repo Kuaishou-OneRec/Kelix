@@ -20,7 +20,7 @@ from collections import defaultdict
 
 # 导入模型相关模块
 from muse.models.keye_ar.modeling import KeyeARModel
-from muse.models.keye_ar.keye_vl_utils import process_vision_info
+from keye_vl_utils import process_vision_info
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
 
 
@@ -203,7 +203,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
 def process_message(messages, processor, device, add_generation_prompt=True, padding=False):
     """处理消息，生成模型输入"""
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt)
-    image_inputs, video_inputs = process_vision_info(messages)
+    image_inputs, video_inputs, _ = process_vision_info(messages)
     
     inputs = processor(
         text=[text],

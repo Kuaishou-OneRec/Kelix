@@ -337,30 +337,31 @@ class KeyeVisionConfig(ModelConfig):
 
 
 class KeyeTokenizerConfig(ModelConfig):
-    """视觉Tokenizer配置，供 KeyeImageTokenizer 使用。"""
+    """Configuration for KeyeImageTokenizer visual tokenizer."""
 
     model_class: str = Field(
         default="KeyeImageTokenizer",
-        description="模型注册名，对应 KeyeImageTokenizer",
+        description="Model registry name for KeyeImageTokenizer",
     )
     vision_config: KeyeVisionConfig = Field(
         default_factory=KeyeVisionConfig,
-        description="视觉编码器配置，默认与 KeyeVisionConfig 一致",
+        description="Vision encoder configuration",
     )
-    codebook_size: int = Field(default=8192, description="码本大小")
-    embedding_dim: int = Field(default=128, description="量化后维度")
-    init_embedding_dim: int = Field(default=4096, description="初始码本维度")
-    llm_hidden_size: int = Field(default=4096, description="对齐到LLM的维度")
-    n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
-    split_dim: bool = Field(default=False, description="是否按维度切分码本")
-    split_voc: int = Field(default=1, description="词表切分数量")
-    add_voc_reducer: bool = Field(default=False, description="是否使用voc reducer")
-    vq_sampling_mode: str = Field(default="argmin", description="VQ采样方式 argmin/softmax")
-    vq_temperature: float = Field(default=1.0, description="softmax温度")
-    vq_temperature_decay: float = Field(default=0.999, description="温度衰减")
-    vq_min_temperature: float = Field(default=0.1, description="最低温度")
-    pre_llm_align: bool = Field(default=False, description="是否先线性对齐到LLM维度")
-    output_dim: int = Field(default=1024, description="输出维度")
+    codebook_size: int = Field(default=8192, description="Codebook size for vector quantization")
+    embedding_dim: int = Field(default=128, description="Embedding dimension after quantization")
+    init_embedding_dim: int = Field(default=4096, description="Initial codebook embedding dimension")
+    llm_hidden_size: int = Field(default=4096, description="Hidden size for LLM alignment")
+    n_q_tokens: int = Field(default=8, description="Number of quantized tokens per position")
+    split_dim: bool = Field(default=False, description="Whether to split codebook by dimension")
+    split_voc: int = Field(default=1, description="Number of vocabulary splits")
+    add_voc_reducer: bool = Field(default=False, description="Whether to use vocabulary reducer")
+    vq_sampling_mode: str = Field(default="argmin", description="VQ sampling mode: argmin or softmax")
+    vq_temperature: float = Field(default=1.0, description="Temperature for softmax sampling")
+    vq_temperature_decay: float = Field(default=0.999, description="Temperature decay rate")
+    vq_min_temperature: float = Field(default=0.1, description="Minimum temperature")
+    pre_llm_align: bool = Field(default=False, description="Whether to apply linear alignment before LLM projection")
+    output_dim: int = Field(default=1024, description="Output embedding dimension")
+    fusion_type: Literal["mean", "sum"] = Field(default="sum", description="Token fusion method: mean or sum")
 
 class SanaConfig(ModelConfig):
     """Configuration for Sana DiT model architecture.
@@ -433,6 +434,14 @@ class SanaConfig(ModelConfig):
     cross_norm: bool = Field(
         default=False,
         description="Whether to use QK normalization in cross-attention"
+    )
+    use_cross_attn_rope: bool = Field(
+        default=False,
+        description="Whether to apply 2D RoPE to query in cross-attention"
+    )
+    cross_attn_x_norm: bool = Field(
+        default=False,
+        description="Whether to apply normalization to x before cross-attention"
     )
     
     # FFN configuration
@@ -670,3 +679,5 @@ class KeyeARConfig(ModelConfig):
         default_factory=UnifiedTokenDecoderConfig,
         description="Configuration for the token decoder component"
     )
+
+

@@ -1,5 +1,5 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
+git config --global user.email 'zhouyang12@kuaishou.com'
+git config --global user.name 'zhouyang12'
 
 email=$(git config --get user.email)
 
@@ -18,12 +18,11 @@ script_name=$(basename "$0" .sh)
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
-# IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted
+IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
-VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/run_ar_dit_lzx_4096_multi_scale
+# 修复 exp3.11 的 bug，将 token embeddings 的h,w除以2，因为token embeddings是2x2 patch合并的
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana_v2/multi_scale/exp3.16
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -118,25 +117,25 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/sana/train_sana_ar_dit.py \
-                --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 50 \
-                --keye-ar-dir $KEYE_AR_DIR \
+        bash -c "python3 recipes/train_sana_ae.py \
+                --visualize-dir $VISUALIZE_DIR \
+                --visualize-per-step 100 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
+                --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
+                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/ar-ae-mix_v2.json \
+                --dataset-config examples/sana/ketu.json \
                 --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 512 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=4096 model_max_length=324 \
+                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True cross_attn_x_norm=True \
                 --beta2 0.999 \
-                --batch-size 1 \
+                --batch-size 32 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 100000 \
@@ -148,7 +147,6 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
-                --multi-scale \
                 --enable-profile \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

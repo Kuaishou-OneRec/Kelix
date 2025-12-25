@@ -27,26 +27,16 @@ Supports two sampling methods:
 - euler: Standard Euler scheduler from diffusers
 
 Usage:
-    # Using DPM-Solver (recommended, faster)
-    python examples/sana/inference_demo.py \
+    python recipes/sana/inference_text2image.py \
         --model-dir /path/to/checkpoint \
-        --tokenizer google/gemma-2-2b-it \
+        --tokenizer /path/to/tokenizer \
+        --vae-pretrained /path/to/vae \
         --prompt "A cat sitting on a couch" \
         --output output.png \
         --num-steps 20 \
         --cfg-scale 4.5 \
-        --sampler dpm-solver \
+        --sampler euler \
         --flow-shift 3.0
-    
-    # Using Euler scheduler
-    python examples/sana/inference_demo.py \
-        --model-dir /path/to/checkpoint \
-        --tokenizer google/gemma-2-2b-it \
-        --prompt "A cat sitting on a couch" \
-        --output output.png \
-        --num-steps 20 \
-        --cfg-scale 4.5 \
-        --sampler euler
 """
 
 import argparse
@@ -63,6 +53,7 @@ from muse.inference.sana import (
     generate_with_dpm_solver,
     generate_with_euler,
 )
+from recipes.sana.utils import load_vae
 
 # Configure logging
 logging.basicConfig(
@@ -130,7 +121,7 @@ def get_args():
     parser.add_argument(
         "--sampler",
         type=str,
-        default="dpm-solver",
+        default="euler",
         choices=["dpm-solver", "euler"],
         help="Sampling algorithm: dpm-solver (faster) or euler"
     )
@@ -259,28 +250,6 @@ def load_model(model_dir: str, device: torch.device, dtype: torch.dtype, subfold
     return model
 
 
-def load_vae(vae_pretrained: str, device: torch.device, dtype: torch.dtype):
-    """Load VAE model.
-    
-    Args:
-        vae_pretrained: VAE model path or HuggingFace repo
-        device: Target device
-        dtype: Model dtype
-    
-    Returns:
-        Loaded VAE model
-    """
-    from diffusers import AutoencoderDC
-    
-    logger.info(f"Loading VAE from {vae_pretrained}")
-    vae = AutoencoderDC.from_pretrained(vae_pretrained, torch_dtype=dtype)
-    vae = vae.to(device)
-    vae.eval()
-    vae.requires_grad_(False)
-    
-    return vae
-
-
 def load_tokenizer_and_encoder(
     tokenizer_path: str,
     text_encoder_path: Optional[str],
@@ -368,7 +337,7 @@ def main():
     
     # Load models
     model = load_model(args.model_dir, device, dtype, args.transformer_subfolder)
-    vae = load_vae(args.vae_pretrained, device, dtype)
+    vae = load_vae(vae_dir=args.vae_pretrained, device=device, dtype=dtype)
     tokenizer, text_encoder = load_tokenizer_and_encoder(
         args.tokenizer, args.text_encoder, device, dtype
     )

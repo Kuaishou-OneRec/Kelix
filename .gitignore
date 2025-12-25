@@ -19,5 +19,3 @@ build
 *.parquet
 *.ttf
 hostfile
-debug
-*pt

@@ -92,10 +92,12 @@ from muse.utils.common import (
     print_rank_0,
     print_rank_n,
     to_cuda,
-    dist_reduce_dict
+    dist_reduce_dict,
+    parse_config_overrides
 )
 from muse.data.datasets import Text2ImageDataset, MultiScaleDatasetWrapper
 from muse.losses.diffusion import FlowMatchingLoss
+from recipes.sana.utils import load_vae, vae_encode
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
 from muse.training.common import initialize_metrics, StepScheduler
@@ -103,49 +105,6 @@ from muse.training.ema import EMAModel, ema_update
 
 
 logger = logging.getLogger(__name__)
-
-
-def parse_config_overrides(overrides: list) -> dict:
-    """Parse config override strings into a dictionary.
-    
-    Args:
-        overrides: List of strings in format "key=value"
-        
-    Returns:
-        Dictionary of parsed overrides with appropriate types
-        
-    Example:
-        >>> parse_config_overrides(["use_pe=true", "pe_interpolation=1.0"])
-        {"use_pe": True, "pe_interpolation": 1.0}
-    """
-    result = {}
-    for override in overrides:
-        if "=" not in override:
-            raise ValueError(f"Invalid override format: {override}. Expected key=value")
-        
-        key, value = override.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        
-        # Parse value to appropriate type
-        if value.lower() == "true":
-            result[key] = True
-        elif value.lower() == "false":
-            result[key] = False
-        elif value.lower() == "none":
-            result[key] = None
-        else:
-            # Try to parse as number
-            try:
-                if "." in value:
-                    result[key] = float(value)
-                else:
-                    result[key] = int(value)
-            except ValueError:
-                # Keep as string
-                result[key] = value
-    
-    return result
 
 
 def get_argument_parser():
@@ -342,33 +301,6 @@ def get_argument_parser():
 
     return parser
 
-
-def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
-    """Load VAE model from diffusers.
-    
-    Reference: Sana/diffusion/model/builder.py
-    """
-    from diffusers import AutoencoderDC
-    
-    print_rank_0(f"Loading VAE from {vae_dir}")
-    vae = AutoencoderDC.from_pretrained(vae_dir, torch_dtype=dtype)
-    vae = vae.to(device).eval()
-    vae.requires_grad_(False)
-    
-    return vae
-
-
-def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
-    """Encode images to latent space.
-    
-    Reference: Sana/diffusion/model/builder.py vae_encode for AutoencoderDC
-    """
-    with torch.no_grad():
-        # VAE runs in float32 for precision, images should already be float32
-        # Use indexing [0] which works for both tuple and EncoderOutput
-        z = vae.encode(images)[0]
-        z = z * vae.config.scaling_factor
-    return z
 
 def load_text_encoder(text_encoder_dir: str, device: torch.device, dtype: torch.dtype):
     """Load text encoder.
