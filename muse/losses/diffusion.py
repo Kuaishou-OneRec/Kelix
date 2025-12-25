@@ -284,8 +284,12 @@ class FlowMatchingLoss(nn.Module):
         model_timesteps = self.scheduler.timestep_map.to(device=device, dtype=x_start.dtype)[timesteps]
         
         # Model prediction (use mapped timesteps!)
+        import time
+        start_time = time.time()
+
         model_output = model(x_t, model_timesteps, y, mask=mask, **model_kwargs)
-        
+        print(f"time consumes: {time.time() - start_time:.4f}sec")
+
         # Handle sigma prediction
         if self.pred_sigma:
             model_output, model_var = model_output.chunk(2, dim=1)

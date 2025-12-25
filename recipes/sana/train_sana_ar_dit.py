@@ -1468,7 +1468,8 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
-            continue
+            continue step time 3sec
+
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
             metrics.loss.append(loss.detach())
