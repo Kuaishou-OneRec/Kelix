@@ -178,7 +178,6 @@ class KeyeImageTokenizer(Model):
         codebook_loss = [v["codebook_loss"] for v in vq_outputs]
         commitment_loss = [v["commitment_loss"] for v in vq_outputs]
         indices = [v["indices"] for v in vq_outputs]
-
         token_embeds = torch.stack([self.up_projectors[i](x_i) \
             for i, x_i in enumerate(z_q)], dim=1)
 
@@ -199,40 +198,6 @@ class KeyeImageTokenizer(Model):
             "token_embeds": token_embeds,
         }
 
-    def forward_image_tokens(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: List[Tuple[int, int, int]],
-        vocab_size: int,
-        **kwargs
-    ) -> torch.Tensor:
-        """
-        提取图像的离散 token 索引，与 VLM 模型中的用法对齐。
-        
-        该函数将视觉特征量化为离散 token，并加上 vocab_size 偏移，
-        使得图像 token 的索引从 vocab_size 开始，不与文本 token 冲突。
-        
-        Args:
-            pixel_values: 视觉patches，形状 [num_patches, C, H, W]。
-            image_grid_thw: 形状 [num_images, 3]，每张图的(t,h,w)。
-            vocab_size: LLM 的词表大小，用于计算偏移后的 aligned_indices。
-            **kwargs: 其他参数（兼容性）。
-            
-        Returns:
-            aligned_indices: 形状 [num_patches, n_q_tokens]，每个位置的离散 token 索引。
-                索引范围：[vocab_size, vocab_size + n_q_tokens * codebook_size)
-        """
-        vq_out = self.forward(pixel_values, image_grid_thw)
-        # indices: List[Tensor]，每个元素形状 [num_patches]
-        indices = torch.stack([x_i for x_i in vq_out['indices']], dim=0).T  # [num_patches, n_q_tokens]
-        
-        # 计算 aligned_indices：加上 vocab_size 偏移和 codebook 偏移
-        # 每个量化器的索引范围是独立的，需要加上对应的 codebook 偏移
-        device = next(iter(self.parameters())).device
-        codebook_offsets = torch.arange(self.n_q_tokens, device=device)[None] * self.config.codebook_size // self.n_q_tokens
-        aligned_indices = vocab_size + indices + codebook_offsets
-        
-        return aligned_indices
     @torch.inference_mode()
     def tokenize(
         self,
@@ -311,43 +276,3 @@ class KeyeImageTokenizer(Model):
 
     def get_checkpointable_module_classes(self):
         return self.visual.get_checkpointable_module_classes()
-
-    def convert_hf_state_dict(self, hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Convert a Hugging Face state dictionary to KeyeImageTokenizer state dictionary.
-        
-        Args:
-            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
-        
-        Returns:
-            A dictionary of model state with converted key names.
-        """
-        muse_state_dict = {}
-        for k, v in hf_state_dict.items():
-            new_k = k
-            
-            # Convert visual.vision_model.* to visual.*
-            if k.startswith("visual.vision_model."):
-                new_k = "visual." + k[len("visual.vision_model."):]
-            
-            # Convert encoder.layers.X.layer_norm1 -> encoder.layers.X.sa_norm
-            new_k = new_k.replace(".layer_norm1.", ".sa_norm.")
-            # Convert encoder.layers.X.layer_norm2 -> encoder.layers.X.mlp_norm
-            new_k = new_k.replace(".layer_norm2.", ".mlp_norm.")
-            # Convert self_attn -> attn
-            new_k = new_k.replace(".self_attn.", ".attn.")
-            # Convert out_proj -> output_proj
-            new_k = new_k.replace(".out_proj.", ".output_proj.")
-            # Convert mlp.fc1 -> mlp.w1
-            new_k = new_k.replace(".mlp.fc1.", ".mlp.w1.")
-            # Convert mlp.fc2 -> mlp.w2
-            new_k = new_k.replace(".mlp.fc2.", ".mlp.w2.")
-            # Convert post_layernorm -> ln_post
-            new_k = new_k.replace(".post_layernorm.", ".ln_post.")
-            # Convert quant_projector -> up_projectors
-            new_k = new_k.replace("quant_projector", "up_projectors")
-            
-            # 过滤掉不需要的键
-            if "visual.head" not in new_k:
-                muse_state_dict[new_k] = v
-        
-        return muse_state_dict

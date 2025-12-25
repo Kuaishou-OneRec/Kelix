@@ -6,8 +6,6 @@ from .image import (
     MultiScaleDatasetWrapper,
     ResolutionBudgetScheduler,
 )
-from .chat2image import Chat2ImageDataset
-
 
 # Backward compatibility - expose all classes
 __all__ = [
@@ -15,7 +13,6 @@ __all__ = [
     'TextDataset',
     'Text2ImageDataset',
     'Token2ImageDataset',
-    'Chat2ImageDataset',
     'MultiScaleDatasetWrapper',
     'ResolutionBudgetScheduler',
 ]
