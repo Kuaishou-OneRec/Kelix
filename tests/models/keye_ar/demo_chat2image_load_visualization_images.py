@@ -11,7 +11,7 @@ from muse.training.common import set_default_dtype
 # 添加项目根目录到Python路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../")))
 import traceback
-# 从train_sana_ar_ae.py导入load_visualization_images函数
+# 从train_sana_ar_dit.py导入load_visualization_images函数
 # 从muse.data.datasets.chat2image导入Chat2ImageDataset
 from muse.data.datasets.chat2image import Chat2ImageDataset
 # 从muse.config.dataset_config导入DatasetConfig
