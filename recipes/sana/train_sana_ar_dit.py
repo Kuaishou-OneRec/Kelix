@@ -1470,7 +1470,7 @@ def train():
 
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
-            metrics.loss.append(loss.detach())
+            # metrics.loss.append(loss.detach())
 
             # 6. Backward Pass
             with record_function("Backward"):
