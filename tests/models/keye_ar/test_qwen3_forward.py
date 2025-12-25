@@ -200,7 +200,7 @@ def demo_qwen3_forward():
     generate_params = {
         "max_length": 200,
         "temperature": 0.8,
-        "top_k": 50,
+        "top_k": 1,
         "top_p": 0.95,
         "eos_token_id": tokenizer.eos_token_id
     }
@@ -214,6 +214,8 @@ def demo_qwen3_forward():
         model_inputs["input_ids"], 
         **generate_params
     )
+
+    print(f"generated_ids: {generated_ids}")
     
     # 解码生成的文本
     generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
@@ -298,6 +300,7 @@ def generate(
                 if temperature > 0:
                     next_token_logits = next_token_logits / temperature
 
+                print("next_token_logitsnext_token_logits", next_token_logits.shape, next_token_logits.argmax(-1))
                 # 应用top-k采样
                 if top_k is not None:
                     next_token_logits = next_token_logits.topk(top_k, dim=-1).values
