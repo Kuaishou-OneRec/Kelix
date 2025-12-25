@@ -1314,6 +1314,8 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if not isinstance(x, dict): return
                 if x.get("type") in ("image_gen", "image"):
                     x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
+                    x["max_pixels"] = self.max_condition_length * \
+                        (self.processor.image_processor.patch_size * self.processor.image_processor.merge_size) ** 2
 
             # 这里是把所有'image'字段替换成路径
             recursive_traverse(messages, call_back)
