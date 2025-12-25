@@ -32,7 +32,7 @@ def main():
         logger.info(f"正在处理第 {idx + 1}/{len(source_parquets)} 个文件: {source_file}")
         
         # 读取文件的前2行
-        df = pq.read_parquet(source_file, nrows=2).to_pandas()
+        df = pq.read_table(source_file, nrows=2).to_pandas()
         logger.info(f"成功读取 {len(df)} 行数据")
         
         # 检查是否有数据
