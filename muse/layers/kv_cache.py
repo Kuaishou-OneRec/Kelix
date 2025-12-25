@@ -104,6 +104,8 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
+        # self.cache_enabled=True attention=<muse.layers.attention_utils.FlashAttention2 object at 0x7f9d13bdb2c0>
+        # kv cache, k=torch.Size([1, 18, 8, 128]), v=torch.Size([1, 18, 8, 128]), self.k_cache=torch.Size([1, 8, 200, 128]), self.v_cache=torch.Size([1, 8, 200, 128])
         print(f"kv cache, k={k.shape}, v={v.shape}, self.k_cache={self.k_cache.shape}, self.v_cache={self.v_cache.shape}")
         # Update cache
         self.k_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = k
