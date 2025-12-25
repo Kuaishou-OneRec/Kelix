@@ -507,10 +507,8 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
-        # print(f"input_ids={input_ids.shape}")
-        # print(f"pixel_values={pixel_values.shape}")
-        # print(f"image_grid_thw={image_grid_thw.shape}")
-        # print(f"cu_seqlens={cu_seqlens}")
+        print(f"rank={dist.get_rank()}, input_ids={input_ids.shape}")
+        print(f"rank={dist.get_rank()}, cu_seqlens={cu_seqlens}")
 
         # Call KeyeARModel forward method
         outputs = tokenizer(
@@ -1405,7 +1403,7 @@ def train():
 
     t0 = time.time()
     while scheduler.global_step < args.num_training_steps:
-        print_rank_0(f"Step time {time.time() - t0:.2f}s")
+        print(f"rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
         t0 = time.time()
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
