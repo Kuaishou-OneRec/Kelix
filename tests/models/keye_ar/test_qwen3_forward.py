@@ -258,7 +258,16 @@ def generate(
                 # 确保至少保留一个token
                 sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
                 sorted_indices_to_remove[:, 0] = 0
-                next_token_logits[sorted_indices_to_remove] = -float("inf")
+                
+                # 修复：使用scatter将掩码映射回原始token索引空间
+                indices_to_remove = torch.zeros_like(next_token_logits, dtype=torch.bool)
+                indices_to_remove = indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+                next_token_logits = next_token_logits.masked_fill(indices_to_remove, -float("inf"))
+
+            # 添加安全检查：确保至少有一个有效token
+            if (next_token_logits == -float("inf")).all(): 
+                print("Warning: All logits are -inf. Resetting to uniform distribution.")
+                next_token_logits = torch.zeros_like(next_token_logits)
 
             # 计算概率分布
             probs = F.softmax(next_token_logits, dim=-1)
