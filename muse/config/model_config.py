@@ -523,7 +523,6 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
-<<<<<<< HEAD
 
 
 class UnifiedQwen3Config(Qwen3Config):
@@ -681,5 +680,4 @@ class KeyeARConfig(ModelConfig):
         default_factory=UnifiedTokenDecoderConfig,
         description="Configuration for the token decoder component"
     )
-=======
->>>>>>> master
+
