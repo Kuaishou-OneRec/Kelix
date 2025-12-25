@@ -1121,6 +1121,10 @@ def train():
         if freeze_patterns:
             frozen_count = freeze_params_by_pattern(model, freeze_patterns)
             print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+    
+        for name, param in model.named_parameters():
+            print_rank_0(f"{name}: {param.requires_grad}")
+
 
     if args.compile:
         # Compile model for better performance
