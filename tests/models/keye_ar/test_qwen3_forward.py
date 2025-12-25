@@ -279,7 +279,8 @@ def generate(
         # 创建预热阶段的位置id (从0到input_seq_len-1)
         prefill_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
         # 使用完整的model()调用，并提供正确的input_pos
-        model(generated, input_pos=prefill_pos, is_causal=True, **kwargs)
+        model(generated, input_pos=prefill_pos,# is_causal=True
+              , **kwargs)
 
     # 自回归生成阶段
     for step in range(input_seq_len, max_length):
