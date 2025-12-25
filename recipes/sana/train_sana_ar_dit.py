@@ -761,39 +761,7 @@ def visualize_reconstruction(
     from PIL import Image
     from diffusers import FlowMatchEulerDiscreteScheduler
     import time
-    # print_rank_0(f"[Step {global_step}] Running visualization...")
     
-    # # Load and preprocess images from parquet file
-    # result = load_visualization_images(
-    #     parquet_path=parquet_path,  # 改为parquet_path
-    #     dataset=dataset,  # 传入dataset用于处理方法
-    #     image_size=image_size,
-    #     device=device,
-    #     dtype=dtype,
-    #     num_images=num_images,
-    # )
-    
-    # texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
-    # batch_size = len(original_images)
-    
-    # # Add text information to TensorBoard
-    # if tb_writer is not None and texts:
-    #     for i, text in enumerate(texts):
-    #         # Truncate text if too long for TensorBoard display
-    #         truncated_text = text[:200] + "..." if len(text) > 200 else text
-    #         # print(f"truncated_text={truncated_text}")
-    #         tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
-
-    # # 1. VAE Reconstruction: encode -> decode
-    # print_rank_0("  VAE encoding...")
-    # latents = vae_encode(vae, vae_input_images)
-    # latent_channels = latents.shape[1]
-    # latent_size = latents.shape[2]
-    
-    # print_rank_0("  VAE decoding (reconstruction)...")
-    # vae_recon_latents = latents / vae.config.scaling_factor
-    # vae_recon_images = vae.decode(vae_recon_latents).sample
-    # vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
     t0 = time.time()
     loaded = VisReconstructionLoader()(
                parquet_path,
