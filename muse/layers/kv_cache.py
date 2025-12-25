@@ -104,18 +104,19 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
-        # self.cache_enabled=True attention=<muse.layers.attention_utils.FlashAttention2 object at 0x7f9d13bdb2c0>
-        # kv cache, k=torch.Size([1, 18, 8, 128]), v=torch.Size([1, 18, 8, 128]), self.k_cache=torch.Size([1, 8, 200, 128]), self.v_cache=torch.Size([1, 8, 200, 128])
-        print(f"kv cache, k={k.shape}, v={v.shape}, self.k_cache={self.k_cache.shape}, self.v_cache={self.v_cache.shape}")
+        # 转置k和v从 [b, s, n_kv, h_d] 到 [b, n_kv, s, h_d] 以匹配内部缓存格式
+        k_for_cache = k.transpose(1, 2)  # [b, s, n_kv, h_d] -> [b, n_kv, s, h_d]
+        v_for_cache = v.transpose(1, 2)  # [b, s, n_kv, h_d] -> [b, n_kv, s, h_d]
+        
         # Update cache
-        self.k_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = k
-        self.v_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = v
+        self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = k_for_cache
+        self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = v_for_cache
         self.cache_pos += seq_len
         
         # Return the full cache up to current position
         return (
-            self.k_cache[:, :self.cache_pos, :],
-            self.v_cache[:, :self.cache_pos, :]
+            self.k_cache[:, :, :self.cache_pos, :],
+            self.v_cache[:, :, :self.cache_pos, :]
         )
     
     def reset(self):

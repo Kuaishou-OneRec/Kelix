@@ -253,13 +253,11 @@ class Qwen3Attention(nn.Module):
 
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
-                # 确保k_for_cache和v_for_cache的形状是[b, s_y, n_kv, h_d]
-                # 当前k,v的形状应该是[b, s_y, n_kv, h_d]，符合KVCache期望
-                k_for_cache = k
-                v_for_cache = v
-                
-                # 检查形状
-                print(f"Before KVCache update: k_for_cache.shape={k_for_cache.shape}, v_for_cache.shape={v_for_cache.shape}")
+                # KVCache内部存储格式是 [b, n_kv, max_seq_len, h_d]
+                # KVCache.update期望输入是 [b, s, n_kv, h_d]，但内部会按 [b, n_kv, s, h_d] 处理
+                # 所以我们需要先将输入从 [b, s_y, n_kv, h_d] 转换为 [b, n_kv, s_y, h_d] 再传入
+                k_for_cache = k.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
+                v_for_cache = v.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
                 
                 k, v = self.kv_cache.update(k_for_cache, v_for_cache)
                 # kv_cache.update返回的形状是 [b, n_kv, current_seq_len, h_d]
@@ -267,7 +265,6 @@ class Qwen3Attention(nn.Module):
                 # 将k和v转置回来以匹配后续处理的期望形状
                 k = k.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
                 v = v.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
-
 
         # If needed, expand the key and value tensors to have the same shape
         # as the query tensor by copying values across the relevant dim
