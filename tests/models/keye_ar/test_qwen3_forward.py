@@ -323,6 +323,7 @@ def generate(
             # 将生成的token添加到序列中
             generated = torch.cat([generated, next_token], dim=1)
 
+            print(f"eos_token_id={eos_token_id}")
             # 检查是否所有序列都已生成结束token
             if eos_token_id is not None:
                 done = (generated == eos_token_id).any(dim=1).all()
