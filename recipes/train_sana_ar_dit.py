@@ -1323,7 +1323,6 @@ def train():
             config=budget_config,
             total_steps=args.num_training_steps,
             drop_last=True,
-            max_resolution_level=args.max_resolution_level,
         )
         
         dataloader = DataLoader(
