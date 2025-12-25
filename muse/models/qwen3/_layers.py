@@ -254,11 +254,11 @@ class Qwen3Attention(nn.Module):
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
                 import IPython
-                print("debugging...")
-                IPython.embed()
+                # IPython.embed()
                 # KVCache内部存储格式是 [b, n_kv, max_seq_len, h_d]
                 # KVCache.update期望输入是 [b, s, n_kv, h_d]，但内部会按 [b, n_kv, s, h_d] 处理
                 # 所以我们需要先将输入从 [b, s_y, n_kv, h_d] 转换为 [b, n_kv, s_y, h_d] 再传入
+                print(f"kv_cache: k.shape={k.shape}, v.shape={v.shape}")
                 k_for_cache = k.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
                 v_for_cache = v.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
                 

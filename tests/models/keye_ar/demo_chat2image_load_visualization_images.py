@@ -177,7 +177,7 @@ def test_load_visualization_images_with_real_env():
         # parquet_path, tmp_root = create_test_parquet(tmp_path, image_size=512)
         
         try:
-            # 配置参数 - 从run_ar_dit_lzx_4096.sh读取
+            # 配置参数 - 从run_ar_ae_lzx_4096.sh读取
             KEYE_AR_DIR = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
             MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/"
             MODEL_CONFIG = "/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json"
