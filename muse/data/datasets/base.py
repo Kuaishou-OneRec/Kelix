@@ -222,7 +222,7 @@ class DistributedDataset(IterableDataset):
   def _load_file_list(self) -> List[str]:
     """Load file list"""
     files = []
-    print(f"self.sources={self.sources}")
+
     if isinstance(self.sources, list):
         files = self.sources
     elif self.sources.endswith(".json"):

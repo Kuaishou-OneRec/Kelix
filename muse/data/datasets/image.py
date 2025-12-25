@@ -38,7 +38,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from transformers import AutoTokenizer, AutoProcessor
-from muse.data.datasets.keye_vl_utils_v2 import process_vision_info
+from keye_vl_utils import process_vision_info
 
 
 from muse.data.datasets.base import DistributedDataset, load_image
@@ -610,8 +610,6 @@ class Text2ImageDataset(DistributedDataset):
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
-
-
 class Token2ImageDataset(DistributedDataset):
     """Dataset for visual token-to-image pairs.
     
@@ -700,7 +698,7 @@ class Token2ImageDataset(DistributedDataset):
             key: Key to get content from
             
         Returns:
-Parsed JSON content or empty list if parsing fails
+            Parsed JSON content or empty list if parsing fails
         """
         content = sample.get(key, "[]")
         try:
@@ -834,8 +832,10 @@ Parsed JSON content or empty list if parsing fails
                 "image": image,
                 "text": text
             }
+        
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
+
         if messages:
             # Validate messages format
             self._validate_messages(messages)
@@ -868,11 +868,12 @@ Parsed JSON content or empty list if parsing fails
             # First segment is text, second is image (validated)
             text = segments[0]["text"]
             image = segments[1]["image"]
-
+        
         if image is None or text is None:
             return None
 
         return {"image": image, "text": text}
+
 
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair.
@@ -997,10 +998,7 @@ Parsed JSON content or empty list if parsing fails
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
-
-        for key in ["input_ids", "attention_mask"]:
-            if key in batch[0]:
-                result[key] = torch.concat([s[key] for s in batch], dim=1)        
+        result["image"] = torch.stack([s["image"] for s in batch])   
         
         return result
 
