@@ -1315,7 +1315,9 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if x.get("type") in ("image_gen", "image"):
                     x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
 
+            # 这里是把所有'image'字段替换成路径
             recursive_traverse(messages, call_back)
+            
             pair["message"] = messages
             return pair
         return None
