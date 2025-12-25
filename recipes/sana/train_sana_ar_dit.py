@@ -1456,7 +1456,7 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
-                continue
+                # continue # step time - 0.4
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1475,7 +1475,7 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
-
+            continue # step time ???
             # 7. Gradient Clipping
             with record_function("GradClip"):
                 clip_grad_by_value(model, args.clip_range)
