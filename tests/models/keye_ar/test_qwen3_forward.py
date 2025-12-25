@@ -197,3 +197,130 @@ def demo_qwen3_forward():
 
 if __name__ == "__main__":
     demo_qwen3_forward()
+
+
+import torch
+from typing import Optional, List, Dict, Any
+from torch.nn import functional as F
+
+
+def generate(
+    model,  # muse.models.qwen3.Qwen3Model
+    input_ids: torch.Tensor,
+    max_length: int = 512,
+    temperature: float = 1.0,
+    top_k: Optional[int] = None,
+    top_p: Optional[float] = None,
+    eos_token_id: Optional[int] = None,
+    pad_token_id: Optional[int] = None,
+    **kwargs
+) -> List[torch.Tensor]:
+    """
+    使用Muse模型进行文本生成
+
+    Args:
+        model: Muse模型实例 (muse.models.qwen3.Qwen3Model)
+        input_ids: 输入token ids，形状为 [batch_size, seq_length]
+        max_length: 生成序列的最大长度
+        temperature: 采样温度
+        top_k: 仅考虑概率最高的k个token
+        top_p: 仅考虑累积概率达到p的token
+        eos_token_id: 结束token id
+        pad_token_id: 填充token id
+        **kwargs: 其他传递给模型的参数
+
+    Returns:
+        生成的token序列列表，每个元素形状为 [seq_length]
+    """
+    device = input_ids.device
+    batch_size = input_ids.size(0)
+    input_seq_len = input_ids.size(1)
+
+    # 设置最大生成长度
+    if max_length <= input_seq_len:
+        return input_ids.tolist()
+
+    # 初始化生成的序列
+    generated = input_ids.clone()
+
+    # 设置KV缓存
+    model.model.setup_caches(
+        batch_size=batch_size,
+        dtype=next(model.parameters()).dtype,
+        decoder_max_seq_len=max_length
+    )
+
+    try:
+        # 预热阶段 - 处理输入序列，填充KV缓存
+        with torch.no_grad():
+            # 计算因果掩码
+            mask = torch.tril(torch.ones(batch_size, input_seq_len, input_seq_len, device=device))
+            # 计算位置id
+            input_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+            # 前向传播，填充KV缓存
+            model.model(generated, mask=mask, input_pos=input_pos, **kwargs)
+
+        # 自回归生成阶段
+        for step in range(input_seq_len, max_length):
+            with torch.no_grad():
+                # 当前的token是生成序列的最后一个token
+                current_token = generated[:, -1:]
+                # 计算当前的位置id
+                current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
+                # 计算当前的因果掩码 (仅包含当前token对所有历史token的注意力)
+                current_mask = torch.ones(batch_size, 1, step + 1, device=device)
+                current_mask = torch.tril(current_mask)
+
+                # 前向传播 - 仅处理当前token，使用KV缓存
+                logits = model.model(current_token, mask=current_mask, input_pos=current_pos, **kwargs)
+
+                # 采样下一个token
+                next_token_logits = logits[:, -1, :]
+
+                # 应用温度缩放
+                if temperature > 0:
+                    next_token_logits = next_token_logits / temperature
+
+                # 应用top-k采样
+                if top_k is not None:
+                    next_token_logits = F.topk(next_token_logits, top_k, dim=-1).values
+
+                # 应用top-p采样 (nucleus sampling)
+                if top_p is not None:
+                    sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
+                    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                    # 移除累积概率超过p的token
+                    sorted_indices_to_remove = cumulative_probs > top_p
+                    # 确保至少保留一个token
+                    sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+                    sorted_indices_to_remove[:, 0] = 0
+                    next_token_logits[sorted_indices_to_remove] = -float("inf")
+
+                # 计算概率分布
+                probs = F.softmax(next_token_logits, dim=-1)
+                # 采样下一个token
+                next_token = torch.multinomial(probs, num_samples=1)
+
+                # 将生成的token添加到序列中
+                generated = torch.cat([generated, next_token], dim=1)
+
+                # 检查是否所有序列都已生成结束token
+                if eos_token_id is not None:
+                    done = (generated == eos_token_id).any(dim=1).all()
+                    if done:
+                        break
+
+    finally:
+        # 重置KV缓存
+        model.model.reset_caches()
+
+    # 将生成的序列转换为列表
+    generated_list = generated.tolist()
+
+    # 如果提供了eos_token_id，截断到eos_token_id
+    if eos_token_id is not None:
+        for i in range(batch_size):
+            if eos_token_id in generated_list[i]:
+                generated_list[i] = generated_list[i][:generated_list[i].index(eos_token_id) + 1]
+
+    return generated_list
