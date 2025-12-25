@@ -130,9 +130,7 @@ class UnifiedTokenDecoder(Model):
             out: (Batch, Seq_Len, d_model) 或 (Batch, Seq_Len, vocab_size) 如果lm_head不为None
         """
         batch_size, seq_len, _ = x_emb.shape
-        # print(f"unified_decoder")
-        # import IPython
-        # IPython.embed()
+
         if not self.reduce:
             x_emb0 = 0
         else:
@@ -145,10 +143,6 @@ class UnifiedTokenDecoder(Model):
         positions = torch.arange(seq_len, device=x_emb.device).unsqueeze(0)
         pos_emb = self.position_embedding(positions)
         x_emb = x_emb + pos_emb
-        
-        # print(f"unified_decoder11111111")
-        # import IPython
-        # IPython.embed()
 
         # 前向传播 - 修改为传入tokens=None，input_embeds=x_emb
         # input is checked
@@ -162,8 +156,6 @@ class UnifiedTokenDecoder(Model):
         if self.lm_head is not None:
             output = self.lm_head(output)
         
-        # import IPython
-        # IPython.embed()
         return output
     
     def forward_with_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
