@@ -82,6 +82,9 @@ def demo_qwen3_forward():
     # 加载Hugging Face模型和tokenizer
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, trust_remote_code=True)
 
+    transformers_model = AutoModelForCausalLM.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
+    transformers_model.eval()
+
     
     # 准备输入文本
     prompt = "Give me a short introduction to large language model."
@@ -118,6 +121,15 @@ def demo_qwen3_forward():
         "eos_token_id": tokenizer.eos_token_id
     }
     
+    print(f"Qwen3 baseline generation:")
+    outputs = transformers_model.generate(
+            model_inputs["input_ids"],
+            max_new_tokens=5,
+            do_sample=False,
+        )
+    print(f"Qwen3 baseline outputs: {outputs}")
+    
+
     # 生成文本
     print(f"生成参数: {generate_params}")
     print("开始生成...")
