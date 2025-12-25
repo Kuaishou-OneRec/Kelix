@@ -5,6 +5,7 @@ from .image import (
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
     ResolutionBudgetScheduler,
+    Chat2ImageDataset
 )
 
 # Backward compatibility - expose all classes
@@ -15,4 +16,5 @@ __all__ = [
     'Token2ImageDataset',
     'MultiScaleDatasetWrapper',
     'ResolutionBudgetScheduler',
+    'Chat2ImageDataset'
 ]
