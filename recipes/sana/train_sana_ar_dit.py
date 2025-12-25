@@ -1403,7 +1403,10 @@ def train():
         # Sync all ranks after step 0 visualization
         dist.barrier()
 
+    t0 = time.time()
     while scheduler.global_step < args.num_training_steps:
+        print_rank_0(f"Step time {time.time() - t0:.2f}s")
+        t0 = time.time()
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
