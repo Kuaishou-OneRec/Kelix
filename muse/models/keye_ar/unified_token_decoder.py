@@ -57,8 +57,6 @@ class UnifiedTokenDecoder(Model):
             self.token_embedding = token_embedding
             assert token_embedding.embedding_dim == d_model, "Embedding dimension must match d_model"
             assert token_embedding.num_embeddings == vocab_size, "Embedding vocab size must match vocab_size"
-        # else:
-        #     self.token_embedding = nn.Embedding(vocab_size, d_model)
         
         # 位置编码 - 添加可训练的位置编码以匹配原始模型
         self.position_embedding = nn.Embedding(self.max_pos_length, d_model)
