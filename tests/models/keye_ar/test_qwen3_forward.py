@@ -247,7 +247,7 @@ def generate(
                     next_token_logits, 
                     -float("inf")
                 )
-            print(f"top_next_token_logits: {next_token_logits}")
+            print(f"top_next_token_logits: {next_token_logits}", next_token_logits.max())
             
             # 应用top-p采样 (nucleus sampling)
             if top_p is not None:
