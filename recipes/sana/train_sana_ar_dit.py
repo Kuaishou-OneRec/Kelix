@@ -507,7 +507,6 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
-        print(f"rank={dist.get_rank()}, input_ids={input_ids.shape}, cu_seqlens={cu_seqlens}, pixel_values={pixel_values.shape}")
 
         # Call KeyeARModel forward method
         outputs = tokenizer(
@@ -518,11 +517,6 @@ def tokenize_images(tokenizer,
             cu_seqlens=cu_seqlens,
         )
         
-        # Extract embeddings from the output
-        # KeyeARModel returns a tuple where the first element is the hidden states
-        # if isinstance(outputs, tuple):
-        #     embeddings = outputs[0]  # [B, seq_len, embed_dim]
-        # else:
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         
         # Extract embeddings between vision_start_id and vision_end_id
@@ -581,6 +575,7 @@ def tokenize_images(tokenizer,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
+        print(f"processed_embeddings shape: {processed_embeddings.shape}, attention_mask shape: {attention_mask.shape}")
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
@@ -1402,7 +1397,7 @@ def train():
 
     t0 = time.time()
     while scheduler.global_step < args.num_training_steps:
-        print(f"rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
+        # print(f"rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
         t0 = time.time()
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
@@ -1453,8 +1448,8 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
-                print(token_embeds.flatten()[-1])
-                continue # step time - ???
+                # print(token_embeds.flatten()[-1])
+                # continue # step time - ???
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1466,7 +1461,7 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
-            continue# step time 3sec
+            # continue# step time 3sec
 
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
