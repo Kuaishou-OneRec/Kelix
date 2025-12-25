@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import logging
+import pyarrow.parquet as pq
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,7 +33,7 @@ def main():
         
         try:
             # 读取文件的前2行
-            df = pd.read_parquet(source_file, nrows=2)
+            df = pq.read_parquet(source_file, nrows=2).to_pandas()
             logger.info(f"成功读取 {len(df)} 行数据")
             
             # 检查是否有数据
