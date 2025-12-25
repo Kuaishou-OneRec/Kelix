@@ -436,8 +436,6 @@ class SanaConfig(ModelConfig):
         default=False,
         description="Whether to use QK normalization in cross-attention"
     )
-<<<<<<< HEAD
-=======
     use_cross_attn_rope: bool = Field(
         default=False,
         description="Whether to apply 2D RoPE to query in cross-attention"
@@ -446,7 +444,6 @@ class SanaConfig(ModelConfig):
         default=False,
         description="Whether to apply normalization to x before cross-attention"
     )
->>>>>>> master
     
     # FFN configuration
     ffn_type: Literal["mlp", "glumbconv"] = Field(
