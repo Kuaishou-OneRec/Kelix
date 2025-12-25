@@ -411,7 +411,22 @@ class VisReconstructionLoader:
         vae_recon_images = vae.decode(vae_recon_latents).sample
         vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
 
-        cls.loaded = (texts, original_images, pixel_values, image_grid_thw, vae_input_images, vae_recon_images, input_ids)
+        import easydict
+        cls.loaded = easydict.EasyDict(
+            texts=texts,
+            original_images=original_images,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            vae_input_images=vae_input_images,
+            input_ids=input_ids,
+            batch_size=batch_size,
+            latents=latents,
+            latent_channels=latent_channels,
+            latent_size=latent_size,
+            vae_recon_images=vae_recon_images,
+
+
+        )
         return cls.loaded
 
 def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
@@ -780,8 +795,7 @@ def visualize_reconstruction(
     # vae_recon_images = vae.decode(vae_recon_latents).sample
     # vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
     
-    texts, original_images, pixel_values, image_grid_thw, vae_input_images, vae_recon_images, input_ids, batch_size, latent_channels, latent_size, latent_size \
-          = VisReconstructionLoader()(
+    loaded = VisReconstructionLoader()(
                parquet_path,
                dataset,
                image_size,
@@ -795,11 +809,11 @@ def visualize_reconstruction(
     print_rank_0("  Getting condition embeddings...")
     cond_embeds, cond_mask = tokenize_images(
         tokenizer=image_tokenizer,
-        pixel_values=pixel_values.to(device=device),
-        image_grid_thw=image_grid_thw.to(device=device),
-        batch_size=batch_size,
+        pixel_values=loaded.pixel_values.to(device=device),
+        image_grid_thw=loaded.image_grid_thw.to(device=device),
+        batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
-        input_ids=input_ids.to(device=device)
+        input_ids=loaded.input_ids.to(device=device)
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -807,17 +821,17 @@ def visualize_reconstruction(
     null_embed = model.y_embedder.y_embedding  # [token_num, caption_channels]
     # Truncate/pad to max_condition_length and expand to batch
     seq_len = min(null_embed.shape[0], max_condition_length)
-    uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(batch_size, -1, -1)  # [B, seq_len, C]
+    uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(loaded.batch_size, -1, -1)  # [B, seq_len, C]
     # Pad to max_condition_length if needed
     if seq_len < max_condition_length:
         padding = torch.zeros(
-            batch_size, max_condition_length - seq_len, uncond_embeds.shape[-1],
+            loaded.batch_size, max_condition_length - seq_len, uncond_embeds.shape[-1],
             device=device, dtype=dtype
         )
         uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
     uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
     # Mask: mark the valid part of null embedding as 1
-    uncond_mask = torch.zeros(batch_size, max_condition_length, device=device)
+    uncond_mask = torch.zeros(loaded.batch_size, max_condition_length, device=device)
     uncond_mask[:, :seq_len] = 1
     uncond_mask = uncond_mask[:, None, None, :]  # [B, 1, 1, L]
     
@@ -831,7 +845,7 @@ def visualize_reconstruction(
     # Initialize with random noise
     generator = torch.Generator(device=device).manual_seed(42)
     dit_latents = torch.randn(
-        (batch_size, latent_channels, latent_size, latent_size),
+        (loaded.batch_size, loaded.latent_channels, loaded.latent_size, loaded.latent_size),
         generator=generator,
         device=device,
         dtype=dtype,
