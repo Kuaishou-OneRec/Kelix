@@ -810,6 +810,20 @@ def train():
         metrics.new(f"perplexity_{i}", dtype="float", reduce="mean")
         metrics.new(f"codebook_usage_{i}", dtype="float", reduce="mean")
     
+    # Add per-codebook loss metrics
+    for i in range(n_q_tokens):
+        metrics.new(f"codebook_loss_{i}", dtype="float", reduce="mean")
+        metrics.new(f"commitment_loss_{i}", dtype="float", reduce="mean")
+    
+    # Add metrics for video codebook perplexity and usage
+    metrics.new("video_avg_perplexity", dtype="float", reduce="mean")
+    metrics.new("video_avg_codebook_usage", dtype="float", reduce="mean")
+    
+    # Add per-codebook metrics for video (for n_q_tokens codebooks)
+    for i in range(n_q_tokens):
+        metrics.new(f"video_perplexity_{i}", dtype="float", reduce="mean")
+        metrics.new(f"video_codebook_usage_{i}", dtype="float", reduce="mean")
+    
     # Track extra metrics for logging
     acc_steps = args.gradient_accumulation_steps
     logging_per_step = args.logging_per_step
@@ -871,6 +885,28 @@ def train():
             avg_cm_loss.avg(window=logging_per_step)[::logging_per_step],
             name=f"commitment_loss_{i}", group="training")
     
+    # Track video perplexity and codebook usage metrics
+    video_avg_perplexity = metrics.video_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
+    video_avg_usage = metrics.video_avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
+    metrics.logger.track(
+        video_avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
+        name="video_avg_perplexity", group="metrics")
+    metrics.logger.track(
+        video_avg_usage.avg(window=logging_per_step)[::logging_per_step],
+        name="video_avg_codebook_usage", group="metrics")
+    
+    # Track per-codebook metrics for video
+    for i in range(n_q_tokens):
+        video_ppl_series = getattr(metrics, f"video_perplexity_{i}")
+        video_usage_series = getattr(metrics, f"video_codebook_usage_{i}")
+        video_avg_ppl = video_ppl_series.avg(window=acc_steps)[::acc_steps][1:]
+        video_avg_usg = video_usage_series.avg(window=acc_steps)[::acc_steps][1:]
+        metrics.logger.track(
+            video_avg_ppl.avg(window=logging_per_step)[::logging_per_step],
+            name=f"video_perplexity_{i}", group="metrics")
+        metrics.logger.track(
+            video_avg_usg.avg(window=logging_per_step)[::logging_per_step],
+            name=f"video_codebook_usage_{i}", group="metrics")
     
     # Store codebook config for metrics computation
     codebook_size = model_config.tokenizer_config.codebook_size
@@ -1055,6 +1091,25 @@ def train():
                         getattr(metrics, f"perplexity_{i}").append(ppl)
                         getattr(metrics, f"codebook_usage_{i}").append(usage)
             
+            # ============ Compute codebook perplexity and usage (video) ============
+            video_vq_indices = output.get("video_indices", None)
+            if video_vq_indices is not None:
+                video_global_perplexities, video_codebook_usages = compute_codebook_metrics(
+                    indices=video_vq_indices,
+                    codebook_size=codebook_size,
+                    n_q_tokens=n_q_tokens
+                )
+
+                # Record average perplexity and usage for video
+                if video_global_perplexities:
+                    metrics.video_avg_perplexity.append(sum(video_global_perplexities) / len(video_global_perplexities))
+                    metrics.video_avg_codebook_usage.append(sum(video_codebook_usages) / len(video_codebook_usages))
+
+                    # Record per-codebook metrics for video
+                    for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
+                        getattr(metrics, f"video_perplexity_{i}").append(ppl)
+                        getattr(metrics, f"video_codebook_usage_{i}").append(usage)
+                        
             # ============ Compute data source loss and sample count ============
             if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
                 # WARN: assume batch_size = 1
