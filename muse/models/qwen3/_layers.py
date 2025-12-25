@@ -289,10 +289,10 @@ class Qwen3Attention(nn.Module):
             k = SeqAllToAll4D.apply(cpg, k, 2, 1)
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
-        print(f"q={q.shape}, k={k.shape}, v={v.shape}, self._attention_function={self._attention_function}, kwargs={kwargs}")
-        print(f"self.kv cache is None={self.kv_cache is None}, mask is None={mask is None}, self.is_causal={self.is_causal}")
+        # print(f"q={q.shape}, k={k.shape}, v={v.shape}, self._attention_function={self._attention_function}, kwargs={kwargs}")
+        # print(f"self.kv cache is None={self.kv_cache is None}, mask is None={mask is None}, self.is_causal={self.is_causal}")
         is_causal = (self.kv_cache is not None) or (mask is None and self.is_causal)
-        is_causal = self.kv_cache is None and mask is None and self.is_causal
+        # is_causal = self.kv_cache is None and mask is None and self.is_causal
         # 1. self.kv_cache is not None的时候必须是is_causal
         # 2. self.is_causal=True的时候也必须是is_causal
         output = self._attention_function(
