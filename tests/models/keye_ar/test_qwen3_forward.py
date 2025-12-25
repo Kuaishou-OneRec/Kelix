@@ -139,7 +139,7 @@ def demo_qwen3_forward():
         model_inputs["input_ids"], 
         **generate_params
     )
-    assert torch.all(torch.tensor(generated_ids) == torch.tensor(outputs))
+    assert torch.all(torch.tensor(generated_ids).to(device) == torch.tensor(outputs).to(device))
     print(f"generated_ids: {generated_ids}")
     
     # 解码生成的文本
