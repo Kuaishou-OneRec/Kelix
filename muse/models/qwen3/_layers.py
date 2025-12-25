@@ -254,19 +254,25 @@ class Qwen3Attention(nn.Module):
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
                 # 调整k和v的维度顺序以匹配KV缓存的期望格式
-                # 当前形状: [b, s_y, n_kv, h_d] -> 需要形状: [b, n_kv, s_y, h_d]
-                k_for_cache = k.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
-                v_for_cache = v.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
+                # 当前形状: [b, s_y, n_kv, h_d] -> 需要形状: [b, s_y, n_kv, h_d] (KVCache期望的格式)
+                # KVCache内部存储格式是 [b, n_kv, max_seq_len, h_d]
+                # KVCache.update期望输入是 [b, s_y, n_kv, h_d]，内部会重新排列
+                k_for_cache = k  # [b, s_y, n_kv, h_d] - 这是KVCache.update期望的格式
+                v_for_cache = v  # [b, s_y, n_kv, h_d] - 这是KVCache.update期望的格式
                 
                 k, v = self.kv_cache.update(k_for_cache, v_for_cache)
-                
-                # 将k和v转置回来以继续后续处理
-                k = k.transpose(1, 2)  # [b, n_kv, s_y, h_d] -> [b, s_y, n_kv, h_d]
-                v = v.transpose(1, 2)  # [b, n_kv, s_y, h_d] -> [b, s_y, n_kv, h_d]
+                # 注意：kv_cache.update返回的k,v形状是 [b, n_kv, current_seq_len, h_d]
+                # 但我们后续代码期望的形状是 [b, s_current, n_kv, h_d] 或 [b, s_current, n_h, h_d]（如果GQA）
+
+                # 将k和v转置回来以匹配后续处理的期望形状
+                # kv_cache.update返回的形状是 [b, n_kv, current_seq_len, h_d]
+                # 我们需要将其转为 [b, current_seq_len, n_kv, h_d] 以匹配后续处理
+                k = k.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
+                v = v.transpose(1, 2)  # [b, n_kv, current_seq_len, h_d] -> [b, current_seq_len, n_kv, h_d]
 
         # If needed, expand the key and value tensors to have the same shape
         # as the query tensor by copying values across the relevant dim
-        # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
+        # k,v shape: [b, s, n_kv, h_d] -> [b, s, n_h, h_d]
         if self.num_heads != self.num_kv_heads:
             expand_shape = (b, -1, self.num_kv_heads, q_per_kv, self.head_dim)
             k = k.unsqueeze(3).expand(expand_shape).flatten(2, 3)
