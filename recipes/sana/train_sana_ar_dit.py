@@ -1456,7 +1456,8 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
-                # continue # step time - 0.4
+                print(token_embeds.flatten()[-1])
+                continue # step time - ???
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
