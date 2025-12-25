@@ -839,6 +839,7 @@ class Token2ImageDataset(DistributedDataset):
         if messages:
             # Validate messages format
             self._validate_messages(messages)
+
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
@@ -998,8 +999,8 @@ class Token2ImageDataset(DistributedDataset):
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
-        result["image"] = torch.stack([s["image"] for s in batch])   
-        
+        result["image"] = torch.stack([s["image"] for s in batch])
+
         return result
 
     
@@ -1107,6 +1108,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
         # initialize buckets for each resolution
         for budget in self.config.budgets:
             buckets[budget.size] = {}
+
             aspect_ratios = self.scheduler.get_aspect_ratios(budget.size)
             for aspect_ratio in aspect_ratios:
                 buckets[budget.size][aspect_ratio] = []
@@ -1142,3 +1144,4 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     yield batch
                     self.scheduler.step()
                     break
+                
