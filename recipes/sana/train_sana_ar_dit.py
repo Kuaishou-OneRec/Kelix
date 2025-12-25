@@ -507,8 +507,7 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
-        print(f"rank={dist.get_rank()}, input_ids={input_ids.shape}")
-        print(f"rank={dist.get_rank()}, cu_seqlens={cu_seqlens}")
+        print(f"rank={dist.get_rank()}, input_ids={input_ids.shape}, cu_seqlens={cu_seqlens}, pixel_values={pixel_values.shape}")
 
         # Call KeyeARModel forward method
         outputs = tokenizer(
