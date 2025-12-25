@@ -40,9 +40,8 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
     qkv_bias = hf_cfg.get("use_qkv_bias")
     q_norm_flag = hf_cfg.get("use_qk_norm", hf_cfg.get("qk_norm", True))
 
-    attention_function = (
-        "flash_attention_2" if hf_cfg.get("use_flash_attn", False) else "eager"
-    )
+    # 强制使用flash attention 2
+    attention_function = "flash_attention_2"
 
     return Qwen3Config(
         model_class="Qwen3Model",
@@ -122,6 +121,7 @@ def demo_qwen3_forward():
     # 构建Muse模型配置
     muse_config = _build_qwen3_config(hf_config_dict)
     print(f"Muse模型配置构建完成，层数: {muse_config.num_layers}")
+    print(f"注意力机制: {muse_config.attention_function}")
     
     # 获取设备和数据类型
     device = next(hf_model.parameters()).device
@@ -275,12 +275,8 @@ def generate(
     try:
         # 预热阶段 - 处理输入序列，填充KV缓存
         with torch.no_grad():
-            # 计算因果掩码
-            mask = torch.tril(torch.ones(batch_size, input_seq_len, input_seq_len, device=device))
-            # 计算位置id
-            input_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
-            # 前向传播，填充KV缓存
-            model.model(generated, mask=mask, input_pos=input_pos, **kwargs)
+            # 使用完整的model()调用，不传入attention mask
+            model(generated, **kwargs)
 
         # 自回归生成阶段
         for step in range(input_seq_len, max_length):
@@ -289,12 +285,9 @@ def generate(
                 current_token = generated[:, -1:]
                 # 计算当前的位置id
                 current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
-                # 计算当前的因果掩码 (仅包含当前token对所有历史token的注意力)
-                current_mask = torch.ones(batch_size, 1, step + 1, device=device)
-                current_mask = torch.tril(current_mask)
 
-                # 前向传播 - 仅处理当前token，使用KV缓存
-                logits = model.model(current_token, mask=current_mask, input_pos=current_pos, **kwargs)
+                # 前向传播 - 使用完整的model()调用，不传入attention mask
+                logits = model(current_token, input_pos=current_pos, **kwargs)
 
                 # 采样下一个token
                 next_token_logits = logits[:, -1, :]
