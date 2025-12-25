@@ -509,6 +509,7 @@ class ChatCompletionVisionDataset(DistributedDataset):
                train_video: bool = True,
                process_vision_info_args: Dict[str, Any] = {},
                use_slowfast: bool = False,
+               shuffle_window: int = 5,
                **kargs):
     """
     datasource_config: 默认覆盖全局配置
@@ -598,6 +599,7 @@ class ChatCompletionVisionDataset(DistributedDataset):
         sources=sources,
         packing=True, # Always enable packing for this dataset as per requirement
         max_length=max_length, # Passing original max_length, adjust internally if needed
+        shuffle_window=shuffle_window,
         **kargs
     )
     
@@ -1537,14 +1539,16 @@ class ChatCompletionVisionDataset(DistributedDataset):
           if np.random.rand() < 0.01:
             logger.warning(f"Failed to parse json field {key} in sample {sample.get('uuid', sample.get('__key__', 'unknown'))}: {e}")
 
-    if "messages" in sample and sample["messages"] is None:
-      del sample["messages"]
-    if "message" in sample and sample["message"] is None:
-      del sample["message"]
+    # Handle None and NaN values for messages/message fields
+    for key in ["messages", "message"]:
+      if key in sample:
+        if sample[key] is None or (isinstance(sample[key], float) and np.isnan(sample[key])):
+          del sample[key]
+
     # 2. 验证 messages/segments 格式
     messages = sample.get("messages") or sample.get("message")
     segments = sample.get("segments")
-    
+
     if messages is not None:
       if isinstance(messages, np.ndarray):
         sample["messages"] = messages.tolist()
@@ -1620,6 +1624,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                process_vision_info_args={"image_factor":28},
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
+               shuffle_window: int = 5,
                **kwargs
                ):
     """
@@ -1726,6 +1731,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
         use_flops_balance=self.use_flops_balance,
         process_vision_info_args=process_vision_info_args,
         use_slowfast=True, 
+        shuffle_window=shuffle_window,
         **kwargs
     )
     # self.sources = sources # Handled by super
@@ -1733,7 +1739,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
-
+    self.shuffle_window = shuffle_window
     if base_model_dir:
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
         self.img_start_token = "<|vision_start|>"
