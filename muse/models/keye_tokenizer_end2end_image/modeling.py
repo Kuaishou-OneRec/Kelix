@@ -650,7 +650,7 @@ class KeyeTokenizerEnd2EndImage(Model):
             )
             position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
         else:
-            position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
+            position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
 
         # Call through Qwen3Model.forward which delegates to TransformerDecoder
