@@ -114,7 +114,7 @@ def demo_qwen3_forward():
     
     # 设置生成参数
     generate_params = {
-        "max_new_tokens": 5,
+        "max_new_tokens": 50,
         "temperature": 0.8,
         "top_k": 1,
         "top_p": 0.95,
@@ -124,7 +124,7 @@ def demo_qwen3_forward():
     print(f"Qwen3 baseline generation:")
     outputs = transformers_model.generate(
             model_inputs["input_ids"],
-            max_new_tokens=5,
+            max_new_tokens=50,
             do_sample=False,
         )
     print(f"Qwen3 baseline outputs: {outputs}")
@@ -233,8 +233,6 @@ def generate(
             # 应用温度缩放
             if temperature > 0:
                 next_token_logits = next_token_logits / temperature
-
-            print("next_token_logitsnext_token_logits", next_token_logits.shape, next_token_logits.argmax(-1))
             
             # 应用top-k采样
             if top_k is not None:
@@ -247,7 +245,6 @@ def generate(
                     next_token_logits, 
                     -float("inf")
                 )
-            print(f"top_next_token_logits: {next_token_logits}", next_token_logits.max())
             
             # 应用top-p采样 (nucleus sampling)
             if top_p is not None:
@@ -266,12 +263,10 @@ def generate(
 
             # 添加安全检查：确保至少有一个有效token
             if (next_token_logits == -float("inf")).all(): 
-                print("Warning: All logits are -inf. Resetting to uniform distribution.")
                 next_token_logits = torch.zeros_like(next_token_logits)
 
             # 计算概率分布
             probs = F.softmax(next_token_logits, dim=-1)
-            print(f"probs: {probs.shape}, probs={probs}")
 
             # 采样下一个token
             next_token = torch.multinomial(probs, num_samples=1)
@@ -279,7 +274,6 @@ def generate(
             # 将生成的token添加到序列中
             generated = torch.cat([generated, next_token], dim=1)
 
-            print(f"eos_token_id={eos_token_id}, next_token={next_token}")
             # 检查是否所有序列都已生成结束token
             if eos_token_id is not None:
                 done = (next_token == eos_token_id).any(dim=1).all()
@@ -291,12 +285,6 @@ def generate(
 
     # 将生成的序列转换为列表
     generated_list = generated.tolist()
-
-    # 如果提供了eos_token_id，截断到eos_token_id
-    # if eos_token_id is not None:
-    #     for i in range(batch_size):
-    #         if eos_token_id in generated_list[i]:
-    #             generated_list[i] = generated_list[i][:generated_list[i].index(eos_token_id) + 1]
 
     return generated_list
 

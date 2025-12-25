@@ -180,7 +180,10 @@ class Qwen3Config(ModelConfig):
         default=True,
         description="Whether to use normalization in the k_proj layer"
     )
-    
+    eos_token_id: Optional[int] = Field(
+        default=151645,
+        description="End-of-sequence token ID"
+    )
     # Multimodal RoPE (3D RoPE for vision-language models)
     use_multimodal_rope: bool = Field(
         default=True,
