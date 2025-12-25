@@ -56,7 +56,6 @@ class UnifiedTokenEmbedding(nn.Module):
         return converted_state_dict
 
     def _embedding_aggregation(self, extended_tokens, embeddings):
-        import IPython
         if embeddings.size(2) == extended_tokens.size(2) - 1:
             embeddings = torch.nn.functional.pad(embeddings, (0, 0, 0, 1), value=0)
 
