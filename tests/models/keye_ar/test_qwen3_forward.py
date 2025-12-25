@@ -300,6 +300,7 @@ def generate(
                 next_token_logits = next_token_logits / temperature
 
             print("next_token_logitsnext_token_logits", next_token_logits.shape, next_token_logits.argmax(-1))
+            
             # 应用top-k采样
             if top_k is not None:
                 next_token_logits = next_token_logits.topk(top_k, dim=-1).values
@@ -323,10 +324,10 @@ def generate(
             # 将生成的token添加到序列中
             generated = torch.cat([generated, next_token], dim=1)
 
-            print(f"eos_token_id={eos_token_id}")
+            print(f"eos_token_id={eos_token_id}, next_token={next_token.shape}")
             # 检查是否所有序列都已生成结束token
             if eos_token_id is not None:
-                done = (generated == eos_token_id).any(dim=1).all()
+                done = (next_token == eos_token_id).any(dim=1).all()
                 if done:
                     break
 
