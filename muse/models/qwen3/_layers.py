@@ -224,7 +224,7 @@ class Qwen3Attention(nn.Module):
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        print(f"self.cache_enabled={self.cache_enabled}", f"attention={self.attention_function}")
+        print(f"self.cache_enabled={self.cache_enabled}", f"attention={self._attention_function}")
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(
