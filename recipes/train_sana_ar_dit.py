@@ -1519,6 +1519,7 @@ def train():
                     grad_norm = compute_fsdp_zero2_grad_norm(model)
                 metrics.grad_norm.append(grad_norm)
                 learning_rate = lr_scheduler.get_last_lr()[0]
+                print(f"learning_rate_222={learning_rate}")
                 metrics.learning_rate.append(learning_rate)
 
                 # 9. Optimizer Step
