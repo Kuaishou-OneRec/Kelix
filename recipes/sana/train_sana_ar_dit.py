@@ -358,7 +358,8 @@ def get_argument_parser():
 
     parser.add_argument("--overfit-batches", type=int, default=None,
                         help="Number of batches to cache for overfitting (debug mode)")
-
+    
+    parser.add_argument("--run_data_iter", action="store_true", help="Run data iterator")
     return parser
 
 
@@ -1347,6 +1348,13 @@ def train():
     else:
         print_rank_0("Warning: No dataloader available. Training loop will not run.")
         data_iter = iter([])
+
+    if args.run_data_iter:
+        while True:
+            it = 0
+            for batch in data_iter:
+                print_rank_0(f"Batch {it}: rank={dist.get_rank()}")
+                it += 1
 
     # Step 0 visualization: show model state before any optimization
     if args.visualize_parquet_path:

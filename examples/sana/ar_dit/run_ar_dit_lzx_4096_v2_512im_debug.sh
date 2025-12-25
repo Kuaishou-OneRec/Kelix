@@ -134,6 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.0 \
                 --image-size 512 \
                 --beta1 0.9 \
+                --run_data_iter \
                 --model-config-overrides caption_channels=4096 model_max_length=324 \
                 --beta2 0.999 \
                 --batch-size 1 \
