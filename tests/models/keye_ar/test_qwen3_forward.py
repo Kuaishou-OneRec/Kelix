@@ -157,10 +157,10 @@ def demo_qwen3_forward():
         hf_outputs = hf_model(**model_inputs)
         hf_logits = hf_outputs.logits
     
-    # Muse模型前向计算 - 严格参考test_qwen3.py，使用tokens参数
+    # Muse模型前向计算 - 严格参考test_qwen3.py，将tokens作为位置参数传递
     with torch.no_grad():
-        muse_inputs = {"tokens": model_inputs["input_ids"]}
-        muse_logits = muse_model(**muse_inputs)
+        # TransformerDecoder.forward()要求tokens作为位置参数
+        muse_logits = muse_model(model_inputs["input_ids"])
     
     # 确保logits在相同的设备和数据类型上
     hf_logits = hf_logits.to(device=device, dtype=dtype)
