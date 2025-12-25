@@ -291,7 +291,8 @@ def generate(
             current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
 
             # 前向传播 - 使用完整的model()调用，提供当前位置id
-            logits = model(current_token, input_pos=current_pos, is_causal=True, **kwargs)
+            logits = model(current_token, input_pos=current_pos,#  is_causal=True
+                           , **kwargs)
 
             # 采样下一个token
             next_token_logits = logits[:, -1, :]
