@@ -114,7 +114,7 @@ def demo_qwen3_forward():
     
     # 设置生成参数
     generate_params = {
-        "max_length": 5,
+        "max_new_tokens": 5,
         "temperature": 0.8,
         "top_k": 1,
         "top_p": 0.95,
@@ -153,10 +153,12 @@ def demo_qwen3_forward():
     print("=" * 60)
 
 
+
 def generate(
     model,  # muse.models.qwen3.Qwen3Model
     input_ids: torch.Tensor,
     max_length: int = 512,
+    max_new_tokens: Optional[int] = None,  # 添加max_new_tokens参数
     temperature: float = 1.0,
     top_k: Optional[int] = None,
     top_p: Optional[float] = None,
@@ -171,6 +173,7 @@ def generate(
         model: Muse模型实例 (muse.models.qwen3.Qwen3Model)
         input_ids: 输入token ids，形状为 [batch_size, seq_length]
         max_length: 生成序列的最大长度
+        max_new_tokens: 要生成的新token数量
         temperature: 采样温度
         top_k: 仅考虑概率最高的k个token
         top_p: 仅考虑累积概率达到p的token
@@ -184,6 +187,11 @@ def generate(
     device = input_ids.device
     batch_size = input_ids.size(0)
     input_seq_len = input_ids.size(1)
+
+    # 处理max_new_tokens参数
+    if max_new_tokens is not None:
+        # 如果指定了max_new_tokens，计算生成的总长度
+        max_length = input_seq_len + max_new_tokens
 
     # 设置最大生成长度
     if max_length <= input_seq_len:
