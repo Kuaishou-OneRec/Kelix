@@ -290,6 +290,7 @@ class Qwen3Attention(nn.Module):
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
         print(f"q={q.shape}, k={k.shape}, v={v.shape}, self._attention_function={self._attention_function}, kwargs={kwargs}")
+        print(f"self.kv cache is None={self.kv_cache is None}, mask is None={mask is None}, self.is_causal={self.is_causal}")
         output = self._attention_function(
             q=q,
             k=k,
