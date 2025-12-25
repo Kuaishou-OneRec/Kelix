@@ -224,7 +224,7 @@ class Qwen3Attention(nn.Module):
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        print(f"self.cache_enabled={self.cache_enabled}", f"attention={self._attention_function}")
+        # print(f"self.cache_enabled={self.cache_enabled}", f"attention={self._attention_function}")
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(
@@ -289,6 +289,7 @@ class Qwen3Attention(nn.Module):
             k = SeqAllToAll4D.apply(cpg, k, 2, 1)
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
+        print(f"q={q.shape}, k={k.shape}, v={v.shape}, self._attention_function={self._attention_function}, kwargs={kwargs}")
         output = self._attention_function(
             q=q,
             k=k,
