@@ -27,8 +27,6 @@ import random
 import json
 import logging
 import collections
-from PIL import Image, ImageDraw, ImageFont
-
 
 import torch
 import torch.nn as nn
@@ -835,11 +833,11 @@ class Token2ImageDataset(DistributedDataset):
         
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
-
+        
         if messages:
             # Validate messages format
             self._validate_messages(messages)
-
+            
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
@@ -1003,7 +1001,6 @@ class Token2ImageDataset(DistributedDataset):
 
         return result
 
-    
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.
     
@@ -1108,7 +1105,6 @@ class MultiScaleDatasetWrapper(IterableDataset):
         # initialize buckets for each resolution
         for budget in self.config.budgets:
             buckets[budget.size] = {}
-
             aspect_ratios = self.scheduler.get_aspect_ratios(budget.size)
             for aspect_ratio in aspect_ratios:
                 buckets[budget.size][aspect_ratio] = []
@@ -1126,6 +1122,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
             aspect_ratio = get_closest_ratio(
                 orig_h, orig_w, self.scheduler.get_aspect_ratios(res))
             # TODO: filter out too extreme aspect ratios
+
             buckets[res][aspect_ratio].append(sample)
             # if bucket exceeds the maximum size, discard the oldest sample to avoid memory overflow
             buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
@@ -1144,4 +1141,4 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     yield batch
                     self.scheduler.step()
                     break
-                
+            
