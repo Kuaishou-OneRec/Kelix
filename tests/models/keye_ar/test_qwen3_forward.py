@@ -300,7 +300,7 @@ def generate(
 
                 # 应用top-k采样
                 if top_k is not None:
-                    next_token_logits = F.topk(next_token_logits, top_k, dim=-1).values
+                    next_token_logits = next_token_logits.topk(top_k, dim=-1).values
 
                 # 应用top-p采样 (nucleus sampling)
                 if top_p is not None:
