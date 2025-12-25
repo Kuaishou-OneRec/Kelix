@@ -26,7 +26,17 @@ from muse.utils.common import print_rank_0
 from muse.training.parallel import initialize_model_parallel
 
 
-def analyze_batch(batch, batch_idx, accumulated_samples):
+def print_with_rank(msg, rank=None):
+    """Print message with rank prefix."""
+    if rank is None:
+        try:
+            rank = dist.get_rank() if dist.is_initialized() else 0
+        except:
+            rank = 0
+    print(f"[Rank {rank}] {msg}", flush=True)
+
+
+def analyze_batch(batch, batch_idx, accumulated_samples, rank=0):
     """Analyze and print detailed information about a packed batch.
     
     Args:
@@ -37,9 +47,12 @@ def analyze_batch(batch, batch_idx, accumulated_samples):
     Returns:
         num_samples_in_batch: Number of logical samples in this batch
     """
-    print_rank_0(f"\n{'='*80}")
-    print_rank_0(f"=== Batch {batch_idx} ===")
-    print_rank_0(f"{'='*80}")
+    def log(msg):
+        print_with_rank(msg, rank)
+    
+    log(f"\n{'='*80}")
+    log(f"=== Batch {batch_idx} ===")
+    log(f"{'='*80}")
     
     # Basic shape information
     input_ids = batch.get("input_ids")
@@ -50,118 +63,118 @@ def analyze_batch(batch, batch_idx, accumulated_samples):
     num_samples_in_batch = 0
     
     if input_ids is not None:
-        print_rank_0(f"input_ids shape: {input_ids.shape}")
-        print_rank_0(f"input_ids dtype: {input_ids.dtype}")
-        print_rank_0(f"Total tokens: {input_ids.numel()}")
+        log(f"input_ids shape: {input_ids.shape}")
+        log(f"input_ids dtype: {input_ids.dtype}")
+        log(f"Total tokens: {input_ids.numel()}")
     
     if sample_idx is not None:
         sample_idx_flat = sample_idx.flatten()
         unique_samples = torch.unique(sample_idx_flat)
         
         # Print raw sample_idx tensor (first 100 values if too long)
-        print_rank_0(f"\nsample_idx tensor:")
-        print_rank_0(f"  shape: {sample_idx.shape}")
+        log(f"\nsample_idx tensor:")
+        log(f"  shape: {sample_idx.shape}")
         if sample_idx_flat.numel() <= 100:
-            print_rank_0(f"  values: {sample_idx_flat.tolist()}")
+            log(f"  values: {sample_idx_flat.tolist()}")
         else:
-            print_rank_0(f"  first 50: {sample_idx_flat[:50].tolist()}")
-            print_rank_0(f"  last 50: {sample_idx_flat[-50:].tolist()}")
+            log(f"  first 50: {sample_idx_flat[:50].tolist()}")
+            log(f"  last 50: {sample_idx_flat[-50:].tolist()}")
         
-        print_rank_0(f"  unique values: {unique_samples.tolist()}")
+        log(f"  unique values: {unique_samples.tolist()}")
         
         # Count samples (excluding padding with -1)
         valid_samples = unique_samples[unique_samples >= 0]
         num_valid_samples = len(valid_samples)
-        print_rank_0(f"  Number of valid samples (excluding padding): {num_valid_samples}")
+        log(f"  Number of valid samples (excluding padding): {num_valid_samples}")
         
         # Calculate logical samples as done in training code
         max_sample_idx = sample_idx.max().item()
         logical_samples = max_sample_idx + 1
         num_samples_in_batch = logical_samples
-        print_rank_0(f"  Logical samples (max_idx + 1): {logical_samples}")
+        log(f"  Logical samples (max_idx + 1): {logical_samples}")
         
         # Sample distribution
-        print_rank_0(f"\nSample distribution:")
+        log(f"\nSample distribution:")
         for sample_id in valid_samples:
             mask = (sample_idx_flat == sample_id)
             token_count = mask.sum().item()
             loss_mask_count = (loss_mask.flatten()[mask] > 0).sum().item() if loss_mask is not None else token_count
-            print_rank_0(f"  Sample {sample_id.item()}: {token_count} tokens (loss_mask: {loss_mask_count})")
+            log(f"  Sample {sample_id.item()}: {token_count} tokens (loss_mask: {loss_mask_count})")
         
         # Padding tokens
         padding_mask = (sample_idx_flat == -1)
         padding_count = padding_mask.sum().item()
         if padding_count > 0:
-            print_rank_0(f"  Padding (-1): {padding_count} tokens")
+            log(f"  Padding (-1): {padding_count} tokens")
         
         # Verify continuity
         if len(valid_samples) > 0:
             valid_samples_sorted = sorted(valid_samples.tolist())
             expected = list(range(valid_samples_sorted[0], valid_samples_sorted[-1] + 1))
             is_continuous = valid_samples_sorted == expected
-            print_rank_0(f"\nSample indices continuous: {is_continuous}")
+            log(f"\nSample indices continuous: {is_continuous}")
             if not is_continuous:
-                print_rank_0(f"  Expected: {expected}")
-                print_rank_0(f"  Actual: {valid_samples_sorted}")
+                log(f"  Expected: {expected}")
+                log(f"  Actual: {valid_samples_sorted}")
         
         # Verify accumulated samples
         expected_accumulated = accumulated_samples + logical_samples
-        print_rank_0(f"\nAccumulated samples check:")
-        print_rank_0(f"  Previous total: {accumulated_samples}")
-        print_rank_0(f"  This batch: {logical_samples}")
-        print_rank_0(f"  New total: {expected_accumulated}")
+        log(f"\nAccumulated samples check:")
+        log(f"  Previous total: {accumulated_samples}")
+        log(f"  This batch: {logical_samples}")
+        log(f"  New total: {expected_accumulated}")
     
     if cu_seqlens is not None:
-        print_rank_0(f"\ncu_seqlens: {cu_seqlens.tolist()}")
-        print_rank_0(f"Number of sequences: {len(cu_seqlens) - 1}")
+        log(f"\ncu_seqlens: {cu_seqlens.tolist()}")
+        log(f"Number of sequences: {len(cu_seqlens) - 1}")
         if len(cu_seqlens) > 1:
             seq_lengths = [(cu_seqlens[i+1] - cu_seqlens[i]).item() for i in range(len(cu_seqlens)-1)]
-            print_rank_0(f"Sequence lengths: {seq_lengths}")
+            log(f"Sequence lengths: {seq_lengths}")
     
     # Video data information
     pixel_values_videos = batch.get("pixel_values_videos")
     video_grid_thw = batch.get("video_grid_thw")
     if pixel_values_videos is not None:
-        print_rank_0(f"\nVideo data:")
-        print_rank_0(f"  pixel_values_videos shape: {pixel_values_videos.shape}")
+        log(f"\nVideo data:")
+        log(f"  pixel_values_videos shape: {pixel_values_videos.shape}")
         if video_grid_thw is not None:
-            print_rank_0(f"  video_grid_thw shape: {video_grid_thw.shape}")
-            print_rank_0(f"  Number of video segments: {len(video_grid_thw)}")
-            print_rank_0(f"  video_grid_thw (all):")
+            log(f"  video_grid_thw shape: {video_grid_thw.shape}")
+            log(f"  Number of video segments: {len(video_grid_thw)}")
+            log(f"  video_grid_thw (all):")
             for i, thw in enumerate(video_grid_thw):
-                print_rank_0(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
+                log(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
     
     fast_pixel_values_videos = batch.get("fast_pixel_values_videos")
     fast_video_grid_thw = batch.get("fast_video_grid_thw")
     if fast_pixel_values_videos is not None:
-        print_rank_0(f"\nFast video data:")
-        print_rank_0(f"  fast_pixel_values_videos shape: {fast_pixel_values_videos.shape}")
+        log(f"\nFast video data:")
+        log(f"  fast_pixel_values_videos shape: {fast_pixel_values_videos.shape}")
         if fast_video_grid_thw is not None:
-            print_rank_0(f"  fast_video_grid_thw shape: {fast_video_grid_thw.shape}")
-            print_rank_0(f"  Number of fast video segments: {len(fast_video_grid_thw)}")
-            print_rank_0(f"  fast_video_grid_thw (all):")
+            log(f"  fast_video_grid_thw shape: {fast_video_grid_thw.shape}")
+            log(f"  Number of fast video segments: {len(fast_video_grid_thw)}")
+            log(f"  fast_video_grid_thw (all):")
             for i, thw in enumerate(fast_video_grid_thw):
-                print_rank_0(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
+                log(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
     
     # Image data information
     pixel_values = batch.get("pixel_values")
     image_grid_thw = batch.get("image_grid_thw")
     if pixel_values is not None:
-        print_rank_0(f"\nImage data:")
-        print_rank_0(f"  pixel_values shape: {pixel_values.shape}")
+        log(f"\nImage data:")
+        log(f"  pixel_values shape: {pixel_values.shape}")
         if image_grid_thw is not None:
-            print_rank_0(f"  image_grid_thw shape: {image_grid_thw.shape}")
-            print_rank_0(f"  Number of image segments: {len(image_grid_thw)}")
+            log(f"  image_grid_thw shape: {image_grid_thw.shape}")
+            log(f"  Number of image segments: {len(image_grid_thw)}")
     
     # Loss mask summary
     if loss_mask is not None:
         loss_mask_flat = loss_mask.flatten()
         valid_tokens = (loss_mask_flat > 0).sum().item()
         total_tokens = loss_mask_flat.numel()
-        print_rank_0(f"\nLoss mask:")
-        print_rank_0(f"  Valid tokens (loss_mask > 0): {valid_tokens} / {total_tokens} ({100*valid_tokens/total_tokens:.2f}%)")
+        log(f"\nLoss mask:")
+        log(f"  Valid tokens (loss_mask > 0): {valid_tokens} / {total_tokens} ({100*valid_tokens/total_tokens:.2f}%)")
     
-    print_rank_0(f"{'='*80}\n")
+    log(f"{'='*80}\n")
     
     return num_samples_in_batch
 
@@ -183,7 +196,6 @@ def main():
     
     # Initialize distributed environment (required by dataset internals)
     # Even for single GPU, we need to init process group for get_data_parallel_rank()
-    print_rank_0("Initializing distributed environment...")
     
     # Get rank/world_size from environment (set by torchrun)
     if "RANK" in os.environ:
@@ -204,9 +216,15 @@ def main():
     args.rank = rank
     args.world_size = world_size
     
+    # Helper function for logging with rank
+    def log(msg):
+        print_with_rank(msg, rank)
+    
+    log("Initializing distributed environment...")
+    
     # Initialize model parallel (for get_data_parallel_rank/group)
     initialize_model_parallel(context_parallel_size=1)
-    print_rank_0(f"Distributed initialized: rank={dist.get_rank()}, world_size={dist.get_world_size()}")
+    log(f"Distributed initialized: rank={dist.get_rank()}, world_size={dist.get_world_size()}")
     
     # Load dataset config
     with open(args.dataset_config, 'r', encoding='utf-8') as f:
@@ -220,27 +238,27 @@ def main():
     # (total_workers = world_size * num_workers, used as slice step)
     if dataset_config.get("num_workers", 0) == 0:
         dataset_config["num_workers"] = 1
-        print_rank_0("Note: Setting dataset num_workers=1 (required for DistributedDataset file sharding)")
+        log("Note: Setting dataset num_workers=1 (required for DistributedDataset file sharding)")
     
     # Add distributed info
     dataset_config["rank"] = args.rank
     dataset_config["world_size"] = args.world_size
     
-    print_rank_0("="*80)
-    print_rank_0("Video Dataset Debug Script")
-    print_rank_0("="*80)
-    print_rank_0(f"Dataset config: {args.dataset_config}")
-    print_rank_0(f"Rank: {args.rank}, World size: {args.world_size}")
-    print_rank_0(f"Number of batches to analyze: {args.num_batches}")
-    print_rank_0("="*80)
+    log("="*80)
+    log("Video Dataset Debug Script (Multi-GPU)")
+    log("="*80)
+    log(f"Dataset config: {args.dataset_config}")
+    log(f"Rank: {args.rank}, World size: {args.world_size}")
+    log(f"Number of batches to analyze: {args.num_batches}")
+    log("="*80)
     
     # Create dataset
-    print_rank_0("\nCreating dataset...")
+    log("\nCreating dataset...")
     try:
         dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast_video(**dataset_config)
-        print_rank_0("Dataset created successfully!")
+        log("Dataset created successfully!")
     except Exception as e:
-        print_rank_0(f"Error creating dataset: {e}")
+        log(f"Error creating dataset: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -249,7 +267,7 @@ def main():
     # IMPORTANT: Use num_workers=0 to avoid multiprocessing issues
     # The dataset uses dist.get_rank() internally, which fails in worker processes
     # without distributed initialization
-    print_rank_0("\nCreating dataloader (num_workers=0 to avoid dist init issues)...")
+    log("\nCreating dataloader (num_workers=0 to avoid dist init issues)...")
     dataloader = DataLoader(
         dataset,
         batch_size=1,
@@ -259,8 +277,8 @@ def main():
     )
     
     # Iterate through batches
-    print_rank_0(f"\nIterating through {args.num_batches} batches...")
-    print_rank_0("="*80)
+    log(f"\nIterating through {args.num_batches} batches...")
+    log("="*80)
     
     total_samples = 0
     total_tokens = 0
@@ -273,7 +291,7 @@ def main():
                 break
             
             # Analyze batch and get samples count
-            num_samples_in_batch = analyze_batch(batch, batch_idx, total_samples)
+            num_samples_in_batch = analyze_batch(batch, batch_idx, total_samples, rank)
             
             # Accumulate statistics
             sample_idx = batch.get("sample_idx")
@@ -289,21 +307,21 @@ def main():
                 total_tokens += input_ids.numel()
         
         # Print summary
-        print_rank_0("\n" + "="*80)
-        print_rank_0("SUMMARY")
-        print_rank_0("="*80)
-        print_rank_0(f"Total batches analyzed: {batch_idx + 1}")
-        print_rank_0(f"Total logical samples (accumulated): {total_samples}")
-        print_rank_0(f"Sum of batch samples: {sum_of_batch_samples}")
-        print_rank_0(f"Samples per batch: {batch_samples_list}")
-        print_rank_0(f"Sum verification: {sum(batch_samples_list)} == {total_samples} ? {sum(batch_samples_list) == total_samples}")
-        print_rank_0(f"Average samples per batch: {total_samples / (batch_idx + 1):.2f}")
-        print_rank_0(f"Total tokens: {total_tokens}")
-        print_rank_0(f"Average tokens per batch: {total_tokens / (batch_idx + 1):.2f}")
-        print_rank_0("="*80)
+        log("\n" + "="*80)
+        log("SUMMARY")
+        log("="*80)
+        log(f"Total batches analyzed: {batch_idx + 1}")
+        log(f"Total logical samples (accumulated): {total_samples}")
+        log(f"Sum of batch samples: {sum_of_batch_samples}")
+        log(f"Samples per batch: {batch_samples_list}")
+        log(f"Sum verification: {sum(batch_samples_list)} == {total_samples} ? {sum(batch_samples_list) == total_samples}")
+        log(f"Average samples per batch: {total_samples / (batch_idx + 1):.2f}")
+        log(f"Total tokens: {total_tokens}")
+        log(f"Average tokens per batch: {total_tokens / (batch_idx + 1):.2f}")
+        log("="*80)
         
     except Exception as e:
-        print_rank_0(f"\nError during iteration: {e}")
+        log(f"\nError during iteration: {e}")
         import traceback
         traceback.print_exc()
 
