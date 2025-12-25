@@ -21,7 +21,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
-VISUAL_PARQUET_PATH=/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet
+VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
 OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/run_ar_dit_lzx_4096_v2
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
@@ -120,7 +120,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 30 \
+                --visualize-per-step 50 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \

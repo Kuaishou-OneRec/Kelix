@@ -760,7 +760,7 @@ def visualize_reconstruction(
     """
     from PIL import Image
     from diffusers import FlowMatchEulerDiscreteScheduler
-    
+    import time
     # print_rank_0(f"[Step {global_step}] Running visualization...")
     
     # # Load and preprocess images from parquet file
@@ -794,7 +794,7 @@ def visualize_reconstruction(
     # vae_recon_latents = latents / vae.config.scaling_factor
     # vae_recon_images = vae.decode(vae_recon_latents).sample
     # vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
-    
+    t0 = time.time()
     loaded = VisReconstructionLoader()(
                parquet_path,
                dataset,
@@ -923,6 +923,7 @@ def visualize_reconstruction(
         
         # Add text information to TensorBoard (already done above)
         print_rank_0(f"  Added {len(loaded.texts)} text samples to TensorBoard")
+    print_rank_0(f"  Visualization time: {time.time() - t0:.4f}s")
 
 
 def _init_profiler(output_dir, with_stack=False) -> None:
