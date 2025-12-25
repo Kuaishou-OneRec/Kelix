@@ -274,65 +274,63 @@ def generate(
         decoder_max_seq_len=max_length
     )
 
-    try:
-        # 预热阶段 - 处理输入序列，填充KV缓存
+    # 预热阶段 - 处理输入序列，填充KV缓存
+    with torch.no_grad():
+        # 创建预热阶段的位置id (从0到input_seq_len-1)
+        prefill_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+        # 使用完整的model()调用，并提供正确的input_pos
+        model(generated, input_pos=prefill_pos, **kwargs)
+
+    # 自回归生成阶段
+    for step in range(input_seq_len, max_length):
         with torch.no_grad():
-            # 创建预热阶段的位置id (从0到input_seq_len-1)
-            prefill_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
-            # 使用完整的model()调用，并提供正确的input_pos
-            model(generated, input_pos=prefill_pos, **kwargs)
+            # 当前的token是生成序列的最后一个token
+            current_token = generated[:, -1:]
+            # 计算当前的位置id (应该是step，因为是接着输入序列之后的位置)
+            current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
 
-        # 自回归生成阶段
-        for step in range(input_seq_len, max_length):
-            with torch.no_grad():
-                # 当前的token是生成序列的最后一个token
-                current_token = generated[:, -1:]
-                # 计算当前的位置id (应该是step，因为是接着输入序列之后的位置)
-                current_pos = torch.tensor([[step]], device=device).expand(batch_size, -1)
+            # 前向传播 - 使用完整的model()调用，提供当前位置id
+            logits = model(current_token, input_pos=current_pos, **kwargs)
 
-                # 前向传播 - 使用完整的model()调用，提供当前位置id
-                logits = model(current_token, input_pos=current_pos, **kwargs)
+            # 采样下一个token
+            next_token_logits = logits[:, -1, :]
 
-                # 采样下一个token
-                next_token_logits = logits[:, -1, :]
+            # 应用温度缩放
+            if temperature > 0:
+                next_token_logits = next_token_logits / temperature
 
-                # 应用温度缩放
-                if temperature > 0:
-                    next_token_logits = next_token_logits / temperature
+            print("next_token_logitsnext_token_logits", next_token_logits.shape, next_token_logits.argmax(-1))
+            # 应用top-k采样
+            if top_k is not None:
+                next_token_logits = next_token_logits.topk(top_k, dim=-1).values
 
-                print("next_token_logitsnext_token_logits", next_token_logits.shape, next_token_logits.argmax(-1))
-                # 应用top-k采样
-                if top_k is not None:
-                    next_token_logits = next_token_logits.topk(top_k, dim=-1).values
+            # 应用top-p采样 (nucleus sampling)
+            if top_p is not None:
+                sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
+                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                # 移除累积概率超过p的token
+                sorted_indices_to_remove = cumulative_probs > top_p
+                # 确保至少保留一个token
+                sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+                sorted_indices_to_remove[:, 0] = 0
+                next_token_logits[sorted_indices_to_remove] = -float("inf")
 
-                # 应用top-p采样 (nucleus sampling)
-                if top_p is not None:
-                    sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
-                    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-                    # 移除累积概率超过p的token
-                    sorted_indices_to_remove = cumulative_probs > top_p
-                    # 确保至少保留一个token
-                    sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
-                    sorted_indices_to_remove[:, 0] = 0
-                    next_token_logits[sorted_indices_to_remove] = -float("inf")
+            # 计算概率分布
+            probs = F.softmax(next_token_logits, dim=-1)
+            # 采样下一个token
+            next_token = torch.multinomial(probs, num_samples=1)
 
-                # 计算概率分布
-                probs = F.softmax(next_token_logits, dim=-1)
-                # 采样下一个token
-                next_token = torch.multinomial(probs, num_samples=1)
+            # 将生成的token添加到序列中
+            generated = torch.cat([generated, next_token], dim=1)
 
-                # 将生成的token添加到序列中
-                generated = torch.cat([generated, next_token], dim=1)
+            # 检查是否所有序列都已生成结束token
+            if eos_token_id is not None:
+                done = (generated == eos_token_id).any(dim=1).all()
+                if done:
+                    break
 
-                # 检查是否所有序列都已生成结束token
-                if eos_token_id is not None:
-                    done = (generated == eos_token_id).any(dim=1).all()
-                    if done:
-                        break
 
-    finally:
-        # 重置KV缓存
-        model.model.reset_caches()
+    model.model.reset_caches()
 
     # 将生成的序列转换为列表
     generated_list = generated.tolist()
