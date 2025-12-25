@@ -297,7 +297,7 @@ class Qwen3Attention(nn.Module):
             v=v,
             mask=mask,
             attention_dropout=self.attn_dropout,
-            is_causal=self.kv_cache is None and mask is None and self.is_causal,
+            is_causal=self.kv_cache is not None and mask is None and self.is_causal,
             training=self.training,
             **kwargs,
         )
