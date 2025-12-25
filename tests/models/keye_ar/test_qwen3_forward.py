@@ -262,6 +262,8 @@ def generate(
 
             # 计算概率分布
             probs = F.softmax(next_token_logits, dim=-1)
+            print(f"probs: {probs.shape}, probs={probs}")
+
             # 采样下一个token
             next_token = torch.multinomial(probs, num_samples=1)
 
