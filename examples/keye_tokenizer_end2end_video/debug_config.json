@@ -11,7 +11,7 @@
     "shrink_ratio": 0.35,
     "max_retry": 3,
     "multiple_of": 8,
-    "num_workers": 0,
+    "num_workers": 1,
     "num_epochs": 1,
     "cut_to_pad": 0,
     "patch_size": 14,
