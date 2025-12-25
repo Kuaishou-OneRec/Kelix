@@ -575,7 +575,7 @@ def tokenize_images(tokenizer,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
-        print(f"processed_embeddings shape: {processed_embeddings.shape}, attention_mask shape: {attention_mask.shape}")
+        # print(f"processed_embeddings shape: {processed_embeddings.shape}, attention_mask shape: {attention_mask.shape}")
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
