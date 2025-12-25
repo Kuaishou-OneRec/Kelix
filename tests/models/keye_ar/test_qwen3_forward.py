@@ -239,7 +239,7 @@ def generate(
             # 将生成的token添加到序列中
             generated = torch.cat([generated, next_token], dim=1)
 
-            print(f"eos_token_id={eos_token_id}, next_token={next_token.shape}")
+            print(f"eos_token_id={eos_token_id}, next_token={next_token}")
             # 检查是否所有序列都已生成结束token
             if eos_token_id is not None:
                 done = (next_token == eos_token_id).any(dim=1).all()
@@ -253,10 +253,10 @@ def generate(
     generated_list = generated.tolist()
 
     # 如果提供了eos_token_id，截断到eos_token_id
-    if eos_token_id is not None:
-        for i in range(batch_size):
-            if eos_token_id in generated_list[i]:
-                generated_list[i] = generated_list[i][:generated_list[i].index(eos_token_id) + 1]
+    # if eos_token_id is not None:
+    #     for i in range(batch_size):
+    #         if eos_token_id in generated_list[i]:
+    #             generated_list[i] = generated_list[i][:generated_list[i].index(eos_token_id) + 1]
 
     return generated_list
 
