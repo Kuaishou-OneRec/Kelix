@@ -1359,8 +1359,8 @@ def train():
         
         # Only rank 0 does the actual visualization
         if dist.get_rank() == 0 and model_for_vis is not None:
-            torch.cuda.empty_cache()
-            gc.collect()
+            # torch.cuda.empty_cache()
+            # gc.collect()
             
             # Load weights to visualization model and move to GPU
             model_for_vis.load_state_dict(state_dict)
@@ -1390,7 +1390,7 @@ def train():
             
             # Move model back to CPU to save memory
             model_for_vis.cpu()
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
         
         # Sync all ranks after step 0 visualization
         dist.barrier()
@@ -1511,8 +1511,8 @@ def train():
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
-                torch.cuda.empty_cache()
-                gc.collect()
+                # torch.cuda.empty_cache()
+                # gc.collect()
                 with Timer("save checkpoint"):
                     save_checkpoint(
                         app_state=app_state,
@@ -1539,8 +1539,8 @@ def train():
                 
                 # Only rank 0 does the actual visualization
                 if dist.get_rank() == 0 and model_for_vis is not None:
-                    torch.cuda.empty_cache()
-                    gc.collect()
+                    # torch.cuda.empty_cache()
+                    # gc.collect()
                     
                     # Load weights to visualization model and move to GPU
                     model_for_vis.load_state_dict(state_dict)
