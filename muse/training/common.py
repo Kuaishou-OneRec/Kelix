@@ -234,6 +234,41 @@ def get_global_grad_norm(model: torch.nn.Module) -> torch.Tensor:
     return get_total_norm(grads, norm_type=2.0)
 
 
+def freeze_params_by_pattern(model: torch.nn.Module, patterns: List[str]) -> int:
+    """Freeze parameters based on pattern matching (contains).
+    
+    Supports two modes:
+    1. Normal mode: freeze params containing any pattern
+       E.g., ['y_embedder', 'cross_attn'] freezes params containing these substrings
+    2. Inverse mode (^ prefix): freeze all EXCEPT params matching patterns
+       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params containing these
+    
+    Args:
+        model: The model to freeze parameters in
+        patterns: List of patterns to match in parameter names (use ^ for inverse selection)
+        
+    Returns:
+        Number of parameters frozen
+    """
+    # Check if inverse mode (all patterns start with ^)
+    inverse_mode = all(p.startswith('^') for p in patterns)
+    if inverse_mode:
+        # Remove ^ prefix for matching
+        patterns = [p[1:] for p in patterns]
+    
+    frozen_count = 0
+    for name, param in model.named_parameters():
+        matches_pattern = any(pattern in name for pattern in patterns)
+
+        # In inverse mode: freeze if NOT matching; normal mode: freeze if matching
+        should_freeze = not matches_pattern if inverse_mode else matches_pattern
+        
+        if should_freeze:
+            param.requires_grad = False
+            frozen_count += 1
+    
+    return frozen_count
+
 
 def compute_fsdp_zero2_grad_norm(model: torch.nn.Module, 
                                  ignore_unused_parameters: bool = True) -> float:

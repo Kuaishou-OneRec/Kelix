@@ -178,9 +178,16 @@ class KeyeImageTokenizer(Model):
         codebook_loss = [v["codebook_loss"] for v in vq_outputs]
         commitment_loss = [v["commitment_loss"] for v in vq_outputs]
         indices = [v["indices"] for v in vq_outputs]
-        token_embeds = torch.sum(
-            torch.stack([self.up_projectors[i](x_i) \
-                for i, x_i in enumerate(z_q)], dim=1), dim=1)
+
+        token_embeds = torch.stack([self.up_projectors[i](x_i) \
+            for i, x_i in enumerate(z_q)], dim=1)
+
+        if self.config.fusion_type == "mean":
+            token_embeds = torch.mean(token_embeds, dim=1)
+        elif self.config.fusion_type == "sum":
+            token_embeds = torch.sum(token_embeds, dim=1)
+        else:
+            raise ValueError(f"Invalid embedding reduction: {embedding_reduction}")
 
         return {
             "z_q": z_q,
@@ -226,6 +233,74 @@ class KeyeImageTokenizer(Model):
         aligned_indices = vocab_size + indices + codebook_offsets
         
         return aligned_indices
+    @torch.inference_mode()
+    def tokenize(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.Tensor,
+        max_pad_to: int = None,
+        return_attention_mask: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+        """Tokenize images with dynamic padding and attention mask.
+        
+        Args:
+            pixel_values: Pixel values tensor [num_total_patches, ...]
+            image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
+            max_pad_to: Pad to this sequence length
+        
+        Returns:
+            fused_embeddings: [B, max_seq_len, embed_dim]
+            attention_mask: [B, 1, 1, max_seq_len]
+            max_seq_len: The actual padded sequence length (min of max_in_batch and max_condition_length)
+        """
+        # Get token embeddings from forward pass
+        embeddings: torch.Tensor = self.forward(
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw
+        )["token_embeds"]
+
+        if not max_pad_to:
+            return embeddings
+        
+        _, embed_dim = embeddings.shape
+        
+        # Compute merge_length from Projector's merge_kernel_size
+        merge_length = self.mlp_AR.merge_kernel_size[0] * self.mlp_AR.merge_kernel_size[1]
+        
+        # Split by image_grid_thw and pad to max_seq_len
+        # image_grid_thw: [B, 3] where each row is (t, h, w)
+        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2] // merge_length).tolist()
+        batch_size = len(lengths)
+        
+        # Compute dynamic padding length: min of max_in_batch and max_condition_length
+        max_seq_len = min(max(lengths), max_pad_to)
+        
+        # Split embeddings according to lengths
+        split_embeddings = torch.split(embeddings, lengths, dim=0)
+        
+        # Pad each to max_seq_len and stack
+        padded = []
+        for emb in split_embeddings:
+            seq_len = emb.shape[0]
+            if seq_len < max_seq_len:
+                padding = torch.zeros(max_seq_len - seq_len, embed_dim, 
+                                        device=emb.device, dtype=emb.dtype)
+                emb = torch.cat([emb, padding], dim=0)
+            else:
+                emb = emb[:max_seq_len]
+            padded.append(emb)
+        
+        embeddings = torch.stack(padded, dim=0)  # [B, max_seq_len, embed_dim]
+        if not return_attention_mask:
+            return embeddings, max_seq_len
+
+        # Create attention mask based on actual lengths
+        attention_mask = torch.zeros(batch_size, max_seq_len, device=embeddings.device)
+        for i, length in enumerate(lengths):
+            attention_mask[i, :min(length, max_seq_len)] = 1
+        attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_seq_len]
+
+        return embeddings, attention_mask, max_seq_len
 
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
         # 直接复用LeCun初始化

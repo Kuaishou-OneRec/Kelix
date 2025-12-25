@@ -45,6 +45,8 @@ from muse.models.sana._layers import (
     RMSNorm,
 )
 
+from muse.utils.common import print_rank_0
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,6 +200,8 @@ class SanaModel(Model):
                 linear_head_dim=config.linear_head_dim,
                 cross_norm=config.cross_norm,
                 cross_attn_type=config.cross_attn_type,
+                use_cross_attn_rope=config.use_cross_attn_rope,
+                cross_attn_x_norm=config.cross_attn_x_norm,
             )
             for i in range(config.depth)
         ])
@@ -340,8 +344,14 @@ class SanaModel(Model):
             raise ValueError("xformers is required for Sana cross-attention without mask")
         
         # Transformer blocks
+        x_input_pos = kwargs.get("x_input_pos", None)
+        cond_input_pos = kwargs.get("cond_input_pos", None)
+
         for block in self.blocks:
-            x = block(x, y, t0, y_lens, (self.h, self.w))
+            x = block(x, y, t0, y_lens, (self.h, self.w),
+                x_input_pos=x_input_pos,
+                cond_input_pos=cond_input_pos,
+            )
         
         # Final layer
         x = self.final_layer(x, t)  # [N, T, patch_size^2 * out_channels]

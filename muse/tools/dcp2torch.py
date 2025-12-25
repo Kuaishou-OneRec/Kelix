@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 
 import os
 import json
@@ -105,12 +105,21 @@ def dcp_to_torch_save(dcp_checkpoint_dir: Union[str, os.PathLike],
 
 def convert(
     checkpoint_dir,
-    output_dir,
-    source_dir
+    tag: Optional[str] = None,
+    source_dir: Optional[Union[str, os.PathLike]] = None
 ):
   """
-  convert比较通用
+  Convert a DCP checkpoint to a Torch save file.
+
+  Args:
+    checkpoint_dir: Directory containing the DCP checkpoint.
+    tag: Tag for the checkpoint.
+    source_dir: Directory containing the source files.
   """
+  if not tag:
+    checkpoint_dir = Path(checkpoint_dir) / tag
+  output_dir = checkpoint_dir.rstrip("/") + "/converted"
+
   dcp_to_torch_save(
     dcp_checkpoint_dir=checkpoint_dir,
     output_dir=output_dir,
@@ -118,14 +127,21 @@ def convert(
     use_safetensor=True,
     max_gb_per_shard=2
   )
+  if not source_dir:
+    if tag and checkpoint_dir.endswith(tag):
+      source_dir = checkpoint_dir.rstrip(tag)
+    else:
+      source_dir = checkpoint_dir.parent
   for fn in tqdm(os.listdir(source_dir)):
     if not fn.endswith(".safetensors") and 'model.safetensors.index.json' not in fn:
       if not os.path.isfile(os.path.join(source_dir, fn)): continue
       shutil.copy(os.path.join(source_dir, fn), os.path.join(output_dir, fn))
 
 if __name__ == '__main__':
-  import sys
-  checkpoint_dir = sys.argv[1]
-  source_dir = sys.argv[2]
-  output_dir = checkpoint_dir.rstrip("/") + "/converted"
-  convert(checkpoint_dir, output_dir, source_dir)
+    parser = argparse.ArgumentParser(description="Convert DCP checkpoint to Torch/Safetensors format")
+    parser.add_argument("checkpoint_dir", type=str, help="Directory containing the DCP checkpoint")
+    parser.add_argument("--source-dir", type=str, default=None, help="Directory containing source config files to copy")
+    parser.add_argument("--tag", type=str, default=None, help="Checkpoint tag/step (e.g., 'global_step1000')")
+    args = parser.parse_args()
+    
+    convert(args.checkpoint_dir, tag=args.tag, source_dir=args.source_dir)

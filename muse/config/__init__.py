@@ -30,8 +30,8 @@ from muse.config.model_config import (
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
-    SanaConfig,
-    UnifiedQwen3Config
+    UnifiedQwen3Config,
+    SanaConfig
 )
 
 from muse.config.dataset_config import DatasetConfig

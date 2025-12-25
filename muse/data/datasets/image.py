@@ -463,7 +463,7 @@ class Text2ImageDataset(DistributedDataset):
             Transform pipeline for this size
         """
         transform_list = [
-            T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),
+            T.Resize(target_size, interpolation=T.InterpolationMode.LANCZOS),
             T.CenterCrop(target_size),
             T.ToTensor(),
             T.Normalize([0.5], [0.5]),
@@ -657,12 +657,12 @@ class Token2ImageDataset(DistributedDataset):
             # 先按短边 Resize（保持宽高比），再 CenterCrop
             target_size = min(self.image_size)
             transform_list.extend([
-                T.Resize(target_size, interpolation=T.InterpolationMode.BILINEAR),  # 短边缩放到 target_size
+                T.Resize(target_size, interpolation=T.InterpolationMode.LANCZOS),  # 短边缩放到 target_size
                 T.CenterCrop(target_size),  # 裁剪成正方形
             ])
         
         transform_list.extend([
-            T.Resize(self.image_size, interpolation=T.InterpolationMode.BILINEAR),
+            T.Resize(self.image_size, interpolation=T.InterpolationMode.LANCZOS),
             T.ToTensor(),
             T.Normalize([0.5], [0.5]),
         ])
@@ -679,7 +679,7 @@ class Token2ImageDataset(DistributedDataset):
             Transform pipeline for this size
         """
         transform_list = [
-            T.Resize(target_size, interpolation=T.InterpolationMode.BILINEAR),
+            T.Resize(target_size, interpolation=T.InterpolationMode.LANCZOS),
             T.CenterCrop(target_size),
             T.ToTensor(),
             T.Normalize([0.5], [0.5]),
@@ -898,17 +898,22 @@ class Token2ImageDataset(DistributedDataset):
         if image.mode != "RGB":
             image = image.convert("RGB")
 
+        target_h, target_w = self.image_size
+
         if self.multi_scale:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
             # Apply same Resize + CenterCrop but keep as PIL image for processor
-            condition_image = T.Compose([
-                T.Resize((target_h, target_w), interpolation=T.InterpolationMode.BILINEAR),
-                T.CenterCrop((target_h, target_w)),
-            ])(image)
         else:
             target_image = self.transform(image)
-            condition_image = image
+        
+        condition_image = T.Compose([
+            T.Resize((target_h, target_w), interpolation=T.InterpolationMode.LANCZOS),
+            T.CenterCrop((target_h, target_w)),
+        ])(image)
+
+        assert condition_image.size == (target_w, target_h)
+        assert target_image.shape[-2:] == (target_h, target_w)
 
         fake_message = [
             {
@@ -970,6 +975,10 @@ class Token2ImageDataset(DistributedDataset):
             if height is not None and width is not None:
                 pair["height"] = height
                 pair["width"] = width
+            else:
+                image = load_image(pair["image"])
+                pair["height"] = image.height
+                pair["width"] = image.width
             return pair
         return None
 
@@ -1046,14 +1055,12 @@ class MultiScaleDatasetWrapper(IterableDataset):
         config: ResolutionBudgetConfig,
         total_steps: int = 1,
         drop_last: bool = False,
-        max_bucket_size: int = 10000,
-        max_resolution_level: int = 1024,
+        max_bucket_size: int = 10000
     ):
         self.dataset = dataset
         self.config = config
         self.drop_last = drop_last
         self.max_bucket_size = max_bucket_size
-        self.max_resolution_level = max_resolution_level
         # Use same random generator as dataset for consistent results across ranks
         self.rng = dataset.rng
         
@@ -1138,6 +1145,16 @@ class MultiScaleDatasetWrapper(IterableDataset):
                     for sample in batch:
                         sample["target_height"] = tgt_h
                         sample["target_width"] = tgt_w
+                    if self.scheduler._current_step % 10 == 0:
+                        print_rank_0(
+                            f"Step: {self.scheduler._current_step}, "
+                            F"Sampler stats: {self.get_sampler_stats()}, "
+                            f"Batch size: {len(batch)}, "
+                            f"Target resolution: {tgt_res}, "
+                            f"Target height: {tgt_h}, "
+                            f"Target width: {tgt_w}, "
+                            f"Aspect ratio: {ratio}"
+                        )
                     yield batch
                     self.scheduler.step()
                     break

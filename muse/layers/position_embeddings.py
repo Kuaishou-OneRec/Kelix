@@ -295,15 +295,32 @@ class RotaryPositionalEmbeddings(nn.Module):
 
 
 class Roraty2DPositionalEmbeddings(nn.Module):
+    """2D Rotary Positional Embeddings for vision tasks.
+    
+    This module applies separate RoPE to height and width dimensions,
+    using flash_attn's apply_rotary_emb for efficiency.
+    
+    Args:
+        head_dim: Dimension per attention head. Will be split in half
+            for height and width dimensions.
+        max_grid_size: Maximum grid size (not used, kept for API compatibility).
+        base: Base for computing inverse frequencies.
+    """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
         self.dim = head_dim // 2
         self.base = base
+        self.rope_init()
+
+    def rope_init(self) -> None:
+        """Initialize or reinitialize the inverse frequency buffer.
         
+        This method is called during __init__ and can be called again
+        to materialize buffers from meta device (for FSDP compatibility).
+        """
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        # self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
 
     def calculate_freqs(self, seqlen: int, dtype: torch.dtype = None) -> torch.Tensor:
         # 使用传入的 dtype，确保与模型精度一致
