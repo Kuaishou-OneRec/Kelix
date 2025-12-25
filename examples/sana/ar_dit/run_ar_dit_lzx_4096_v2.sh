@@ -23,7 +23,7 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.2
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/t2i_ar_ae_4096
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/run_ar_dit_lzx_4096_v2
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -128,7 +128,7 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_ae/ar-ae-mix_v2.json \
+                --dataset-config examples/sana/ar_dit/ar-ae-mix_v2.json \
                 --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
