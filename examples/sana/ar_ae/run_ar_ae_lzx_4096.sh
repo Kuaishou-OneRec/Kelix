@@ -21,8 +21,9 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
+VISUAL_PARQUET_PATH=/llm_reco/lingzhixin/recovlm_data/datasets/Gen_qwen_image_position/0.0.0/part/rank0-0.parquet
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/t2i_ae_1024
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/t2i_ar_ae_4096
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -118,25 +119,24 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy=\
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ar_dit.py \
-                --visualize-dir $VISUALIZE_DIR \
+                --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 30 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/ae-mix.json \
-                --learning-rate 1e-4 \
+                --dataset-config examples/sana/ar_ae/ar-ae-mix_v2.json \
+                --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 512 \
                 --beta1 0.9 \
                 --model-config-overrides caption_channels=4096 model_max_length=324 \
                 --beta2 0.999 \
-                --batch-size 32 \
+                --batch-size 2 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 100000 \

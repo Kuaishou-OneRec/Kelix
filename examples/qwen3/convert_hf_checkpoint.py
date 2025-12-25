@@ -15,7 +15,7 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
         hf_cfg.get("num_key_value_heads")
         or hf_cfg.get("n_kv_head")
         or num_heads
-    
+    )
     head_dim = hf_cfg.get("head_dim") or (embed_dim // num_heads)
     intermediate_dim = hf_cfg.get("intermediate_size") or hf_cfg.get(
         "ffn_hidden_size", 4 * embed_dim
