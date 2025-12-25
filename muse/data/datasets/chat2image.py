@@ -57,50 +57,8 @@ from muse.data.datasets.image import Token2ImageDataset
 
 logger = logging.getLogger(__name__)
 
-
-from PIL import Image, ImageDraw, ImageFont
 import os
 
-def resize_and_center_crop(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
-    """
-    对PIL图像进行等比例缩放后居中裁剪至目标尺寸
-    
-    参数:
-        image: 输入的PIL Image对象
-        target_width: 目标宽度（像素）
-        target_height: 目标高度（像素）
-    
-    返回:
-        处理后的PIL Image对象
-    """
-    # 获取原始图像尺寸
-    original_width, original_height = image.size
-    
-    # 计算缩放比例（保证图像能覆盖目标尺寸，取较大的缩放比例）
-    scale_width = target_width / original_width
-    scale_height = target_height / original_height
-    scale = max(scale_width, scale_height)
-    
-    # 计算等比例缩放后的尺寸
-    new_width = int(original_width * scale)
-    new_height = int(original_height * scale)
-    
-    # 等比例缩放图像（兼容PIL不同版本）
-    try:
-        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    except AttributeError:
-        resized_image = image.resize((new_width, new_height), Image.LANCZOS)
-    
-    # 计算居中裁剪的坐标（四舍五入避免浮点误差）
-    left = round((new_width - target_width) / 2)
-    top = round((new_height - target_height) / 2)
-    right = left + target_width
-    bottom = top + target_height
-    
-    # 执行居中裁剪
-    cropped_image = resized_image.crop((left, top, right, bottom))
-    
-    return cropped_image
 
 
 
@@ -137,9 +95,8 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, force_assistant_image_size=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.force_assistant_image_size = force_assistant_image_size
     
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair using chat-style message processing.
@@ -173,13 +130,6 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         # Get message from sample for chat template processing
         messages = sample["message"]
-        if self.force_assistant_image_size is not None:
-            for message in messages:
-                if message["role"] != "assistant": continue
-                content = message["content"]
-                for el in content:
-                    if 'image' not in el: continue
-                    el['image'] = resize_and_center_crop(Image.open(el["image"]), self.force_assistant_image_size, self.force_assistant_image_size)
 
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
