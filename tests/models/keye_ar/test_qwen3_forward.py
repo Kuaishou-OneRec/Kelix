@@ -292,7 +292,7 @@ def generate(
 
             # 前向传播 - 使用完整的model()调用，提供当前位置id
             logits = model(current_token, input_pos=current_pos,#  is_causal=True
-                           , **kwargs)
+                            **kwargs)
 
             # 采样下一个token
             next_token_logits = logits[:, -1, :]
