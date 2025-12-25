@@ -239,7 +239,7 @@ def generate(
             # 应用top-k采样
             if top_k is not None:
                 next_token_logits = next_token_logits.topk(top_k, dim=-1).values
-
+            print(f"top_next_token_logits: {next_token_logits}")
             # 应用top-p采样 (nucleus sampling)
             if top_p is not None:
                 sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
