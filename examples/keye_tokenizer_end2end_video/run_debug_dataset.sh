@@ -31,8 +31,10 @@ echo "Number of batches: $NUM_BATCHES"
 echo "=========================================="
 echo ""
 
-# Run the debug script
-python3 examples/keye_tokenizer_end2end_video/debug_dataset.py \
+# Run the debug script with torchrun for proper distributed initialization
+# Using single GPU (nproc_per_node=1)
+torchrun --nproc_per_node=1 --master_port=29500 \
+    examples/keye_tokenizer_end2end_video/debug_dataset.py \
     --dataset-config "$DATASET_CONFIG" \
     --model-dir "$MODEL_DIR" \
     --num-batches "$NUM_BATCHES" \

@@ -9,6 +9,7 @@ each batch's packing structure, sample_idx distribution, and related metrics.
 import argparse
 import json
 import torch
+import torch.distributed as dist
 from torch.utils.data import DataLoader
 from pathlib import Path
 import sys
@@ -17,8 +18,12 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Set environment variable to disable tokenizer parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast_video
 from muse.utils.common import print_rank_0
+from muse.training.parallel import initialize_model_parallel
 
 
 def analyze_batch(batch, batch_idx):
@@ -142,6 +147,33 @@ def main():
     
     args = parser.parse_args()
     
+    # Initialize distributed environment (required by dataset internals)
+    # Even for single GPU, we need to init process group for get_data_parallel_rank()
+    print_rank_0("Initializing distributed environment...")
+    
+    # Get rank/world_size from environment (set by torchrun)
+    if "RANK" in os.environ:
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    else:
+        rank = args.rank
+        world_size = args.world_size
+        local_rank = 0
+    
+    torch.cuda.set_device(local_rank)
+    
+    if not dist.is_initialized():
+        dist.init_process_group(backend="nccl")
+    
+    # Override args with actual values
+    args.rank = rank
+    args.world_size = world_size
+    
+    # Initialize model parallel (for get_data_parallel_rank/group)
+    initialize_model_parallel(context_parallel_size=1)
+    print_rank_0(f"Distributed initialized: rank={dist.get_rank()}, world_size={dist.get_world_size()}")
+    
     # Load dataset config
     with open(args.dataset_config, 'r', encoding='utf-8') as f:
         dataset_config = json.load(f)
@@ -149,6 +181,12 @@ def main():
     # Override base_model_dir if provided
     if args.model_dir and not dataset_config.get("base_model_dir"):
         dataset_config["base_model_dir"] = args.model_dir
+    
+    # Fix num_workers: DistributedDataset requires num_workers >= 1 for file sharding
+    # (total_workers = world_size * num_workers, used as slice step)
+    if dataset_config.get("num_workers", 0) == 0:
+        dataset_config["num_workers"] = 1
+        print_rank_0("Note: Setting dataset num_workers=1 (required for DistributedDataset file sharding)")
     
     # Add distributed info
     dataset_config["rank"] = args.rank
@@ -174,12 +212,15 @@ def main():
         return
     
     # Create dataloader
-    print_rank_0("\nCreating dataloader...")
+    # IMPORTANT: Use num_workers=0 to avoid multiprocessing issues
+    # The dataset uses dist.get_rank() internally, which fails in worker processes
+    # without distributed initialization
+    print_rank_0("\nCreating dataloader (num_workers=0 to avoid dist init issues)...")
     dataloader = DataLoader(
         dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=dataset_config.get("num_workers", 0),
+        num_workers=0,  # Must be 0 for non-distributed debug mode
         collate_fn=lambda x: x[0]  # Unwrap single-element list
     )
     
