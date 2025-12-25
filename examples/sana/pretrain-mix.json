@@ -1,0 +1,9 @@
+{
+    "name": "Text2ImageDataset",
+    "sources": "/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
+    "image_size": 1024,
+    "max_text_length": 300,
+    "center_crop": true,
+    "packing": false
+  }
+  

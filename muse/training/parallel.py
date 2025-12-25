@@ -69,7 +69,7 @@ _CONTEXT_PARALLEL_GROUP_GLOO = None
 _DATA_PARALLEL_GROUP = None
 
 
-def initialize_model_parallel(context_parallel_size: int):
+def initialize_model_parallel(context_parallel_size: int = 1):
     world_size = dist.get_world_size()
     num_context_parallel_groups: int = world_size // context_parallel_size
     num_data_parallel_groups: int = context_parallel_size

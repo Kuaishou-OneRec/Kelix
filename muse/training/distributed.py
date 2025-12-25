@@ -262,6 +262,9 @@ def shard_model(
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
+    # Store compute dtype on model for use in forward pass
+    model._compute_dtype = param_dtype if fp32_weight else None
+
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
@@ -286,9 +289,15 @@ def shard_model(
 
 def load_from_full_model_state_dict(model: "FSDPModule",
                                     full_sd: Dict[str, Any],
-                                    allow_random_init_params: Optional[Union[str, List[str]]] = None):
+                                    allow_random_init_params: Optional[Union[str, List[str]]] = None,
+                                    skip_load_params: Optional[Union[str, List[str]]] = None):
     if isinstance(allow_random_init_params, str):
       allow_random_init_params = allow_random_init_params.split(',')
+    
+    # Parse skip_load_params (prefix matching)
+    if isinstance(skip_load_params, str):
+        skip_load_params = [p.strip() for p in skip_load_params.split(',') if p.strip()]
+    
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
@@ -300,6 +309,17 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         extra_full_ds = {
             k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
+
+        # Detect shape mismatches for keys that exist in both
+        shape_mismatches = {}
+        for k in set(meta_sharded_sd.keys()) & set(full_sd.keys()):
+            model_shape = meta_sharded_sd[k].shape
+            sd_shape = full_sd[k].shape
+            if model_shape != sd_shape:
+                shape_mismatches[k] = {
+                    'model_shape': model_shape,
+                    'state_dict_shape': sd_shape
+                }
 
         full_sd_info = {
             k: (v.shape, v.device, v.dtype)
@@ -314,14 +334,72 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         print_rank_0(f"meta_sharded_sd={format_dict_or_list(meta_sharded_sd_info)}")
 
         device0 = full_sd[list(full_sd)[0]]
+        
+        # Force random init for skip_load_params (even if they exist in checkpoint)
+        if skip_load_params:
+            for k in list(full_sd.keys()):
+                should_skip = any(prefix in k for prefix in skip_load_params)
+                if should_skip and k in meta_sharded_sd:
+                    full_sd[k] = torch.empty(meta_sharded_sd[k].shape)
+                    model.get_initializer(k)(full_sd[k])
+                    full_sd[k] = full_sd[k].to(device0)
+                    print_rank_0(f"Skip load, random init: {k}, shape={full_sd[k].shape}")
+        
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
-                full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1
+                full_sd[k] = torch.empty(extra_meta_sharded_sd[k][0])
                 model.get_initializer(k)(full_sd[k])
                 full_sd[k] = full_sd[k].to(device0)
                 print_rank_0(
                     f"random init k={k}, {extra_meta_sharded_sd[k]}\n, "
                     f"meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
+        # Handle shape mismatches
+        for k, mismatch_info in shape_mismatches.items():
+            # Check if handled by allow_random_init_params or skip_load_params
+            in_allow_random = allow_random_init_params is not None and k in allow_random_init_params
+            in_skip_load = skip_load_params and any(pattern in k for pattern in skip_load_params)
+            
+            if in_allow_random or in_skip_load:
+                model_shape = mismatch_info['model_shape']
+                sd_shape = mismatch_info['state_dict_shape']
+                
+                # Initialize with model's expected shape
+                full_sd[k] = torch.empty(model_shape)
+                model.get_initializer(k)(full_sd[k])
+                full_sd[k] = full_sd[k].to(device0)
+                
+                reason = "skip_load_params" if in_skip_load else "allow_random_init_params"
+                print_rank_0(
+                    f"Shape mismatch, random init ({reason}): k={k}\n"
+                    f"  model_shape: {model_shape}\n"
+                    f"  state_dict_shape: {sd_shape}\n"
+                    f"  new tensor shape: {full_sd[k].shape}"
+                )
+            else:
+                # Log warning for unhandled mismatches
+                print_rank_0(
+                    f"WARNING: Shape mismatch (not handled): k={k}\n"
+                    f"  model_shape: {mismatch_info['model_shape']}\n"
+                    f"  state_dict_shape: {mismatch_info['state_dict_shape']}"
+                )
+
+        # Check for unhandled shape mismatches (shape mismatches will cause errors)
+        # Exclude params that are in allow_random_init_params or match skip_load_params patterns
+        def is_handled(k):
+            if allow_random_init_params and k in allow_random_init_params:
+                return True
+            if skip_load_params and any(pattern in k for pattern in skip_load_params):
+                return True
+            return False
+        
+        unhandled_shape_mismatches = {
+            k: v for k, v in shape_mismatches.items()
+            if not is_handled(k)
+        }
+        assert len(unhandled_shape_mismatches) == 0, \
+            f"Unhandled shape mismatches found. Add these params to allow_random_init_params " \
+            f"or skip_load_params to randomly initialize them:\n{format_dict_or_list(unhandled_shape_mismatches)}"
 
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, " \
@@ -332,7 +410,6 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
-    print("rank=", dist.get_rank(), "meta_sharded_sd=", meta_sharded_sd.keys())
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         print_rank_0(f"param_name={param_name}\nsharded_meta_param={sharded_meta_param.shape}")
         if dist.get_rank() == 0:
@@ -349,15 +426,21 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-
-        mesh = sharded_meta_param.device_mesh
-
-        dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
-        dist.barrier()
-        sharded_tensor = distribute_tensor(
-            full_tensor, mesh, sharded_meta_param.placements
-        )
-        sharded_sd[param_name] = nn.Parameter(sharded_tensor) # default: requires_grad=True
+        
+        # Check if it's a DTensor (sharded parameter) or regular Tensor (e.g., buffer)
+        if isinstance(sharded_meta_param, DTensor):
+            mesh = sharded_meta_param.device_mesh
+            dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+            dist.barrier()
+            sharded_tensor = distribute_tensor(
+                full_tensor, mesh, sharded_meta_param.placements
+            )
+            sharded_sd[param_name] = nn.Parameter(sharded_tensor)  # default: requires_grad=True
+        else:
+            # Regular tensor (e.g., buffers) - just broadcast and store
+            dist.broadcast(full_tensor, src=0)
+            dist.barrier()
+            sharded_sd[param_name] = full_tensor
 
     model.load_state_dict(sharded_sd, assign=True)
 
@@ -428,16 +511,21 @@ def initialize_model_params(model: "FSDPModule"):
                 device='cuda'
             )
         
-        # Broadcast from rank 0 to all ranks
-        mesh = meta_param.device_mesh
-        dist.broadcast(param_tensor, src=0, group=mesh.get_group(0))
-        dist.barrier()
-        
-        # Distribute tensor according to FSDP sharding
-        sharded_tensor = distribute_tensor(
-            param_tensor, mesh, meta_param.placements
-        )
-        initialized_sd[param_name] = nn.Parameter(sharded_tensor)
+        # Check if it's a DTensor (sharded parameter) or regular Tensor (e.g., buffer)
+        if isinstance(meta_param, DTensor):
+            mesh = meta_param.device_mesh
+            dist.broadcast(param_tensor, src=0, group=mesh.get_group(0))
+            dist.barrier()
+            # Distribute tensor according to FSDP sharding
+            sharded_tensor = distribute_tensor(
+                param_tensor, mesh, meta_param.placements
+            )
+            initialized_sd[param_name] = nn.Parameter(sharded_tensor)
+        else:
+            # Regular tensor (e.g., buffers) - just broadcast and store
+            dist.broadcast(param_tensor, src=0)
+            dist.barrier()
+            initialized_sd[param_name] = param_tensor
     
     # Load initialized parameters into model
     model.load_state_dict(initialized_sd, assign=True)
