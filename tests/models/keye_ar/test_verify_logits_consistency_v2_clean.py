@@ -20,7 +20,7 @@ from collections import defaultdict
 
 # 导入模型相关模块
 from muse.models.keye_ar.modeling import KeyeARModel
-from muse.models.keye_ar.keye_vl_utils import process_vision_info
+from keye_vl_utils import process_vision_info
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
 
 
