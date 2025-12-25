@@ -1172,15 +1172,6 @@ def train():
         device=torch.cuda.current_device(),
         dtype=args.model_dtype
     )
-    
-    # Load processor for visualization (only needed if visualize_parquet_path is set)
-    vis_processor = None
-    if args.visualize_parquet_path:
-        vis_processor = AutoProcessor.from_pretrained(
-            args.keye_ar_dir,
-            trust_remote_code=True
-        )
-        print_rank_0(f"Loaded processor for visualization from {args.keye_ar_dir}")
 
     # Setup visualization model (for FSDP mode)
     # In FSDP mode, we need a separate model instance for inference
