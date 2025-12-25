@@ -146,7 +146,6 @@ class ParquetReader(Reader):
       worker_id, _  = get_worker_info()
       for fn in tqdm(self.sources):
         try:
-          print(f"fn={fn}")
           parquet_file = load_parquet(fn)
         except Exception as e:
           print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
