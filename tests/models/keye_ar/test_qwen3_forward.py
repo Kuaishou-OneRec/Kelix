@@ -97,7 +97,7 @@ def demo_qwen3_forward():
         enable_thinking=True
     )
     model_inputs = tokenizer([text], return_tensors="pt").to(device)
-
+    print(f"model_inputs={model_inputs}")
     
     # 创建Muse模型实例
     model_dtype = torch.bfloat16
