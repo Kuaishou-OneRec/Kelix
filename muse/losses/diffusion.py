@@ -288,6 +288,7 @@ class FlowMatchingLoss(nn.Module):
         start_time = time.time()
 
         model_output = model(x_t, model_timesteps, y, mask=mask, **model_kwargs)
+        x0 = model_output.flatten()[0].cpu().item()
         print(f"time consumes: {time.time() - start_time:.4f}sec")
 
         # Handle sigma prediction
