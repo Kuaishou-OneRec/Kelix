@@ -102,7 +102,7 @@ def demo_qwen3_forward():
     # 创建Muse模型实例
     model_dtype = torch.bfloat16
     with set_default_dtype(model_dtype):
-        muse_model = Qwen3Model.from_pretrained(checkpoint_dir, trust_remote_code=True).to(device)
+        muse_model = Qwen3Model.from_pretrained(checkpoint_dir).to(device)
         
     # 调用generate函数生成文本
     print("\n" + "=" * 60)
