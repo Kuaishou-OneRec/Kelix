@@ -70,32 +70,18 @@ def demo_qwen3_forward():
     """
     Qwen3模型前向计算的demo，严格参考tests/test_qwen3.py的实现
     """
-    print("=" * 60)
-    print("Qwen3模型前向计算Demo")
-    print("=" * 60)
-    
+
     # 设置随机种子
     torch.manual_seed(0)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
-    
+    device = "cuda:0"
     # 检查预训练模型路径是否存在
-    checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
-    if not os.path.exists(checkpoint_dir):
-        print(f"错误：预训练模型路径不存在: {checkpoint_dir}")
-        print("请修改checkpoint_dir为正确的预训练模型路径")
-        return
-    
-    print(f"加载预训练模型: {checkpoint_dir}")
-    
+    checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base"
+
     # 加载Hugging Face模型和tokenizer
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, trust_remote_code=True)
-    hf_model = AutoModelForCausalLM.from_pretrained(
-        checkpoint_dir,
-        torch_dtype="auto",
-        device_map="auto",
-        trust_remote_code=True
-    )
+
     
     # 准备输入文本
     prompt = "Give me a short introduction to large language model."
@@ -110,87 +96,14 @@ def demo_qwen3_forward():
         add_generation_prompt=True,
         enable_thinking=True
     )
-    model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
-    print(f"输入文本: {text}")
-    print(f"输入token数量: {model_inputs['input_ids'].shape[1]}")
-    
-    # 加载HF模型的配置和state dict
-    hf_state_dict = hf_model.state_dict()
-    hf_config_dict = hf_model.config.to_dict()
-    
-    # 构建Muse模型配置
-    muse_config = _build_qwen3_config(hf_config_dict)
-    print(f"Muse模型配置构建完成，层数: {muse_config.num_layers}")
-    print(f"注意力机制: {muse_config.attention_function}")
-    
-    # 获取设备和数据类型
-    device = next(hf_model.parameters()).device
-    dtype = next(hf_model.parameters()).dtype
-    print(f"模型设备: {device}, 数据类型: {dtype}")
+    model_inputs = tokenizer([text], return_tensors="pt").to(device)
+
     
     # 创建Muse模型实例
-    model_dtype = torch.bfloat16 if dtype == torch.bfloat16 else torch.float32
+    model_dtype = torch.bfloat16
     with set_default_dtype(model_dtype):
-        muse_model = Qwen3Model(muse_config)
-    
-    # 转换并加载state dict
-    print("转换并加载预训练权重...")
-    converted_state_dict = muse_model.convert_hf_state_dict(hf_state_dict)
-    
-    # 将权重加载到Muse模型
-    missing_keys, unexpected_keys = muse_model.load_state_dict(
-        converted_state_dict, strict=False
-    )
-    
-    # 将模型移动到设备
-    muse_model = muse_model.to(device).to(dtype)
-    print(f"Muse模型已移动到设备: {device}，数据类型: {dtype}")
-    
-    # 进行前向计算
-    print("\n进行模型前向计算...")
-    
-    # 设置为评估模式
-    hf_model.eval()
-    muse_model.eval()
-    
-    # HF模型前向计算
-    with torch.no_grad():
-        hf_outputs = hf_model(**model_inputs)
-        hf_logits = hf_outputs.logits
-    
-    # Muse模型前向计算 - 严格参考test_qwen3.py，将tokens作为位置参数传递
-    with torch.no_grad():
-        # TransformerDecoder.forward()要求tokens作为位置参数
-        muse_logits = muse_model(model_inputs["input_ids"])
-    
-    # 确保logits在相同的设备和数据类型上
-    hf_logits = hf_logits.to(device=device, dtype=dtype)
-    muse_logits = muse_logits.to(device=device, dtype=dtype)
-    
-    # 比较logits
-    print("\nLogits比较结果:")
-    print(f"HF logits shape: {hf_logits.shape}")
-    print(f"Muse logits shape: {muse_logits.shape}")
-    
-    # 计算差异
-    if hf_logits.shape == muse_logits.shape:
-        logits_diff = (hf_logits - muse_logits).abs()
-        print(f"Logits最大差异: {logits_diff.max().item():.6e}")
-        print(f"Logits平均差异: {logits_diff.mean().item():.6e}")
+        muse_model = Qwen3Model.from_pretrained(checkpoint_dir, trust_remote_code=True).to(device)
         
-        # 检查是否接近
-        if torch.allclose(hf_logits, muse_logits, atol=1e-3, rtol=1e-3):
-            print("✅ Logits匹配度符合要求！")
-        else:
-            print("⚠️ Logits差异较大")
-    else:
-        print("⚠️ Logits形状不匹配")
-        min_seq_len = min(hf_logits.shape[1], muse_logits.shape[1])
-        hf_logits = hf_logits[:, :min_seq_len, :]
-        muse_logits = muse_logits[:, :min_seq_len, :]
-        logits_diff = (hf_logits - muse_logits).abs()
-        print(f"对齐后Logits最大差异: {logits_diff.max().item():.6e}")
-    
     # 调用generate函数生成文本
     print("\n" + "=" * 60)
     print("使用Muse模型生成文本")
