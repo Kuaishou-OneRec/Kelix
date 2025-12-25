@@ -701,9 +701,7 @@ def visualize_reconstruction(
     result = load_visualization_images(
         parquet_path=parquet_path,  # 改为parquet_path
         dataset=dataset,  # 传入dataset用于处理方法
-        processor=processor,
         image_size=image_size,
-        max_condition_length=max_condition_length,
         device=device,
         dtype=dtype,
         num_images=num_images,
