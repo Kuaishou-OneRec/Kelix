@@ -291,13 +291,17 @@ class Qwen3Attention(nn.Module):
 
         print(f"q={q.shape}, k={k.shape}, v={v.shape}, self._attention_function={self._attention_function}, kwargs={kwargs}")
         print(f"self.kv cache is None={self.kv_cache is None}, mask is None={mask is None}, self.is_causal={self.is_causal}")
+        
+        # 1. self.kv_cache is not None的时候必须是is_causal
+        # 2. self.is_causal=True的时候也必须是is_causal
         output = self._attention_function(
             q=q,
             k=k,
             v=v,
             mask=mask,
             attention_dropout=self.attn_dropout,
-            is_causal=self.kv_cache is not None and mask is None and self.is_causal,
+            is_causal=(self.kv_cache is not None) \
+                or (mask is None and self.is_causal),
             training=self.training,
             **kwargs,
         )
