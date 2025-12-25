@@ -128,11 +128,11 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/ar-ae-mix_v2.json \
-                --learning-rate 2e-5 \
+                --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2.json \
+                --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
-                --image-size 512 \
+                --image-size 1024 \
                 --beta1 0.9 \
                 --model-config-overrides caption_channels=4096 model_max_length=324 \
                 --beta2 0.999 \
