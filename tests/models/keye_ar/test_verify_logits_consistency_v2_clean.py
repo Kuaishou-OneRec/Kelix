@@ -178,7 +178,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
     processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
     
     # 直接从conf.json加载KeyeARConfig（使用load_keye_ar_config函数）
-    config = load_keye_ar_config("muse/models/keye_ar/conf.json")
+    config = load_keye_ar_config(f"{output_model_dir}/config.json")
     
     # 创建模型实例
     model = KeyeARModel(config)

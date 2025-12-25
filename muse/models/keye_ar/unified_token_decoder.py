@@ -155,7 +155,6 @@ class UnifiedTokenDecoder(Model):
         output = self.transformer(tokens=None, input_embeds=x_emb).to(self.output_linear.weight.dtype)
 
         # 输出线性层和残差连接（修复：移除条件判断，始终应用残差连接）
-        print(1112413, output.dtype, self.output_linear.weight.dtype)
         output = self.output_linear(output)
         output = output + x_emb0
 

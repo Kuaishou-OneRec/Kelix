@@ -262,16 +262,13 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         # batchsize x length x (n_q_tokens + 1) x embed_dim
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
-        # import IPython
-        # IPython.embed()
-        print(f"fhhh", h.dtype)
+
+
         h = self.token_head(h.flatten(0,1)).reshape(h.shape)
-        # h = h.reshape(-1, h.size(2), h.size(-1))
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
-        # import IPython
-        # IPython.embed()
+
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type
         output = output if not hidden else [*hidden, output]
@@ -433,8 +430,7 @@ class UnifiedQwen3Model(Qwen3Model):
 
         if not tie_word_embeddings:
             converted_state_dict["model.output.weight"] = hf_state_dict["lm_head.weight"]
-        # import IPython
-        # IPython.embed()
+
         return converted_state_dict
 
 
@@ -668,8 +664,7 @@ class KeyeARModel(Model):
                 aligned_indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T
                 aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
                     to(tokens)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
-                #import IPython
-                #IPython.embed()
+
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
