@@ -885,10 +885,10 @@ def visualize_reconstruction(
     os.makedirs(vis_dir, exist_ok=True)
     
     # Convert tensors to numpy for visualization
-    vae_recon_np = vae_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
+    vae_recon_np = loaded.vae_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
     dit_recon_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
     
-    for i, orig_img in enumerate(original_images):
+    for i, orig_img in enumerate(loaded.original_images):
         # Get reconstructed images
         vae_img = Image.fromarray((vae_recon_np[i] * 255).round().astype("uint8"))
         dit_img = Image.fromarray((dit_recon_np[i] * 255).round().astype("uint8"))
@@ -906,12 +906,12 @@ def visualize_reconstruction(
     if tb_writer is not None:
         # Create a grid of all comparisons
         all_images = []
-        for i, orig_img in enumerate(original_images):
+        for i, orig_img in enumerate(loaded.original_images):
             # Original
             orig_tensor = torch.from_numpy(np.array(orig_img)).permute(2, 0, 1).float() / 255.0
             all_images.append(orig_tensor)
             # VAE reconstruction
-            all_images.append(vae_recon_images[i].cpu().float())
+            all_images.append(loaded.vae_recon_images[i].cpu().float())
             # DiT reconstruction  
             all_images.append(dit_recon_images[i].cpu().float())
         
@@ -922,7 +922,7 @@ def visualize_reconstruction(
         tb_writer.add_image("visualization/comparison_grid", grid_img, global_step)
         
         # Add text information to TensorBoard (already done above)
-        print_rank_0(f"  Added {len(texts)} text samples to TensorBoard")
+        print_rank_0(f"  Added {len(loaded.texts)} text samples to TensorBoard")
 
 
 def _init_profiler(output_dir, with_stack=False) -> None:
