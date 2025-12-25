@@ -253,7 +253,16 @@ class Qwen3Attention(nn.Module):
 
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
-                k, v = self.kv_cache.update(k, v)
+                # 调整k和v的维度顺序以匹配KV缓存的期望格式
+                # 当前形状: [b, s_y, n_kv, h_d] -> 需要形状: [b, n_kv, s_y, h_d]
+                k_for_cache = k.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
+                v_for_cache = v.transpose(1, 2)  # [b, s_y, n_kv, h_d] -> [b, n_kv, s_y, h_d]
+                
+                k, v = self.kv_cache.update(k_for_cache, v_for_cache)
+                
+                # 将k和v转置回来以继续后续处理
+                k = k.transpose(1, 2)  # [b, n_kv, s_y, h_d] -> [b, s_y, n_kv, h_d]
+                v = v.transpose(1, 2)  # [b, n_kv, s_y, h_d] -> [b, s_y, n_kv, h_d]
 
         # If needed, expand the key and value tensors to have the same shape
         # as the query tensor by copying values across the relevant dim
