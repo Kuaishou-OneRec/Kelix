@@ -26,8 +26,17 @@ from muse.utils.common import print_rank_0
 from muse.training.parallel import initialize_model_parallel
 
 
-def analyze_batch(batch, batch_idx):
-    """Analyze and print detailed information about a packed batch."""
+def analyze_batch(batch, batch_idx, accumulated_samples):
+    """Analyze and print detailed information about a packed batch.
+    
+    Args:
+        batch: The batch data
+        batch_idx: Index of current batch
+        accumulated_samples: Total samples accumulated so far (before this batch)
+    
+    Returns:
+        num_samples_in_batch: Number of logical samples in this batch
+    """
     print_rank_0(f"\n{'='*80}")
     print_rank_0(f"=== Batch {batch_idx} ===")
     print_rank_0(f"{'='*80}")
@@ -38,6 +47,8 @@ def analyze_batch(batch, batch_idx):
     cu_seqlens = batch.get("cu_seqlens")
     loss_mask = batch.get("loss_mask")
     
+    num_samples_in_batch = 0
+    
     if input_ids is not None:
         print_rank_0(f"input_ids shape: {input_ids.shape}")
         print_rank_0(f"input_ids dtype: {input_ids.dtype}")
@@ -46,18 +57,28 @@ def analyze_batch(batch, batch_idx):
     if sample_idx is not None:
         sample_idx_flat = sample_idx.flatten()
         unique_samples = torch.unique(sample_idx_flat)
-        print_rank_0(f"\nsample_idx shape: {sample_idx.shape}")
-        print_rank_0(f"sample_idx unique values: {unique_samples.tolist()}")
+        
+        # Print raw sample_idx tensor (first 100 values if too long)
+        print_rank_0(f"\nsample_idx tensor:")
+        print_rank_0(f"  shape: {sample_idx.shape}")
+        if sample_idx_flat.numel() <= 100:
+            print_rank_0(f"  values: {sample_idx_flat.tolist()}")
+        else:
+            print_rank_0(f"  first 50: {sample_idx_flat[:50].tolist()}")
+            print_rank_0(f"  last 50: {sample_idx_flat[-50:].tolist()}")
+        
+        print_rank_0(f"  unique values: {unique_samples.tolist()}")
         
         # Count samples (excluding padding with -1)
         valid_samples = unique_samples[unique_samples >= 0]
         num_valid_samples = len(valid_samples)
-        print_rank_0(f"Number of valid samples (excluding padding): {num_valid_samples}")
+        print_rank_0(f"  Number of valid samples (excluding padding): {num_valid_samples}")
         
         # Calculate logical samples as done in training code
         max_sample_idx = sample_idx.max().item()
         logical_samples = max_sample_idx + 1
-        print_rank_0(f"Logical samples (max_idx + 1): {logical_samples}")
+        num_samples_in_batch = logical_samples
+        print_rank_0(f"  Logical samples (max_idx + 1): {logical_samples}")
         
         # Sample distribution
         print_rank_0(f"\nSample distribution:")
@@ -82,12 +103,19 @@ def analyze_batch(batch, batch_idx):
             if not is_continuous:
                 print_rank_0(f"  Expected: {expected}")
                 print_rank_0(f"  Actual: {valid_samples_sorted}")
+        
+        # Verify accumulated samples
+        expected_accumulated = accumulated_samples + logical_samples
+        print_rank_0(f"\nAccumulated samples check:")
+        print_rank_0(f"  Previous total: {accumulated_samples}")
+        print_rank_0(f"  This batch: {logical_samples}")
+        print_rank_0(f"  New total: {expected_accumulated}")
     
     if cu_seqlens is not None:
         print_rank_0(f"\ncu_seqlens: {cu_seqlens.tolist()}")
         print_rank_0(f"Number of sequences: {len(cu_seqlens) - 1}")
         if len(cu_seqlens) > 1:
-            seq_lengths = [cu_seqlens[i+1] - cu_seqlens[i] for i in range(len(cu_seqlens)-1)]
+            seq_lengths = [(cu_seqlens[i+1] - cu_seqlens[i]).item() for i in range(len(cu_seqlens)-1)]
             print_rank_0(f"Sequence lengths: {seq_lengths}")
     
     # Video data information
@@ -99,8 +127,9 @@ def analyze_batch(batch, batch_idx):
         if video_grid_thw is not None:
             print_rank_0(f"  video_grid_thw shape: {video_grid_thw.shape}")
             print_rank_0(f"  Number of video segments: {len(video_grid_thw)}")
-            if len(video_grid_thw) > 0:
-                print_rank_0(f"  First video_grid_thw: {video_grid_thw[0].tolist()}")
+            print_rank_0(f"  video_grid_thw (all):")
+            for i, thw in enumerate(video_grid_thw):
+                print_rank_0(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
     
     fast_pixel_values_videos = batch.get("fast_pixel_values_videos")
     fast_video_grid_thw = batch.get("fast_video_grid_thw")
@@ -110,6 +139,9 @@ def analyze_batch(batch, batch_idx):
         if fast_video_grid_thw is not None:
             print_rank_0(f"  fast_video_grid_thw shape: {fast_video_grid_thw.shape}")
             print_rank_0(f"  Number of fast video segments: {len(fast_video_grid_thw)}")
+            print_rank_0(f"  fast_video_grid_thw (all):")
+            for i, thw in enumerate(fast_video_grid_thw):
+                print_rank_0(f"    [{i}] t={thw[0].item()}, h={thw[1].item()}, w={thw[2].item()}")
     
     # Image data information
     pixel_values = batch.get("pixel_values")
@@ -130,6 +162,8 @@ def analyze_batch(batch, batch_idx):
         print_rank_0(f"  Valid tokens (loss_mask > 0): {valid_tokens} / {total_tokens} ({100*valid_tokens/total_tokens:.2f}%)")
     
     print_rank_0(f"{'='*80}\n")
+    
+    return num_samples_in_batch
 
 
 def main():
@@ -230,13 +264,16 @@ def main():
     
     total_samples = 0
     total_tokens = 0
+    sum_of_batch_samples = 0  # Sum of logical samples from each batch
+    batch_samples_list = []   # List of samples per batch for verification
     
     try:
         for batch_idx, batch in enumerate(dataloader):
             if batch_idx >= args.num_batches:
                 break
             
-            analyze_batch(batch, batch_idx)
+            # Analyze batch and get samples count
+            num_samples_in_batch = analyze_batch(batch, batch_idx, total_samples)
             
             # Accumulate statistics
             sample_idx = batch.get("sample_idx")
@@ -244,6 +281,8 @@ def main():
                 max_idx = sample_idx.max().item()
                 logical_samples = max_idx + 1
                 total_samples += logical_samples
+                sum_of_batch_samples += num_samples_in_batch
+                batch_samples_list.append(logical_samples)
             
             input_ids = batch.get("input_ids")
             if input_ids is not None:
@@ -254,7 +293,10 @@ def main():
         print_rank_0("SUMMARY")
         print_rank_0("="*80)
         print_rank_0(f"Total batches analyzed: {batch_idx + 1}")
-        print_rank_0(f"Total logical samples: {total_samples}")
+        print_rank_0(f"Total logical samples (accumulated): {total_samples}")
+        print_rank_0(f"Sum of batch samples: {sum_of_batch_samples}")
+        print_rank_0(f"Samples per batch: {batch_samples_list}")
+        print_rank_0(f"Sum verification: {sum(batch_samples_list)} == {total_samples} ? {sum(batch_samples_list) == total_samples}")
         print_rank_0(f"Average samples per batch: {total_samples / (batch_idx + 1):.2f}")
         print_rank_0(f"Total tokens: {total_tokens}")
         print_rank_0(f"Average tokens per batch: {total_tokens / (batch_idx + 1):.2f}")
