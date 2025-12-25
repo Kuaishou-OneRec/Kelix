@@ -1396,7 +1396,7 @@ def train():
 
     t0 = time.time()
     while scheduler.global_step < args.num_training_steps:
-        print(f"rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
+        print(f"step={scheduler.global_step}, rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
         t0 = time.time()
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
