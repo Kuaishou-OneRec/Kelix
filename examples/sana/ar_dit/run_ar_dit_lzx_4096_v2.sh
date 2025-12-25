@@ -120,9 +120,9 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 50 \
+                --visualize-per-step 100 \
                 --keye-ar-dir $KEYE_AR_DIR \
-                --num-vis-images 10 \
+                --num-vis-images 12 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 324 \
@@ -139,7 +139,7 @@ nohup mpirun --allow-run-as-root \
                 --batch-size 1 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
-                --num-training-steps 100000 \
+                --num-training-steps 1000000 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
