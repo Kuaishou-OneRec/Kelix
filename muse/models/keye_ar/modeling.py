@@ -846,7 +846,7 @@ class KeyeARModel(Model):
         if prompt_groups > 0:
             prefill_pos = torch.arange(input_seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
             outputs = self(
-                input_ids=current_ids,
+                current_ids,
                 input_pos=prefill_pos,
                 **model_kwargs
             )
@@ -880,7 +880,7 @@ class KeyeARModel(Model):
             #print(f"input last_group={last_group}")
             # 模型前向（使用cache）
             outputs = self(
-                input_ids=last_group,
+                last_group,
                 input_pos=current_pos,
                 **model_kwargs
             )
