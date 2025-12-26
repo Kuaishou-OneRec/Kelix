@@ -1270,13 +1270,9 @@ def train():
                 budgets=[ResolutionBudget(args.image_size, args.batch_size)],
             )
         
-        print_rank_0(f"Multi-scale training with curriculum scheduling:")
-        print_rank_0(f"  Total steps: {args.num_training_steps}")
-        for b, sw, ew in zip(budget_config.budgets, 
-                              budget_config.start_weights, 
-                              budget_config.end_weights):
-            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
-                         f"weight {sw:.2f} -> {ew:.2f}")
+        print_rank_0(f"Multi-scale training configuration:")
+        for b in budget_config.budgets:
+            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}")
         
         # Wrap with multi-scale wrapper (supports both fixed and dynamic resolution)
         multi_scale_wrapper = MultiScaleDatasetWrapper(
