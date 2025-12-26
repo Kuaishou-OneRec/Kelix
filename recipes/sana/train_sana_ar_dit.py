@@ -574,7 +574,6 @@ def tokenize_images(tokenizer,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
-        # print(f"processed_embeddings shape: {processed_embeddings.shape}, attention_mask shape: {attention_mask.shape}")
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
@@ -1112,10 +1111,6 @@ def train():
         if freeze_patterns:
             frozen_count = freeze_params_by_pattern(model, freeze_patterns)
             print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
-    
-    for name, param in model.named_parameters():
-        print_rank_0(f"req grad check - {name}: {param.requires_grad}")
-
 
     if args.compile:
         # Compile model for better performance
@@ -1358,8 +1353,8 @@ def train():
         
         # Only rank 0 does the actual visualization
         if dist.get_rank() == 0 and model_for_vis is not None:
-            # torch.cuda.empty_cache()
-            # gc.collect()
+            torch.cuda.empty_cache()
+            gc.collect()
             
             # Load weights to visualization model and move to GPU
             model_for_vis.load_state_dict(state_dict)
@@ -1389,15 +1384,12 @@ def train():
             
             # Move model back to CPU to save memory
             model_for_vis.cpu()
-            # torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
         
         # Sync all ranks after step 0 visualization
         dist.barrier()
 
-    t0 = time.time()
     while scheduler.global_step < args.num_training_steps:
-        print(f"step={scheduler.global_step}, rank={dist.get_rank()}, Step time {time.time() - t0:.2f}s")
-        t0 = time.time()
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
@@ -1447,8 +1439,6 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
-                # print(token_embeds.flatten()[-1])
-                # continue # step time - ???
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1460,8 +1450,6 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
-            # continue# step time 3sec
-
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
             metrics.loss.append(loss.detach())
@@ -1469,7 +1457,7 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
-            # continue # step time 3sec
+
             # 7. Gradient Clipping
             with record_function("GradClip"):
                 clip_grad_by_value(model, args.clip_range)
@@ -1510,8 +1498,8 @@ def train():
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
-                # torch.cuda.empty_cache()
-                # gc.collect()
+                torch.cuda.empty_cache()
+                gc.collect()
                 with Timer("save checkpoint"):
                     save_checkpoint(
                         app_state=app_state,
@@ -1538,8 +1526,8 @@ def train():
                 
                 # Only rank 0 does the actual visualization
                 if dist.get_rank() == 0 and model_for_vis is not None:
-                    # torch.cuda.empty_cache()
-                    # gc.collect()
+                    torch.cuda.empty_cache()
+                    gc.collect()
                     
                     # Load weights to visualization model and move to GPU
                     model_for_vis.load_state_dict(state_dict)
