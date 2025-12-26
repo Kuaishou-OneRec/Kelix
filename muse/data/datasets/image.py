@@ -1094,7 +1094,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
                         # Set target dimensions for transform
                         tgt_h, tgt_w = self._aspect_ratios[check_res][check_ratio]
                         for s in batch:
-                            print(s.keys(), f"samplessss {s['id']}", tgt_h, tgt_w)
+                            print(s.keys(), f"samplessss", tgt_h, tgt_w)
                             s["target_height"] = tgt_h
                             s["target_width"] = tgt_w
                         
