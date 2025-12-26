@@ -840,25 +840,19 @@ class KeyeARModel(Model):
             # 采样
             probs = torch.softmax(logits, dim=-1)
             next_tokens = torch.multinomial(probs.reshape(-1, probs.size(-1)), num_samples=1)[..., 0]
-            #print(f"next_tokens={next_tokens.shape}, probs={probs.shape}") # next_tokens=torch.Size([350, 1]), probs=torch.Size([350, 217472])
-            #print(next_tokens)
-            #print(probs[-1])
+
             next_tokens = next_tokens.reshape(batch_size, -1, next_tokens.shape[-1])
-            #print(f"next_tokensnext_tokens", next_tokens.shape)
-            #print(f"next_tokens={next_tokens}")
+
             next_tokens[...,-1] = q_eos_token
-            #print(f"new_next_tokens", next_tokens)
 
             # 处理组内EOS：EOS之后的token保持pad值
             eos_mask = (next_tokens == q_eos_token)
             eos_indices = eos_mask.int().argmax(dim=-1)  # 每组第一个EOS的位置
             pos_indices = torch.arange(n_tokens, device=next_tokens.device).expand(batch_size, -1)
             keep_pad_mask = pos_indices > eos_indices.unsqueeze(-1)
-            #print(f"keep_pad_mask: {keep_pad_mask.shape}\n{keep_pad_mask}")
-            #print(f"next_tokens: {next_tokens.shape}\n{next_tokens}")
+
             next_tokens = torch.where(keep_pad_mask, pad_token_id, next_tokens)
-            #print(f"n333333", next_tokens.shape)
-            #print(next_tokens)
+
             return next_tokens
         
         # ==============================================
@@ -873,7 +867,7 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
             logits = outputs
-            print(f"logits={logits.shape}")
+
             # logits = outputs.logits  # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
 
@@ -884,14 +878,11 @@ class KeyeARModel(Model):
             # 采样最后一个prompt group的下一个group
             last_group_logits = logits[:, -1, :]  # (batch, 9, vocab_size)
             next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
-            #print(f"next_group={next_group.shape}, current_ids={current_ids.shape}") #  current_ids=
-            #print(f"current_ids={current_ids}")
-            # next_group=torch.Size([1, 350, 9]), current_ids=torch.Size([1, 350, 9])
+
             current_ids = torch.cat([current_ids, next_group], dim=1)
         
         # Decode阶段：增量生成，仅输入新增group
         for step in range(1, max_new_tokens):
-            #print(f"\n\n\n")
             # 仅取最后一个group作为输入（增量生成）
             last_group = current_ids[:, -1:, :]  # (batch, 1, 9)
             current_pos = torch.tensor([[step]], device=input_ids.device).expand(batch_size, -1)
@@ -908,7 +899,7 @@ class KeyeARModel(Model):
                 input_pos=current_pos,
                 **model_kwargs
             )
-            logits = outputs.logits  # (batch, 1, 9, vocab_size)
+            logits = outputs  # (batch, 1, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=q_eos_token)
 
             # 采样新group
@@ -933,3 +924,123 @@ class KeyeARModel(Model):
         if return_1d_ids:
             generated_ids = generated_ids[...,0]
         return generated_ids
+    
+    def extract_image_tokens(self, input_tensor):
+        """
+        从输入tensor中提取所有满足要求的图像token矩阵
+        - 匹配模式：第一列中 vision_start_token_id 开始 → vision_end_id 结束
+        - 提取范围：每个配对区间内的行，取前 n_q_tokens 列
+        
+        Args:
+            input_tensor (torch.Tensor): 输入的二维token矩阵 (seq_len, vocab_dim)
+        
+        Returns:
+            list[torch.Tensor]: 所有提取到的图像token矩阵列表（无匹配时返回空列表）
+        """
+        # 基础校验：确保输入是二维tensor
+        assert input_tensor.dim() == 2, f"Input must be 2D tensor, got {input_tensor.dim()}D"
+        seq_len, vocab_dim = input_tensor.shape
+        if seq_len == 0 or vocab_dim < self.config.vision_config.n_q_tokens:
+            return []
+        
+        # 提取第一列用于定位标记
+        first_col = input_tensor[:, 0]
+        
+        # 找出所有start和end标记的位置（按出现顺序排序）
+        start_indices = torch.where(first_col == self.config.vision_start_token_id)[0].tolist()
+        end_indices = torch.where(first_col == self.config.vision_end_token_id)[0].tolist()
+        
+        if not start_indices or not end_indices:
+            return []  # 无任何标记时返回空列表
+        
+        # 配对start和end：确保每个start对应其后最近的未匹配end
+        matched_pairs = []
+        end_ptr = 0  # 用于遍历end_indices的指针
+        for start in start_indices:
+            # 找到当前start之后的第一个end
+            while end_ptr < len(end_indices) and end_indices[end_ptr] <= start:
+                end_ptr += 1
+            # 若找到有效end，记录配对
+            if end_ptr < len(end_indices):
+                matched_pairs.append((start, end_indices[end_ptr]))
+                end_ptr += 1  # 该end已被使用，移动指针
+            else:
+                break  # 无更多end可匹配，终止循环
+        
+        # 提取每个配对区间的图像token矩阵
+        image_token_list = []
+        for start_idx, end_idx in matched_pairs:
+            # 确保区间有效（start和end之间至少有一行数据）
+            if end_idx - start_idx <= 1:
+                continue  # 无实际图像token行，跳过
+            
+            # 提取：start之后 → end之前的行，取前n_q_tokens列
+            image_tokens = input_tensor[start_idx + 1 : end_idx, :self.config.vision_config.n_q_tokens]
+            image_token_list.append(image_tokens)
+        
+        return image_token_list
+
+    def fill_image_tokens(self, input_ids, sequences):
+        """
+        在input_ids中寻找151652和151653 (<|vision_start|><|vision_end|>)的组合，并在它们之间插入指定数量的151655(image_token_id)单个token
+        
+        Args:
+            input_ids: 输入的token id张量，形状为(1, seq_len)
+            sequences: fill_image_tokens函数的输出，包含多个image_token_id序列的列表
+            
+        Returns:
+            tensor: 插入image_token_id token后的新张量
+        """
+        # 确保输入是CPU上的张量以便处理
+        input_ids = input_ids.cpu()
+        
+        # 将输入转换为一维列表以便处理
+        input_list = input_ids.squeeze(0).tolist()
+        
+        vision_start_token_id = self.config.vision_start_token_id
+        vision_end_token_id = self.config.vision_end_token_id
+        image_token_id = self.config.image_token_id
+
+        # 找到所有151652后面紧跟着151653的位置
+        positions = []
+        for i in range(len(input_list) - 1):
+            if input_list[i] == vision_start_token_id and input_list[i + 1] == vision_end_token_id:
+                positions.append(i)
+        
+        # print(f"找到了 {len(positions)} 个151652-151653组合")
+        # print(f"有 {len(sequences)} 个序列可用于确定插入数量")
+        
+        # 确保位置和序列数量匹配
+        if len(positions) != len(sequences):
+            print(f"警告: 位置数量({len(positions)})与序列数量({len(sequences)})不匹配")
+            # 使用较少的数量
+            min_count = min(len(positions), len(sequences))
+            positions = positions[:min_count]
+            sequences = sequences[:min_count]
+        
+        # 从后往前处理，这样索引不会因为插入而改变
+        positions.reverse()
+        sequences.reverse()
+        
+        result_list = input_list.copy()
+        
+        for pos, seq in zip(positions, sequences):
+            # 获取序列的行数，即需要插入的151655数量
+            num_im_tokens = seq.shape[0]
+            
+            # 在151652和151653之间插入指定数量的151655
+            # 注意: pos是151652的位置，我们想在151652之后、151653之前插入
+            insert_pos = pos + 1
+            
+            # 创建要插入的151655列表
+            tokens_to_insert = [image_token_id] * num_im_tokens
+            
+            # 插入token
+            result_list = result_list[:insert_pos] + tokens_to_insert + result_list[insert_pos:]
+            
+            # print(f"在位置 {pos} 插入了 {num_im_tokens} 个151655 token")
+        
+        # 转换回张量并放回原设备
+        result_tensor = torch.tensor([result_list], device=input_ids.device)
+        
+        return result_tensor
