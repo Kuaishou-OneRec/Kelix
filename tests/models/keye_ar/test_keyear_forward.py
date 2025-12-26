@@ -260,7 +260,7 @@ def demo_keyear_forward():
         # assert torch.all(torch.tensor(generated_ids).to(device) == torch.tensor(outputs).to(device))
 
         # 解码生成的文本
-        generated_text = tokenizer.decode(generated_ids[0,...,0], skip_special_tokens=True)
+        generated_text = processor.decode(generated_ids[0,...,0], skip_special_tokens=True)
         
         print("\n生成结果:")
         print(generated_text)
