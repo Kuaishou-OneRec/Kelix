@@ -195,7 +195,9 @@ class UnifiedTokenDecoder(Model):
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
         self.eval()
-
+        print(f"pos222222")
+        import IPython
+        IPython.embed()
         if tokens is not None:
             input_ids = tokens
         
@@ -289,7 +291,8 @@ class UnifiedTokenDecoder(Model):
             if only_last:
                 generated_ids = generated_ids[..., -1:]
                 logits_list = logits_list[-1:]
-                
+            
+            print(f"return_logits={return_logits}, logits_list={type(logits_list)}")
             if return_logits and logits_list:
                 logits_tensor = torch.stack(logits_list, dim=1)
                 return generated_ids, logits_tensor
