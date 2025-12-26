@@ -140,6 +140,7 @@ nohup mpirun --allow-run-as-root \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 1000000 \
+                --model-config-overrides caption_channels=4096 model_max_length=324 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
