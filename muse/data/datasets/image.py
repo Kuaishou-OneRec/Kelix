@@ -1044,6 +1044,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
         4. If yes, yield batch
         5. Repeat until dataset exhausted
         """
+        print(f"wrapper")
         # Global buckets: (resolution, aspect_ratio) -> [samples]
         buckets: Dict[int, Dict[str, List[Dict]]] = {}
         source_count = collections.Counter()
@@ -1064,7 +1065,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
 
             # Determine resolution level based on sample's natural dimensions
             res = get_resolution_level(orig_h, orig_w)
-            
+            print(f"get_resolution_level: orig_h={orig_h}, orig_w={orig_w}, res={res}")
             if res not in self._resolutions:
                 continue
             
