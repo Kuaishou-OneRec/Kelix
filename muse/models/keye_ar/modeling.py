@@ -274,8 +274,9 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             h = self.token_head(h.flatten(0,1)).reshape(h.shape)
         else:
             self.token_head.set_infer_id_embs_fn(self.tok_embeddings._get_token_embeddings)
+            print(f"hshape {h.shape}")
             _, h = self.token_head.generate(
-                h.flatten(0,1),
+                input_embeddings=h,
                 return_logits=True,
                 max_new_tokens=self.token_head_max_new_tokens
             )
