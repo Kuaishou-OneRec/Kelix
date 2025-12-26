@@ -872,7 +872,9 @@ class KeyeARModel(Model):
                 input_pos=prefill_pos,
                 **model_kwargs
             )
-            logits = outputs.logits  # (batch, 9, vocab_size)
+            logits = outputs
+            print(f"logits={logits.shape}")
+            # logits = outputs.logits  # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
 
             #print(f"logits0000={logits.shape}")
