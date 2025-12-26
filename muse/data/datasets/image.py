@@ -1090,9 +1090,9 @@ class MultiScaleDatasetWrapper(IterableDataset):
                         # Set target dimensions for transform
                         tgt_h, tgt_w = self._aspect_ratios[check_res][check_ratio]
                         for s in batch:
-
                             s["target_height"] = tgt_h
                             s["target_width"] = tgt_w
+                        print(f"batch keys={[b.keys() for b in batch]}")
                         
                         # Update stats
                         source_count.update([s.get("source", "unknown") for s in batch])
@@ -1172,6 +1172,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             image = image.convert("RGB")
 
         if self.multi_scale:
+            print(f"sample keys={sample.keys()}")
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
         else:
