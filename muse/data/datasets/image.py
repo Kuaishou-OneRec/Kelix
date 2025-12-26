@@ -1078,6 +1078,9 @@ class MultiScaleDatasetWrapper(IterableDataset):
             if len(buckets[res][aspect_ratio]) > self.max_bucket_size:
                 buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
             
+            print(f"_resolutions={self._resolutions}")
+            print(f"buckets={buckets}")
+
             # Check all buckets for any that are ready
             for check_res in self._resolutions:
                 batch_size = self._batch_sizes[check_res]
