@@ -272,21 +272,25 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
 
             h = self.token_head(h.flatten(0,1)).reshape(h.shape)
+
+            # shape: [b, seq_len, out_dim]
+            output = self.unembed(h)
         else:
-            self.token_head.set_infer_id_embs_fn(self.tok_embeddings._get_token_embeddings)
+            self.token_head.set_infer_funcs(
+                self.tok_embeddings._get_token_embeddings, 
+                self.unembed
+            )
             # print(f"hshape {h.shape}")
             # print(f"pos1111")
             # import IPython
             # IPython.embed()
-            _, h = self.token_head.generate(
+            _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
                 max_new_tokens=self.token_head_max_new_tokens
             )
-            self.token_head.reset_infer_id_embs_fn()
-
-        # shape: [b, seq_len, out_dim]
-        output = self.unembed(h)
+            self.token_head.reset_infer_funcs()
+            output = h
 
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type

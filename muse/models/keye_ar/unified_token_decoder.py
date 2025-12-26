@@ -119,11 +119,13 @@ class UnifiedTokenDecoder(Model):
             output=nn.Identity()
         )
     
-    def set_infer_id_embs_fn(self, infer_id_embs_fn):
+    def set_infer_funcs(self, infer_id_embs_fn, lm_head):
         self.infer_id_embs_fn = infer_id_embs_fn
+        self.lm_head = lm_head
     
-    def reset_infer_id_embs_fn(self):
+    def reset_infer_funcs(self):
         self.infer_id_embs_fn = None
+        self.lm_head = None
 
     def forward(self, x_emb: torch.Tensor) -> torch.Tensor:
         """
@@ -344,38 +346,45 @@ class UnifiedTokenDecoder(Model):
             import IPython
             IPython.embed()
 
-            # 2. 自回归生成循环（始终用embeddings输入）
-            for _ in range(max_new_tokens):
-                # 序列长度限制检查
-                if current_embeddings.shape[1] >= self.max_length:
+
+        logits_list = []
+        generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
+        current_embeddings = input_embeddings.clone()
+        # 2. 自回归生成循环（始终用embeddings输入）
+        for _ in range(max_new_tokens):
+            # 序列长度限制检查
+            if current_embeddings.shape[1] >= self.max_length:
+                break
+            
+            # 前向传播
+            logits = self.forward(current_embeddings)
+            
+            next_token_logits = logits[:, -1, :]
+            print(f"next_token_logits.shape={next_token_logits.shape}", next_token_logits.argmax(dim=-1))
+            # 保存logits
+            if return_logits:
+                logits_list.append(next_token_logits)
+            
+            next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
+            
+            # 更新生成序列
+            generated_ids = torch.cat([generated_ids, next_token], dim=1)
+            
+            # 生成新token的embedding并更新输入embeddings
+            if self.infer_id_embs_fn is not None:
+                next_token_emb = self.infer_id_embs_fn(next_token, group_size=1)[:,:,0]
+            else:
+                next_token_emb = self.token_embedding(next_token)
+            
+            current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
+            
+            # 检查EOS停止条件
+            if self.eos_token is not None:
+                if next_token[-1, 0] == self.eos_token:
                     break
-                
-                # 前向传播
-                logits = self.forward(current_embeddings)
-                
-                next_token_logits = logits[:, -1, :]
-                
-                # 保存logits
-                if return_logits:
-                    logits_list.append(next_token_logits)
-                
-                next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
-                
-                # 更新生成序列
-                generated_ids = torch.cat([generated_ids, next_token], dim=1)
-                
-                # 生成新token的embedding并更新输入embeddings
-                if self.infer_id_embs_fn is not None:
-                    next_token_emb = self.infer_id_embs_fn(next_token, group_size=1)[:,:,0]
-                else:
-                    next_token_emb = self.token_embedding(next_token)
-                
-                current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
-                
-                # 检查EOS停止条件
-                if self.eos_token is not None:
-                    if next_token[-1, 0] == self.eos_token:
-                        break
+
+
+
             
             # 处理返回结果
             if only_last:
