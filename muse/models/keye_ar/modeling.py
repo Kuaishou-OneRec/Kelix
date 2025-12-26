@@ -773,11 +773,13 @@ class KeyeARModel(Model):
             # 如果指定了max_new_tokens，计算生成的总长度
             max_length = input_seq_len + max_new_tokens
 
-        self.model.model.setup_caches(
-            batch_size=batch_size,
-            dtype=next(self.model.model.parameters()).dtype,
-            decoder_max_seq_len=max_length
-        )
+        if not self.model.model.caches_are_setup():
+            self.model.model.setup_caches(
+                batch_size=batch_size,
+                dtype=next(self.model.model.parameters()).dtype,
+                decoder_max_seq_len=max_length
+            )
+        
 
         # 删除attention_mask以适配flash attention
         model_kwargs.pop('attention_mask', None)
