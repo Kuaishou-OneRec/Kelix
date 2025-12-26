@@ -146,11 +146,12 @@ class UnifiedTokenEmbedding(nn.Module):
     
 
 class UnifiedTransformerDecoder(TransformerDecoder):
-    def __init__(self, *args, token_head: UnifiedTokenDecoder, output_last_hidden_states_only: bool = False, **kwargs):
+    def __init__(self, *args, token_head: UnifiedTokenDecoder, output_last_hidden_states_only: bool = False, token_decoder_with_teacher_forcing: bool = True, token_head_max_new_tokens: int = 9, **kwargs):
         super().__init__(*args, **kwargs)
         self.token_head = token_head
         self.output_last_hidden_states_only = output_last_hidden_states_only
-
+        self.token_decoder_with_teacher_forcing = token_decoder_with_teacher_forcing
+        self.token_head_max_new_tokens = token_head_max_new_tokens
     
     def forward(
         self,
@@ -261,14 +262,21 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
         if len(self.layers) in self.output_hidden_states:
             hidden.append(h)
 
-        token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
-        next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
 
-        # batchsize x length x (n_q_tokens + 1) x embed_dim
-        h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
+        if self.token_decoder_with_teacher_forcing:
+            token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
+            next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
 
+            # batchsize x length x (n_q_tokens + 1) x embed_dim
+            h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
 
-        h = self.token_head(h.flatten(0,1)).reshape(h.shape)
+            h = self.token_head(h.flatten(0,1)).reshape(h.shape)
+        else:
+            _, h = self.token_head.generate(
+                h.flatten(0,1),
+                return_logits=True,
+                max_new_tokens=self.token_head_max_new_tokens
+            )
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
@@ -322,7 +330,9 @@ class UnifiedQwen3Model(Qwen3Model):
             norm=self.model.norm,
             output_last_hidden_states_only=qwen_config.output_last_hidden_states_only,
             output=nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size + tokenizer_config.codebook_size, bias=False),
-            token_head=token_head
+            token_head=token_head,
+            token_decoder_with_teacher_forcing=qwen_config.token_decoder_with_teacher_forcing,
+            token_head_max_new_tokens=qwen_config.n_q_tokens+1
         )
 
 
@@ -330,7 +340,7 @@ class UnifiedQwen3Model(Qwen3Model):
         self,
         tokens: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_pos: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -346,7 +356,7 @@ class UnifiedQwen3Model(Qwen3Model):
         Args:
             tokens: 输入token IDs
             attention_mask: 注意力掩码
-            position_ids: 位置IDs
+            input_pos: 位置IDs
             past_key_values: 过去的key/value缓存
             inputs_embeds: 输入嵌入
             use_cache: 是否使用缓存
@@ -364,7 +374,7 @@ class UnifiedQwen3Model(Qwen3Model):
         outputs = super().forward(
             tokens=tokens,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            input_pos=input_pos,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -658,7 +668,7 @@ class KeyeARModel(Model):
         self,
         tokens: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_pos: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs
@@ -674,16 +684,16 @@ class KeyeARModel(Model):
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
         tokens = self.expand_with_image_tokens(aligned_indices, tokens)
-        assert position_ids.ndim == 2, "position_ids must be 2D"
+        assert input_pos.ndim == 2, "input_pos must be 2D"
         assert tokens.ndim == 3, "tokens must be 3D after expansion, get {}".format(tokens.shape)
         assert tokens.size(2) == self.config.qwen_config.n_q_tokens + 1, \
             "tokens must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, tokens.size(2), aligned_indices)
-        # print(f"tokens={tokens.shape}, position_ids={position_ids.shape}")
+        # print(f"tokens={tokens.shape}, input_pos={input_pos.shape}")
         # 调用Qwen3Model
         outputs = self.model(
             tokens=tokens,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            input_pos=input_pos,
             **kwargs
         )
         return outputs
@@ -729,7 +739,12 @@ class KeyeARModel(Model):
         
         """
         self.eval()
-        
+        assert self.config.qwen_config.token_decoder_with_teacher_forcing == self.model.model.token_decoder_with_teacher_forcing == True, \
+            "token_decoder_with_teacher_forcing must be True, but get configured as {} and param set as {}".format(
+                self.config.qwen_config.token_decoder_with_teacher_forcing,
+                self.model.model.token_decoder_with_teacher_forcing
+            )
+
         # 核心参数定义
         n_q_tokens = self.config.tokenizer_config.n_q_tokens
         n_tokens = n_q_tokens + 1  # 每组token数（9）

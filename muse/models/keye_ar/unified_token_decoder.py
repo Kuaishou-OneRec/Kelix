@@ -183,7 +183,6 @@ class UnifiedTokenDecoder(Model):
                  top_k: Optional[int] = None, 
                  top_p: Optional[float] = None,
                  do_sample: bool = False, 
-                 pad_token_id: Optional[int] = None,
                  return_logits: bool = True,
                  only_last: bool = False) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """

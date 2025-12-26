@@ -57,6 +57,7 @@ def demo_keyear_forward():
     model_dtype = torch.bfloat16
     with set_default_dtype(model_dtype):
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
+    muse_model.config.qwen_config.token_decoder_with_teacher_forcing = muse_model.model.model.token_decoder_with_teacher_forcing = False
 
     # 准备输入文本
     for messages in[

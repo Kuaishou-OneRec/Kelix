@@ -493,26 +493,26 @@ def tokenize_images(tokenizer,
     """
     with torch.no_grad():
         
-        # Create position_ids using cu_seqlens if provided
+        # Create input_pos using cu_seqlens if provided
         if cu_seqlens is not None:
-            # Calculate position_ids based on cu_seqlens
+            # Calculate input_pos based on cu_seqlens
             # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
-            position_ids = []
+            input_pos = []
             for i in range(len(cu_seqlens) - 1):
                 seq_len = cu_seqlens[i+1] - cu_seqlens[i]
                 pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
-                position_ids.append(pos_ids)
-            position_ids = torch.cat(position_ids, dim=0).unsqueeze(0)  # [1, total_seq_len]
+                input_pos.append(pos_ids)
+            input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
         else:
-            # Fallback: create position_ids from input_ids shape
-            position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+            # Fallback: create input_pos from input_ids shape
+            input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
         # Call KeyeARModel forward method
         outputs = tokenizer(
             tokens=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
-            position_ids=position_ids,
+            input_pos=input_pos,
             cu_seqlens=cu_seqlens,
         )
         

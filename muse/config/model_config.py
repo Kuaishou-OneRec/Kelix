@@ -574,6 +574,11 @@ class UnifiedQwen3Config(Qwen3Config):
         description="Whether to output only the last hidden states of the model."
     )
 
+    token_decoder_with_teacher_forcing: bool = Field(
+        default=True,
+        description="Whether to use teacher forcing during training. Disable it during generation."
+    )
+
     # # Tokenizer configuration
     codebook_size: int = Field(default=8192, description="码本大小")
     n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
