@@ -98,7 +98,7 @@ def generate_and_understanding(model, processor):
             ],
         }
     ]
-    inputs = process_message(messages)
+    inputs = process_message(processor, model.device, messages)
     inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
     inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
     output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=450)
@@ -112,7 +112,7 @@ def generate_and_understanding(model, processor):
 def edit_and_understanding(model, processor):
     """测试编辑和理解"""
     print("Testing edit and understanding...")
-    for size in [100, 600]:
+    for size in [300]:
         print(f"Generating circle image of size {size}x{size}...")
         # 生成圆形测试图像
         image = generate_circle_image((size,size))
@@ -128,7 +128,7 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理消息并生成多模态输出
-        inputs = process_message(messages)
+        inputs = process_message(processor, model.device, messages)
         output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=400)
 
         # 解码输出token为文本内容
@@ -148,7 +148,7 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理编辑指令并生成输出
-        inputs = process_message(messages)
+        inputs = process_message(processor, model.device, messages)
         output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=450)
         output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
         content = processor.decode(output_ids[:,0].long().tolist())
@@ -170,7 +170,7 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理纯文本查询并生成输出
-        inputs = process_message(messages)
+        inputs = process_message(processor, model.device, messages)
         inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
         inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
         output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=400)
@@ -179,7 +179,7 @@ def edit_and_understanding(model, processor):
         print(f"setting: size={size}x{size}")
         print(f"输入:\n{messages}")
         print(f"生成内容: {content}\n")
-        # print(f"output_ids=\n{output_ids}")
+
 
 def demo_keyear_forward():
     """
