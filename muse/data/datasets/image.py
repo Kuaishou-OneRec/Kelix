@@ -1049,7 +1049,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
         buckets: Dict[int, Dict[str, List[Dict]]] = {}
         source_count = collections.Counter()
         batch_count = 0
-        
+
         # Initialize buckets for each resolution
         for res in self._resolutions:
             buckets[res] = {}
@@ -1094,7 +1094,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
                         # Set target dimensions for transform
                         tgt_h, tgt_w = self._aspect_ratios[check_res][check_ratio]
                         for s in batch:
-                            print(f"sample {s['id']}", tgt_h, tgt_w)
+                            print(s.keys(), f"samplessss {s['id']}", tgt_h, tgt_w)
                             s["target_height"] = tgt_h
                             s["target_width"] = tgt_w
                         
