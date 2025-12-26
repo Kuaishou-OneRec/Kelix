@@ -338,7 +338,7 @@ class VisReconstructionLoader:
         
         texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
         batch_size = len(original_images)
-        
+        print_rank_0(f"Loaded {len(original_images)} images for visualization, pixel_values shape: {pixel_values.shape}")
         # Add text information to TensorBoard
         if tb_writer is not None and texts:
             for i, text in enumerate(texts):
@@ -452,6 +452,7 @@ def tokenize_images(tokenizer,
             # Fallback: create position_ids from input_ids shape
             position_ids = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
 
+        print_rank_0(f"tokenize_images: pixel_values={pixel_values.shape}")
         # Call KeyeARModel forward method
         outputs = tokenizer(
             tokens=input_ids,
