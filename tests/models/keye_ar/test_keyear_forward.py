@@ -9,6 +9,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor
 from torch.nn import functional as F
 from muse.config import KeyeARConfig
+from keye_vl_utils import process_vision_info
 from muse.models.keye_ar import KeyeARModel
 from muse.training.common import set_default_dtype
 from PIL import Image, ImageDraw
