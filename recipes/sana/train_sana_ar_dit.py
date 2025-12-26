@@ -344,7 +344,6 @@ class VisReconstructionLoader:
             for i, text in enumerate(texts):
                 # Truncate text if too long for TensorBoard display
                 truncated_text = text[:200] + "..." if len(text) > 200 else text
-                # print(f"truncated_text={truncated_text}")
                 tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
         # 1. VAE Reconstruction: encode -> decode
@@ -1240,9 +1239,6 @@ def train():
             collate_fn=lambda x: collate_fn(x[0])
         )
         
-        for it in dataloader:
-            print_rank_0(f"iiiiiiiiiiiiiit={it}")
-        exit()
         print_rank_0("Multi-scale training enabled")
     else:
         dataloader = DataLoader(

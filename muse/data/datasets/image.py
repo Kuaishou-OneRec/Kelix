@@ -1044,7 +1044,6 @@ class MultiScaleDatasetWrapper(IterableDataset):
         4. If yes, yield batch
         5. Repeat until dataset exhausted
         """
-        print(f"wrapper")
         # Global buckets: (resolution, aspect_ratio) -> [samples]
         buckets: Dict[int, Dict[str, List[Dict]]] = {}
         source_count = collections.Counter()
@@ -1065,7 +1064,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
 
             # Determine resolution level based on sample's natural dimensions
             res = get_resolution_level(orig_h, orig_w)
-            print(f"get_resolution_level: orig_h={orig_h}, orig_w={orig_w}, res={res}")
+
             if res not in self._resolutions:
                 continue
             
@@ -1078,9 +1077,6 @@ class MultiScaleDatasetWrapper(IterableDataset):
             # Limit bucket size to avoid memory overflow
             if len(buckets[res][aspect_ratio]) > self.max_bucket_size:
                 buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
-            
-            print(f"_resolutions={self._resolutions}")
-            print(f"buckets={buckets}")
 
             # Check all buckets for any that are ready
             for check_res in self._resolutions:
@@ -1094,7 +1090,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
                         # Set target dimensions for transform
                         tgt_h, tgt_w = self._aspect_ratios[check_res][check_ratio]
                         for s in batch:
-                            print(s.keys(), f"samplessss", tgt_h, tgt_w)
+
                             s["target_height"] = tgt_h
                             s["target_width"] = tgt_w
                         
