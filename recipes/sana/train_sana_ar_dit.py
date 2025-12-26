@@ -1268,8 +1268,6 @@ def train():
             # Single resolution default - no curriculum scheduling
             budget_config = ResolutionBudgetConfig(
                 budgets=[ResolutionBudget(args.image_size, args.batch_size)],
-                start_weights=[1.0],
-                end_weights=[1.0],
             )
         
         print_rank_0(f"Multi-scale training with curriculum scheduling:")
