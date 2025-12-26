@@ -58,7 +58,7 @@ def process_message(processor, device, messages, add_generation_prompt=True, pad
     
     # print(f"text={text}")
     
-    image_inputs, video_inputs = process_vision_info(messages)
+    image_inputs, video_inputs, _ = process_vision_info(messages)
     inputs = processor(
         text=[text],
         images=image_inputs,
