@@ -195,9 +195,7 @@ class UnifiedTokenDecoder(Model):
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
         self.eval()
-        print(f"pos222222")
-        import IPython
-        IPython.embed()
+
         if tokens is not None:
             input_ids = tokens
         
@@ -205,8 +203,7 @@ class UnifiedTokenDecoder(Model):
         if (input_ids is None and input_embeddings is None) or \
            (input_ids is not None and input_embeddings is not None):
             raise ValueError("Must provide either input_ids or input_embeddings, not both")
-        import IPython
-        IPython.embed()
+
         with torch.no_grad():
             # 1. 统一初始输入为embeddings（无论输入是ids还是embeddings）
             if input_ids is not None:
@@ -216,7 +213,7 @@ class UnifiedTokenDecoder(Model):
                 
                 # 从input_ids生成初始embeddings
                 if self.infer_id_embs_fn is not None:
-                    current_embeddings = self.infer_id_embs_fn(input_ids)
+                    current_embeddings = self.infer_id_embs_fn(input_ids, group_size=1)
                 else:
                     current_embeddings = self.token_embedding(input_ids)
                 
@@ -276,7 +273,7 @@ class UnifiedTokenDecoder(Model):
                 
                 # 生成新token的embedding并更新输入embeddings
                 if self.infer_id_embs_fn is not None:
-                    next_token_emb = self.infer_id_embs_fn(next_token)
+                    next_token_emb = self.infer_id_embs_fn(next_token, group_size=1)[:,:,0]
                 else:
                     next_token_emb = self.token_embedding(next_token)
                 
@@ -291,13 +288,12 @@ class UnifiedTokenDecoder(Model):
             if only_last:
                 generated_ids = generated_ids[..., -1:]
                 logits_list = logits_list[-1:]
+    
+        if return_logits and logits_list:
+            logits_tensor = torch.stack(logits_list, dim=1)
+            return generated_ids, logits_tensor
             
-            print(f"return_logits={return_logits}, logits_list={type(logits_list)}")
-            if return_logits and logits_list:
-                logits_tensor = torch.stack(logits_list, dim=1)
-                return generated_ids, logits_tensor
-            
-            return generated_ids
+        return generated_ids
     
     @staticmethod
     def convert_hf_state_dict(state_dict: dict, reduce_mode: bool = False) -> dict:
