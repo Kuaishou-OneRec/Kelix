@@ -6,7 +6,7 @@ import os
 from typing import Any, Dict, Optional, List
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor
 from torch.nn import functional as F
 from muse.config import KeyeARConfig
 from muse.models.keye_ar import KeyeARModel
@@ -37,6 +37,149 @@ def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
+def process_message(processor, device, messages, add_generation_prompt=True, padding=False):
+    """
+    处理消息并返回模型输入
+    
+    Args:
+        messages: 消息列表
+        add_generation_prompt: 是否添加生成提示
+        padding: 是否进行填充
+        
+    Returns:
+        处理后的模型输入
+    """
+    text = processor.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=add_generation_prompt
+    )
+    
+    # print(f"text={text}")
+    
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=padding,
+        truncation=False,
+        return_tensors="pt",
+    ).to(device)
+    return inputs
+
+def generate_and_understanding(model, processor):
+    print("Testing generate and understanding...")
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Generate an image of a cat."}
+            ],
+        }
+    ]
+    inputs = process_message(
+        processor, model.device, messages)
+    output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=450)
+    output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+    content = processor.decode(output_ids[:,0].long().tolist())
+    print(f"输入:\n{messages}")
+    print(f"生成内容: {content}\n")
+    print(f"output_ids=\n{output_ids}")
+    print()
+    input_image_ids = model.extract_image_tokens(output_ids)
+    print(f"input_image_ids({[x.shape for x in input_image_ids]})=\n{input_image_ids}")
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "<|vision_start|><|vision_end|>what's in the image? I need a detailed description."}
+            ],
+        }
+    ]
+    inputs = process_message(messages)
+    inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
+    inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
+    output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=450)
+    output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+    content = processor.decode(output_ids[:,0].long().tolist())
+    print(f"输入:\n{messages}")
+    print(f"生成内容: {content}\n")
+    print(f"output_ids=\n{output_ids}")
+
+
+def edit_and_understanding(model, processor):
+    """测试编辑和理解"""
+    print("Testing edit and understanding...")
+    for size in [100, 600]:
+        print(f"Generating circle image of size {size}x{size}...")
+        # 生成圆形测试图像
+        image = generate_circle_image((size,size))
+
+        # 构建第一次查询：图像内容描述请求
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": "What's in the image? I need detailed description."}
+                ],
+            }
+        ]
+        # 处理消息并生成多模态输出
+        inputs = process_message(messages)
+        output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=400)
+
+        # 解码输出token为文本内容
+        content = processor.decode(output_ids[0,inputs["input_ids"].shape[1]:,0].long().tolist())
+        print(f"输入:\n{messages}")
+        # print(f"生成内容: {content}\n")
+        print()
+
+        # 构建第二次查询：图像编辑指令（将图像颜色变为红色）
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": "Turn the image color into red, but keep the background the same."}
+                ],
+            }
+        ]
+        # 处理编辑指令并生成输出
+        inputs = process_message(messages)
+        output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=450)
+        output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+        content = processor.decode(output_ids[:,0].long().tolist())
+        print(f"输入:\n{messages}")
+        print(f"生成内容: {content}\n")
+        print(f"output_ids=\n{output_ids}")
+        print()
+
+        # 从输出中提取图像token用于后续分析
+        input_image_ids = model.extract_image_tokens(output_ids)
+        print(f"input_image_ids({[x.shape for x in input_image_ids]})=\n{input_image_ids}")
+        # 构建第三次查询：纯文本查询（使用特殊token标记图像位置）
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "<|vision_start|><|vision_end|>what's in the image? I need a detailed description."}
+                ],
+            }
+        ]
+        # 处理纯文本查询并生成输出
+        inputs = process_message(messages)
+        inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
+        inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
+        output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=400)
+        output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+        content = processor.decode(output_ids[:,0].long().tolist())
+        print(f"setting: size={size}x{size}")
+        print(f"输入:\n{messages}")
+        print(f"生成内容: {content}\n")
+        # print(f"output_ids=\n{output_ids}")
+
 def demo_keyear_forward():
     """
     KeyeAR模型前向计算的demo，严格参考tests/test_keyear.py的实现
@@ -58,7 +201,11 @@ def demo_keyear_forward():
     with set_default_dtype(model_dtype):
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     muse_model.config.qwen_config.token_decoder_with_teacher_forcing = muse_model.model.model.token_decoder_with_teacher_forcing = False
-
+    
+    processor = AutoProcessor.from_pretrained(
+            checkpoint_dir, 
+            trust_remote_code=True
+        )
     # 准备输入文本
     for messages in[
             [
@@ -75,14 +222,7 @@ def demo_keyear_forward():
         ]:
         print(f"\n\n\nmessages=\n{messages}")
         # 应用chat template并编码
-        text = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=True
-        )
-        model_inputs = tokenizer([text], return_tensors="pt").to(device)
-        print(f"model_inputs={model_inputs}")
+        inputs = process_message(processor, device, messages)
         
             
         # 调用generate函数生成文本
@@ -99,14 +239,13 @@ def demo_keyear_forward():
             "eos_token_id": tokenizer.eos_token_id
         }
         
-        print(f"Qwen3 baseline generation:")
 
         # 生成文本
         print(f"生成参数: {generate_params}")
         print("开始生成...")
         
         generated_ids = muse_model.generate(
-            model_inputs["input_ids"], 
+            **inputs, 
             **generate_params
         )
         print(f"generated_ids: {generated_ids}")
