@@ -119,6 +119,12 @@ class UnifiedTokenDecoder(Model):
             output=nn.Identity()
         )
     
+    def set_infer_id_embs_fn(self, infer_id_embs_fn):
+        self.infer_id_embs_fn = infer_id_embs_fn
+    
+    def reset_infer_id_embs_fn(self):
+        self.infer_id_embs_fn = None
+
     def forward(self, x_emb: torch.Tensor) -> torch.Tensor:
         """
         前向传播（输入为embedding）
