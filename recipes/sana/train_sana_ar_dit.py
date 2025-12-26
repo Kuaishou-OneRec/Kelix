@@ -284,7 +284,7 @@ def get_argument_parser():
 
     ############ Visualization Args ############
     
-    parser.add_argument("--cfg-scale", type=float, default=4.5,
+    parser.add_argument("--cfg-scale", type=float, default=1.0,
                         help="CFG scale for validation sampling")
     
     parser.add_argument("--num-sampling-steps", type=int, default=20,
@@ -973,7 +973,7 @@ def train():
         config_save_path = os.path.join(args.output_dir, "config.json")
         model_config.save(config_save_path)
         print_rank_0(f"Saved model config to: {config_save_path}")
-
+    
     model_class_name = model_config.model_class
     # Get model class from registry
     print_rank_0(f"Available models: {list_models()}")
@@ -1100,6 +1100,7 @@ def train():
     total_params = sum(p.numel() for p in model.parameters())
     trainable_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print_rank_0(f"Total params: {total_params:,}, Trainable: {trainable_count:,} ({100*trainable_count/total_params:.2f}%)")
+
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable
     vae = None
@@ -1136,7 +1137,6 @@ def train():
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
-    print(f"args.learning_rate={args.learning_rate}")
     optimizer = torch.optim.AdamW(
         model.get_optimizer_grouped_parameters(
             learning_rate=args.learning_rate,
@@ -1154,6 +1154,7 @@ def train():
         num_training_steps=args.num_training_steps,
         min_lr=args.min_lr
     )
+
     # Create loss function
     loss_fn = FlowMatchingLoss(
         num_timesteps=args.num_timesteps,
