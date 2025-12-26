@@ -203,37 +203,107 @@ def demo_chat2image_dataset_multiscale(
 
 def example_iterate_dataloader(dataloader: DataLoader, max_batches: int = 2) -> None:
     """
-    Example function showing how to iterate through the dataloader.
+    Example function showing how to iterate through the dataloader and inspect samples.
+    
+    This function demonstrates how to fetch and analyze actual samples from the dataloader,
+    including tensor shapes, data ranges, and field information.
     
     Args:
         dataloader: The configured DataLoader
-        max_batches: Maximum number of batches to iterate (for testing)
+        max_batches: Maximum number of batches to iterate and print (for testing)
     """
-    print(f"\nIterating through dataloader (showing first {max_batches} batches):")
-    print("=" * 80)
+    print(f"\n{'=' * 100}")
+    print(f"Iterating through dataloader (showing first {max_batches} batches)")
+    print(f"{'=' * 100}")
     
-    for batch_idx, batch in enumerate(dataloader):
-        if batch_idx >= max_batches:
-            break
-        
-        print(f"\nBatch {batch_idx}:")
-        print(f"  Batch keys: {list(batch.keys())}")
-        
-        for key, value in batch.items():
-            if isinstance(value, torch.Tensor):
-                print(f"  {key}: shape={value.shape}, dtype={value.dtype}")
-            else:
-                print(f"  {key}: type={type(value)}")
-        
-        # Show example of accessing specific fields
-        if "image" in batch:
-            print(f"  Image range: [{batch['image'].min():.3f}, {batch['image'].max():.3f}]")
-        
-        if "input_ids" in batch:
-            print(f"  Input IDs: {batch['input_ids'].shape}")
-        
-        if "pixel_values" in batch:
-            print(f"  Pixel values: {batch['pixel_values'].shape}")
+    total_samples = 0
+    
+    try:
+        for batch_idx, batch in enumerate(dataloader):
+            if batch_idx >= max_batches:
+                break
+            
+            print(f"\n{'─' * 100}")
+            print(f"Batch {batch_idx}:")
+            print(f"{'─' * 100}")
+            
+            # Print batch keys
+            print(f"Available fields: {list(batch.keys())}")
+            
+            # Iterate through all fields in the batch
+            for key, value in batch.items():
+                print(f"\n  Field: '{key}'")
+                
+                if isinstance(value, torch.Tensor):
+                    print(f"    Type: torch.Tensor")
+                    print(f"    Shape: {value.shape}")
+                    print(f"    Data type: {value.dtype}")
+                    print(f"    Device: {value.device}")
+                    
+                    # Show value ranges for numerical tensors
+                    if value.dtype in [torch.float32, torch.float64, torch.float16]:
+                        print(f"    Value range: [{value.min():.4f}, {value.max():.4f}]")
+                        print(f"    Mean: {value.mean():.4f}, Std: {value.std():.4f}")
+                    
+                    # Show more details for specific fields
+                    if key == "image":
+                        total_samples += value.shape[0]
+                        print(f"    ├─ Number of images: {value.shape[0]}")
+                        print(f"    ├─ Image dimensions: {value.shape[-2:]} (H x W)")
+                        print(f"    └─ Channels: {value.shape[1] if len(value.shape) > 3 else 'N/A'}")
+                    
+                    elif key == "pixel_values":
+                        print(f"    ├─ Total patches: {value.shape[0]}")
+                        print(f"    └─ Patch feature dim: {value.shape[-1]}")
+                    
+                    elif key == "image_grid_thw":
+                        print(f"    ├─ Grid info shape: {value.shape}")
+                        print(f"    └─ Contains (T, H, W) grid dimensions for each image")
+                    
+                    elif key in ["input_ids", "attention_mask"]:
+                        print(f"    ├─ Sequence length (cumulative): {value.shape[-1] if len(value.shape) > 1 else value.shape[0]}")
+                        if key == "input_ids" and len(value.shape) > 1:
+                            print(f"    └─ Non-zero tokens: {(value > 0).sum().item()}")
+                    
+                    elif key == "cu_seqlens":
+                        print(f"    ├─ Cumulative sequence lengths: {value}")
+                        print(f"    └─ Number of samples: {len(value) - 1}")
+                
+                elif isinstance(value, dict):
+                    print(f"    Type: dict")
+                    print(f"    Keys: {list(value.keys())}")
+                    print(f"    Number of items: {len(value)}")
+                
+                elif isinstance(value, list):
+                    print(f"    Type: list")
+                    print(f"    Length: {len(value)}")
+                    if len(value) > 0:
+                        print(f"    First item type: {type(value[0])}")
+                
+                else:
+                    print(f"    Type: {type(value)}")
+                    print(f"    Value: {value}")
+            
+            # Print summary statistics for the batch
+            print(f"\n  Batch Summary:")
+            print(f"    ├─ Total samples in batch: {total_samples}")
+            if "image" in batch:
+                print(f"    ├─ Image batch shape: {batch['image'].shape}")
+            if "input_ids" in batch:
+                print(f"    ├─ Text tokens shape: {batch['input_ids'].shape}")
+            if "pixel_values" in batch:
+                print(f"    └─ Vision patches shape: {batch['pixel_values'].shape}")
+    
+    except StopIteration:
+        print(f"\nDataloader iteration completed.")
+    except Exception as e:
+        print(f"\n✗ Error during dataloader iteration: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print(f"\n{'=' * 100}")
+    print(f"Total samples fetched: {total_samples}")
+    print(f"{'=' * 100}\n")
 
 
 if __name__ == "__main__":
@@ -244,12 +314,13 @@ if __name__ == "__main__":
     Configuration based on: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.sh
     """
     print("Chat2ImageDataset + MultiScaleDatasetWrapper Demo")
-    print("=" * 80)
+    print("=" * 100)
     
     # Example 1: Multi-scale training with single resolution (default config)
     # Mirrors: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.sh
-    print("\nExample 1: Multi-scale training with single resolution (default)")
-    print("-" * 80)
+    print("\n\n" + "█" * 100)
+    print("Example 1: Multi-scale training with single resolution (default)")
+    print("█" * 100)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
             sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
@@ -260,14 +331,21 @@ if __name__ == "__main__":
             use_multi_scale=True,
             num_workers=0,
         )
-        # example_iterate_dataloader(dataloader, max_batches=1)
         print("✓ Multi-scale dataloader (single resolution) created successfully")
+        
+        # Fetch and print actual samples from dataloader
+        print("\nFetching samples from dataloader...")
+        example_iterate_dataloader(dataloader, max_batches=1)
+        
     except Exception as e:
-        print(f"✗ Error creating multi-scale dataloader: {e}")
+        print(f"✗ Error creating/using multi-scale dataloader: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Example 2: Fixed-size training (no multi-scale wrapper)
-    print("\n\nExample 2: Fixed-size training (no multi-scale)")
-    print("-" * 80)
+    print("\n\n" + "█" * 100)
+    print("Example 2: Fixed-size training (no multi-scale)")
+    print("█" * 100)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
             sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
@@ -278,14 +356,21 @@ if __name__ == "__main__":
             use_multi_scale=False,
             num_workers=0,
         )
-        # example_iterate_dataloader(dataloader, max_batches=1)
         print("✓ Fixed-size dataloader created successfully")
+        
+        # Fetch and print actual samples from dataloader
+        print("\nFetching samples from dataloader...")
+        example_iterate_dataloader(dataloader, max_batches=1)
+        
     except Exception as e:
-        print(f"✗ Error creating fixed-size dataloader: {e}")
+        print(f"✗ Error creating/using fixed-size dataloader: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Example 3: Multi-scale with custom resolution budgets
-    print("\n\nExample 3: Multi-scale training with custom resolution budgets")
-    print("-" * 80)
+    print("\n\n" + "█" * 100)
+    print("Example 3: Multi-scale training with custom resolution budgets")
+    print("█" * 100)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
             sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
@@ -297,10 +382,17 @@ if __name__ == "__main__":
             resolution_budgets=[(512, 32), (1024, 8)],
             num_workers=0,
         )
-        # example_iterate_dataloader(dataloader, max_batches=1)
         print("✓ Multi-scale dataloader (custom budgets) created successfully")
+        
+        # Fetch and print actual samples from dataloader
+        print("\nFetching samples from dataloader...")
+        example_iterate_dataloader(dataloader, max_batches=1)
+        
     except Exception as e:
-        print(f"✗ Error creating multi-scale dataloader: {e}")
+        print(f"✗ Error creating/using multi-scale dataloader: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print("\n" + "=" * 80)
-    print("Demo complete! Dataloader is ready for training.")
+    print("\n\n" + "=" * 100)
+    print("Demo complete! All dataloader configurations tested with sample inspection.")
+    print("=" * 100 + "\n")
