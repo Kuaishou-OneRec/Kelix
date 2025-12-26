@@ -318,6 +318,13 @@ def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
 
 
 def main():
+    '''
+    demo usage:
+
+    PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
+        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted \
+        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted
+    '''
     parser = argparse.ArgumentParser(description="Convert Hugging Face Keye checkpoint to Muse format")
     parser.add_argument(
         "--hf-checkpoint-path",
