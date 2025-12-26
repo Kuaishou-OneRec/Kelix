@@ -137,6 +137,8 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.8_stage1/step9500/ \
+                --resume_from_tag global_step9500 \
                 --comment '$comment' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
