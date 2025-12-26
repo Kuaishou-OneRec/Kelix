@@ -185,8 +185,6 @@ def demo_keyear_forward():
     """
     KeyeAR模型前向计算的demo，严格参考tests/test_keyear.py的实现
     """
-    
-
     # 设置随机种子
     torch.manual_seed(0)
     if torch.cuda.is_available():
@@ -199,13 +197,6 @@ def demo_keyear_forward():
             checkpoint_dir, 
             trust_remote_code=True
         )
-    # inputs = process_message(processor, device, [
-    #             {"role": "user", "content": [{
-    #                 "type": "image",
-    #                 "image": generate_circle_image()
-    #             }, 
-    #             {"type": "text", "content": "What's in the image?"}]}
-    #         ])
 
     # 创建Muse模型实例
     model_dtype = torch.bfloat16
@@ -240,7 +231,7 @@ def demo_keyear_forward():
         
         # 设置生成参数
         generate_params = {
-            "max_new_tokens": 20,
+            "max_new_tokens": 450,
             "temperature": 0.8,
             "top_k": 1,
             "top_p": 0.95,
@@ -264,7 +255,9 @@ def demo_keyear_forward():
         
         print("\n生成结果:")
         print(generated_text)
-        
+    
+    generate_and_understanding(muse_model, processor)
+    edit_and_understanding(muse_model, processor)
 
 
 
