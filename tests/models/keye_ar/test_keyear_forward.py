@@ -195,20 +195,17 @@ def demo_keyear_forward():
     # 检查预训练模型路径是否存在
     checkpoint_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
 
-    processor = AutoProcessor.from_pretrained(
-            checkpoint_dir, 
-            trust_remote_code=True
-        )
-    inputs = process_message(processor, device, [
-                {"role": "user", "content": [{
-                    "type": "image",
-                    "image": generate_circle_image()
-                }, 
-                {"type": "text", "content": "What's in the image?"}]}
-            ])
-    input()
-    print(f"inputs=\n{inputs}")
-    exit()
+    # processor = AutoProcessor.from_pretrained(
+    #         checkpoint_dir, 
+    #         trust_remote_code=True
+    #     )
+    # inputs = process_message(processor, device, [
+    #             {"role": "user", "content": [{
+    #                 "type": "image",
+    #                 "image": generate_circle_image()
+    #             }, 
+    #             {"type": "text", "content": "What's in the image?"}]}
+    #         ])
 
     # 创建Muse模型实例
     model_dtype = torch.bfloat16
