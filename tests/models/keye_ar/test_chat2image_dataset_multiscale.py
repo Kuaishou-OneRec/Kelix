@@ -6,13 +6,43 @@ for multi-scale training, following the pattern from recipes/sana/train_sana_ar_
 """
 
 import torch
+import torch.distributed as dist
 import pytest
 from pathlib import Path
 from torch.utils.data import DataLoader
 from typing import List, Dict, Any
+import os
 
 from muse.data.datasets import Chat2ImageDataset, MultiScaleDatasetWrapper
 from muse.data.utils import ResolutionBudget, ResolutionBudgetConfig
+
+
+def setup_distributed_environment() -> bool:
+    """
+    Initialize distributed environment for testing.
+    
+    In a single-process test environment, we initialize a local process group
+    to avoid distributed training errors.
+    
+    Returns:
+        True if distributed was already initialized or successfully initialized,
+        False otherwise
+    """
+    if dist.is_available() and not dist.is_initialized():
+        try:
+            # For testing, use the default backend on CPU
+            dist.init_process_group(
+                backend='gloo',
+                init_method='tcp://127.0.0.1:29500',
+                rank=0,
+                world_size=1,
+            )
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to initialize distributed environment: {e}")
+            print("Will attempt to run without distributed mode...")
+            return False
+    return True
 
 
 def demo_chat2image_dataset_multiscale(
@@ -25,6 +55,9 @@ def demo_chat2image_dataset_multiscale(
     use_multi_scale: bool = True,
     resolution_budgets: List[tuple] = None,
     center_crop: bool = True,
+    rank: int = 0,
+    world_size: int = 1,
+    initialize_dist: bool = True,
 ) -> DataLoader:
     """
     Demo function showing how to use Chat2ImageDataset with MultiScaleDatasetWrapper.
@@ -69,6 +102,15 @@ def demo_chat2image_dataset_multiscale(
         
         center_crop: Whether to center crop images (default: True)
                     From run_ar_dit_lzx_4096_v2_1024im.json
+        
+        rank: Distributed rank (default: 0)
+              For single-process testing, keep at 0
+        
+        world_size: Number of distributed processes (default: 1)
+                   For single-process testing, keep at 1
+        
+        initialize_dist: Whether to initialize distributed environment (default: True)
+                        In test environment, automatically initializes single-process group
     
     Returns:
         Configured DataLoader with appropriate collate_fn
@@ -91,6 +133,12 @@ def demo_chat2image_dataset_multiscale(
     """
     
     # ====================================================================================
+    # Setup: Initialize distributed environment if needed
+    # ====================================================================================
+    if initialize_dist:
+        setup_distributed_environment()
+    
+    # ====================================================================================
     # Step 1: Prepare dataset configuration
     # Based on: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.json
     # ====================================================================================
@@ -102,6 +150,8 @@ def demo_chat2image_dataset_multiscale(
         "center_crop": center_crop,
         "packing": False,
         "multi_scale": use_multi_scale,
+        "rank": rank,
+        "world_size": world_size,
     }
     
     print(f"Building Chat2ImageDataset with config: {dataset_config}")
