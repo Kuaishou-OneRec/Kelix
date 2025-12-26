@@ -1049,7 +1049,7 @@ class MultiScaleDatasetWrapper(IterableDataset):
         buckets: Dict[int, Dict[str, List[Dict]]] = {}
         source_count = collections.Counter()
         batch_count = 0
-
+        
         # Initialize buckets for each resolution
         for res in self._resolutions:
             buckets[res] = {}

@@ -1240,6 +1240,9 @@ def train():
             collate_fn=lambda x: collate_fn(x[0])
         )
         
+        for it in dataloader:
+            print_rank_0(f"iiiiiiiiiiiiiit={it}")
+        exit()
         print_rank_0("Multi-scale training enabled")
     else:
         dataloader = DataLoader(
@@ -1427,7 +1430,6 @@ def train():
             # Logging
             if scheduler.should_logging():
                 metrics.write_logs(scheduler.global_step)
-
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
