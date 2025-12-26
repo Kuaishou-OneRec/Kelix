@@ -1565,7 +1565,6 @@ def train():
             if torch_profiler:
                 torch_profiler.step()
 
-
     # Save final checkpoint
     print_rank_0("Training completed. Saving final checkpoint...")
     save_checkpoint(

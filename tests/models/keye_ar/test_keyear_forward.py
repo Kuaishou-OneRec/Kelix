@@ -207,9 +207,9 @@ def demo_keyear_forward():
 
     # 准备输入文本
     for messages in[
-            [
-                {"role": "user", "content": "Give me a short introduction to large language model."}
-            ],
+            # [
+            #     {"role": "user", "content": "Give me a short introduction to large language model."}
+            # ],
             [
                 {"role": "user", "content": [{
                     "type": "image",
