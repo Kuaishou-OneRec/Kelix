@@ -128,7 +128,7 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
-                --resolution-budgets "512:32,768:16,1024:16" \
+                --resolution-budgets "512:2,768:1,1024:1" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
