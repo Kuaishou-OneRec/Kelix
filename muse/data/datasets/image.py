@@ -979,6 +979,7 @@ class Token2ImageDataset(DistributedDataset):
 
         return result
 
+
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.
     
@@ -1107,32 +1108,6 @@ class MultiScaleDatasetWrapper(IterableDataset):
                             )
                         
                         yield batch
-
-
-            tgt_res = self.scheduler.current_resolution
-            aspect_ratio_keys = list(self.scheduler.get_aspect_ratios(tgt_res).keys())
-            self.rng.shuffle(aspect_ratio_keys)
-            for ratio in aspect_ratio_keys:
-                if len(buckets[tgt_res][ratio]) >= self._batch_sizes[tgt_res]:
-                    batch = buckets[tgt_res][ratio][:self._batch_sizes[tgt_res]]
-                    buckets[tgt_res][ratio] = buckets[tgt_res][ratio][self._batch_sizes[tgt_res]:]
-                    tgt_h, tgt_w = self.scheduler.get_aspect_ratios(tgt_res)[ratio]
-                    for sample in batch:
-                        sample["target_height"] = tgt_h
-                        sample["target_width"] = tgt_w
-                    if self.scheduler._current_step % 10 == 0:
-                        print_rank_0(
-                            f"Step: {self.scheduler._current_step}, "
-                            F"Sampler stats: {self.get_sampler_stats()}, "
-                            f"Batch size: {len(batch)}, "
-                            f"Target resolution: {tgt_res}, "
-                            f"Target height: {tgt_h}, "
-                            f"Target width: {tgt_w}, "
-                            f"Aspect ratio: {ratio}"
-                        )
-                    yield batch
-                    self.scheduler.step()
-                    break
 
 
 class Chat2ImageDataset(Token2ImageDataset):
