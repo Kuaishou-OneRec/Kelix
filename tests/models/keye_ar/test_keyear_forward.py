@@ -244,7 +244,7 @@ def demo_keyear_forward():
             "temperature": 0.8,
             "top_k": 1,
             "top_p": 0.95,
-            "eos_token_id": tokenizer.eos_token_id
+            # "eos_token_id": tokenizer.eos_token_id
         }
         
 
