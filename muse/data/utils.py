@@ -31,19 +31,19 @@ ASPECT_RATIO_512 = {
     '3.75': (960, 256), '3.88': (992, 256), '4.0': (1024, 256),
 }
 
-# ASPECT_RATIO_768 = {
-#     '0.25': (384, 1536), '0.26': (384, 1488), '0.27': (384, 1440), '0.28': (384, 1392),
-#     '0.32': (432, 1344), '0.33': (432, 1296), '0.35': (432, 1248), '0.4': (480, 1200),
-#     '0.42': (480, 1152), '0.48': (528, 1104), '0.5': (528, 1056), '0.52': (528, 1008),
-#     '0.57': (576, 1008), '0.6': (576, 960), '0.68': (624, 912), '0.72': (624, 864),
-#     '0.78': (672, 864), '0.82': (672, 816), '0.88': (720, 816), '0.94': (720, 768),
-#     '1.0': (768, 768),
-#     '1.07': (768, 720), '1.13': (816, 720), '1.21': (816, 672), '1.29': (864, 672),
-#     '1.38': (864, 624), '1.46': (912, 624), '1.67': (960, 576), '1.75': (1008, 576),
-#     '2.0': (1056, 528), '2.09': (1104, 528), '2.4': (1152, 480), '2.5': (1200, 480),
-#     '2.89': (1248, 432), '3.0': (1296, 432), '3.11': (1344, 432), '3.62': (1392, 384),
-#     '3.75': (1440, 384), '3.88': (1488, 384), '4.0': (1536, 384),
-# }
+ASPECT_RATIO_768 = {
+    '0.25': (384, 1536), '0.27': (384, 1440), '0.29': (416, 1440), '0.31': (416, 1344),
+    '0.33': (448, 1344), '0.36': (448, 1248), '0.38': (480, 1248), '0.42': (480, 1152),
+    '0.44': (512, 1152), '0.5': (512, 1024), '0.56': (576, 1024), '0.6': (576, 960),
+    '0.67': (640, 960), '0.71': (640, 896), '0.75': (672, 896), '0.78': (672, 864),
+    '0.81': (704, 864), '0.88': (736, 832), '0.92': (768, 832),
+    '1.0': (768, 768),
+    '1.08': (832, 768), '1.13': (832, 736), '1.17': (864, 736), '1.23': (864, 704),
+    '1.29': (896, 704), '1.33': (896, 672), '1.4': (896, 640), '1.5': (960, 640),
+    '1.67': (960, 576), '1.78': (1024, 576), '2.0': (1024, 512), '2.25': (1152, 512),
+    '2.4': (1152, 480), '2.6': (1248, 480), '2.79': (1248, 448), '3.0': (1344, 448),
+    '3.23': (1344, 416), '3.46': (1440, 416), '3.75': (1440, 384), '4.0': (1536, 384),
+}
 
 ASPECT_RATIO_1024 = {
     '0.25': (512, 2048), '0.26': (512, 1984), '0.27': (512, 1920), '0.28': (512, 1856),
@@ -125,7 +125,7 @@ def get_closest_ratio(height: int, width: int, aspect_ratios: dict) -> str:
 # Standard resolution levels for multi-scale training
 # RESOLUTION_LEVELS = [256, 512, 768, 1024, 1536, 2048]
 
-RESOLUTION_LEVELS = [256, 512, 1024, 1536, 2048]
+RESOLUTION_LEVELS = [256, 512, 768, 1024, 1536, 2048]
 
 def get_resolution_level(
     height: int,
@@ -191,7 +191,7 @@ def get_closest_size(
     
     return target_h, target_w
 # =============================================================================
-# Resolution Budget Configuration for Dynamic Multi-Scale Training
+# Resolution Budget Configuration for Multi-Scale Training
 # =============================================================================
 
 @dataclass
@@ -203,98 +203,44 @@ class ResolutionBudget:
 
 @dataclass
 class ResolutionBudgetConfig:
-    """Complete resolution budget configuration with weight scheduling.
+    """Resolution budget configuration for multi-scale training.
     
-    Supports curriculum learning where weights interpolate linearly from
-    start_weights to end_weights based on training progress.
+    Simply configures supported resolution levels and their batch sizes.
+    Samples are buffered by (resolution, aspect_ratio) and yielded when
+    a bucket reaches its batch size.
     
     Args:
         budgets: List of ResolutionBudget entries
-        start_weights: Weights at training start (low-res heavy)
-        end_weights: Weights at training end (high-res heavy)
         
     Example:
         >>> config = ResolutionBudgetConfig(
         ...     budgets=[ResolutionBudget(512, 32), ResolutionBudget(1024, 8)],
-        ...     start_weights=[0.8, 0.2],  # 80% 512, 20% 1024 at start
-        ...     end_weights=[0.2, 0.8],    # 20% 512, 80% 1024 at end
         ... )
-        >>> config.get_weights(0.0)   # [0.8, 0.2]
-        >>> config.get_weights(0.5)   # [0.5, 0.5]
-        >>> config.get_weights(1.0)   # [0.2, 0.8]
     """
     budgets: List[ResolutionBudget]
-    start_weights: List[float]  # weights at training start (low-res heavy)
-    end_weights: List[float]    # weights at training end (high-res heavy)
-    
-    def __post_init__(self):
-        n = len(self.budgets)
-        assert len(self.start_weights) == n, \
-            f"start_weights length {len(self.start_weights)} != budgets {n}"
-        assert len(self.end_weights) == n, \
-            f"end_weights length {len(self.end_weights)} != budgets {n}"
-        # Normalize weights
-        self.start_weights = self._normalize(self.start_weights)
-        self.end_weights = self._normalize(self.end_weights)
-    
-    @staticmethod
-    def _normalize(weights: List[float]) -> List[float]:
-        """Normalize weights to sum to 1."""
-        total = sum(weights)
-        if total == 0:
-            return [1.0 / len(weights)] * len(weights)
-        return [w / total for w in weights]
-    
-    def get_weights(self, progress: float) -> List[float]:
-        """Get interpolated weights based on training progress.
-        
-        Args:
-            progress: Training progress in [0, 1] (current_step / total_steps)
-            
-        Returns:
-            List of weights, one per resolution budget
-        """
-        progress = max(0.0, min(1.0, progress))  # clamp to [0, 1]
-        weights = [
-            start + progress * (end - start)
-            for start, end in zip(self.start_weights, self.end_weights)
-        ]
-        return self._normalize(weights)
 
 
-# Default config: low-res heavy early, high-res heavy late
+# Default config for multi-scale training
 DEFAULT_RESOLUTION_BUDGETS = ResolutionBudgetConfig(
     budgets=[
         ResolutionBudget(size=512, batch_size=32),
         ResolutionBudget(size=768, batch_size=16),
         ResolutionBudget(size=1024, batch_size=8),
     ],
-    start_weights=[0.7, 0.2, 0.1],  # 70% 512, 20% 768, 10% 1024 at start
-    end_weights=[0.1, 0.2, 0.7],    # 10% 512, 20% 768, 70% 1024 at end
 )
 
 
-def parse_resolution_budgets(
-    budgets_str: str,
-    start_weights_str: Optional[str] = None,
-    end_weights_str: Optional[str] = None,
-) -> ResolutionBudgetConfig:
-    """Parse resolution budgets from CLI strings.
+def parse_resolution_budgets(budgets_str: str) -> ResolutionBudgetConfig:
+    """Parse resolution budgets from CLI string.
     
     Args:
         budgets_str: Format "512:32,768:16,1024:8" (size:batch_size)
-        start_weights_str: Format "0.7,0.2,0.1" (weights at start)
-        end_weights_str: Format "0.1,0.2,0.7" (weights at end)
         
     Returns:
         ResolutionBudgetConfig with parsed values
         
     Example:
-        >>> config = parse_resolution_budgets(
-        ...     "512:32,768:16,1024:8",
-        ...     "0.7,0.2,0.1",
-        ...     "0.1,0.2,0.7"
-        ... )
+        >>> config = parse_resolution_budgets("512:32,768:16,1024:8")
     """
     budgets = []
     for entry in budgets_str.split(","):
@@ -303,30 +249,4 @@ def parse_resolution_budgets(
         batch_size = int(parts[1])
         budgets.append(ResolutionBudget(size=size, batch_size=batch_size))
     
-    n = len(budgets)
-    
-    # Parse or default start weights
-    if start_weights_str:
-        start_weights = [float(w.strip()) for w in start_weights_str.split(",")]
-    else:
-        # Default: favor low-res (first budget gets 70%)
-        if n > 1:
-            start_weights = [0.7] + [0.3 / (n - 1)] * (n - 1)
-        else:
-            start_weights = [1.0]
-    
-    # Parse or default end weights
-    if end_weights_str:
-        end_weights = [float(w.strip()) for w in end_weights_str.split(",")]
-    else:
-        # Default: favor high-res (last budget gets 70%)
-        if n > 1:
-            end_weights = [0.3 / (n - 1)] * (n - 1) + [0.7]
-        else:
-            end_weights = [1.0]
-    
-    return ResolutionBudgetConfig(
-        budgets=budgets,
-        start_weights=start_weights,
-        end_weights=end_weights,
-    )
+    return ResolutionBudgetConfig(budgets=budgets)
