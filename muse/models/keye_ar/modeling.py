@@ -733,7 +733,7 @@ class KeyeARModel(Model):
         # 核心参数定义
         n_q_tokens = self.config.tokenizer_config.n_q_tokens
         n_tokens = n_q_tokens + 1  # 每组token数（9）
-        batch_size = input_ids.size[0]
+        batch_size = input_ids.size(0)
         image_token_id = self.config.qwen_config.image_token_id
         q_eos_token = self.config.qwen_config.q_eos_token
         pad_token_id = q_eos_token  # self.config.pad_token_id if hasattr(self.config, 'pad_token_id') else 0
