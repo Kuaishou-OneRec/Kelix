@@ -184,6 +184,7 @@ def demo_keyear_forward():
     """
     KeyeAR模型前向计算的demo，严格参考tests/test_keyear.py的实现
     """
+    
 
     # 设置随机种子
     torch.manual_seed(0)
@@ -193,8 +194,20 @@ def demo_keyear_forward():
     # 检查预训练模型路径是否存在
     checkpoint_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
 
-    # 加载Hugging Face模型和tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(
+            checkpoint_dir, 
+            trust_remote_code=True
+        )
+    inputs = process_message(processor, device, [
+                {"role": "user", "content": [{
+                    "type": "image",
+                    "image": generate_circle_image()
+                }, 
+                {"type": "text", "content": "What's in the image?"}]}
+            ])
+    input()
+    print(f"inputs=\n{inputs}")
+    exit()
 
     # 创建Muse模型实例
     model_dtype = torch.bfloat16
@@ -202,10 +215,7 @@ def demo_keyear_forward():
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     muse_model.config.qwen_config.token_decoder_with_teacher_forcing = muse_model.model.model.token_decoder_with_teacher_forcing = False
     
-    processor = AutoProcessor.from_pretrained(
-            checkpoint_dir, 
-            trust_remote_code=True
-        )
+
     # 准备输入文本
     for messages in[
             [
