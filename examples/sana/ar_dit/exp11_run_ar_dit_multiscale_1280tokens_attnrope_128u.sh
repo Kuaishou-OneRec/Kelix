@@ -38,9 +38,6 @@ SECOND_LAST_DIR=$(basename "$(dirname "${SCRIPT_DIR}")")
 # 4. 提取最后一级目录名
 LAST_DIR=$(basename "${SCRIPT_DIR}")
 OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_DIR}
-echo "Output: $OUTPUT_DIR"
-
-
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -142,7 +139,7 @@ nohup mpirun --allow-run-as-root \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --max-condition-length 2560 \
+                --max-condition-length 1280 \
                 --output-dir $OUTPUT_DIR \
                 --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
@@ -157,7 +154,7 @@ nohup mpirun --allow-run-as-root \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 1000000 \
-                --model-config-overrides caption_channels=4096 model_max_length=2560 y_norm_scale_factor=1 use_cross_attn_rope=True \
+                --model-config-overrides caption_channels=4096 model_max_length=1280 y_norm_scale_factor=1 use_cross_attn_rope=True \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \

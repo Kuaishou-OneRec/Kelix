@@ -19,7 +19,7 @@ MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max324/./step23000/global_step23000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
@@ -139,9 +139,9 @@ nohup mpirun --allow-run-as-root \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --max-condition-length 2560 \
+                --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
+                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
                 --resolution-budgets "512:2,768:1,1024:1" \
                 --learning-rate 1e-4 \
@@ -154,7 +154,7 @@ nohup mpirun --allow-run-as-root \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 1000000 \
-                --model-config-overrides caption_channels=4096 model_max_length=3000 y_norm_scale_factor=1 use_cross_attn_rope=True \
+                --model-config-overrides caption_channels=4096 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
