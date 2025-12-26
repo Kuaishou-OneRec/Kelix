@@ -135,7 +135,6 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
-                --model-config-overrides  \
                 --beta2 0.999 \
                 --batch-size 16 \
                 --lr-scheduler-type constant \
