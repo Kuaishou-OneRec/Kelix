@@ -41,6 +41,8 @@ def is_image_exist(image_path: str) -> bool:
 
 def load_image(image: str) -> Optional[Image.Image]:
   try:
+    if not isinstance(image, str):
+      return None
     if not is_image_exist(image):
       image_bytes = base64.b64decode(image)
       image = Image.open(BytesIO(image_bytes))

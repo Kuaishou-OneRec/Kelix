@@ -17,7 +17,6 @@ from typing import Dict, Any, List, Optional
 from muse.data.datasets.image import (
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
-    ResolutionBudgetScheduler,
 )
 from muse.data.utils import (
     ResolutionBudget,
@@ -311,149 +310,6 @@ class TestToken2ImageDatasetCollateFn:
 
 
 # =============================================================================
-# Tests for ResolutionBudgetScheduler
-# =============================================================================
-
-class TestResolutionBudgetScheduler:
-    """Test ResolutionBudgetScheduler class."""
-    
-    def test_init(self):
-        """Test scheduler initialization."""
-        config = ResolutionBudgetConfig(
-            budgets=[
-                ResolutionBudget(512, 32),
-                ResolutionBudget(1024, 8),
-            ],
-            start_weights=[0.8, 0.2],
-            end_weights=[0.2, 0.8],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=1000)
-        
-        assert len(scheduler.budgets) == 2
-        assert scheduler.total_steps == 1000
-        assert scheduler._current_step == 0
-    
-    def test_step_increments_counter(self):
-        """Test step() increments _current_step and samples resolution."""
-        config = ResolutionBudgetConfig(
-            budgets=[ResolutionBudget(512, 32)],
-            start_weights=[1.0],
-            end_weights=[1.0],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        
-        scheduler.step()
-        assert scheduler._current_step == 1
-        
-        scheduler.step()
-        assert scheduler._current_step == 2
-    
-    def test_current_resolution_property(self):
-        """Test current_resolution returns sampled resolution."""
-        config = ResolutionBudgetConfig(
-            budgets=[ResolutionBudget(512, 32)],
-            start_weights=[1.0],
-            end_weights=[1.0],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        scheduler.step()  # Need to step first to sample resolution
-        
-        # With single resolution, should always return 512
-        assert scheduler.current_resolution == 512
-    
-    def test_progress_calculation(self):
-        """Test progress calculation."""
-        config = ResolutionBudgetConfig(
-            budgets=[ResolutionBudget(512, 32)],
-            start_weights=[1.0],
-            end_weights=[1.0],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        
-        assert scheduler.progress == 0.0
-        
-        scheduler._current_step = 50
-        assert abs(scheduler.progress - 0.5) < 1e-6
-        
-        scheduler._current_step = 100
-        assert abs(scheduler.progress - 1.0) < 1e-6
-    
-    def test_progress_capped_at_one(self):
-        """Test progress is capped at 1.0 when step exceeds total_steps."""
-        config = ResolutionBudgetConfig(
-            budgets=[ResolutionBudget(512, 32)],
-            start_weights=[1.0],
-            end_weights=[1.0],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        scheduler._current_step = 200
-        
-        assert scheduler.progress == 1.0
-    
-    def test_get_aspect_ratios(self):
-        """Test get_aspect_ratios returns correct dict."""
-        config = ResolutionBudgetConfig(
-            budgets=[
-                ResolutionBudget(512, 32),
-                ResolutionBudget(1024, 8),
-            ],
-            start_weights=[0.5, 0.5],
-            end_weights=[0.5, 0.5],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        
-        ratios_512 = scheduler.get_aspect_ratios(512)
-        ratios_1024 = scheduler.get_aspect_ratios(1024)
-        
-        assert len(ratios_512) > 0
-        assert len(ratios_1024) > 0
-        # 1024 sizes should be larger
-        assert ratios_1024["1.0"][0] > ratios_512["1.0"][0]
-    
-    def test_get_stats(self):
-        """Test get_stats returns correct info."""
-        config = ResolutionBudgetConfig(
-            budgets=[
-                ResolutionBudget(512, 32),
-                ResolutionBudget(1024, 8),
-            ],
-            start_weights=[0.8, 0.2],
-            end_weights=[0.2, 0.8],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        scheduler._current_step = 25
-        scheduler.step()  # Need to step to set current_resolution
-        
-        stats = scheduler.get_stats()
-        
-        assert stats["step"] == 26  # After step()
-        assert 512 in stats["weights"]
-        assert 1024 in stats["weights"]
-    
-    def test_curriculum_weight_interpolation(self):
-        """Test that weights interpolate correctly over training."""
-        config = ResolutionBudgetConfig(
-            budgets=[
-                ResolutionBudget(512, 32),
-                ResolutionBudget(1024, 8),
-            ],
-            start_weights=[0.9, 0.1],
-            end_weights=[0.1, 0.9],
-        )
-        scheduler = ResolutionBudgetScheduler(config, total_steps=100)
-        
-        # At start
-        scheduler._current_step = 0
-        weights_start = scheduler.current_weights
-        assert weights_start[0] > weights_start[1]
-        
-        # At end
-        scheduler._current_step = 100
-        weights_end = scheduler.current_weights
-        assert weights_end[1] > weights_end[0]
-
-
-# =============================================================================
 # Tests for MultiScaleDatasetWrapper
 # =============================================================================
 
@@ -465,14 +321,11 @@ class TestMultiScaleDatasetWrapperInit:
         mock_dataset = MockDataset([])
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
             config=config,
-            total_steps=1000,
         )
         
         assert wrapper.config is config
@@ -484,67 +337,17 @@ class TestMultiScaleDatasetWrapperInit:
         mock_dataset = MockDataset([])
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
             config=config,
-            total_steps=500,
             drop_last=True,
             max_bucket_size=5000,
         )
         
         assert wrapper.drop_last is True
         assert wrapper.max_bucket_size == 5000
-        assert wrapper.scheduler.total_steps == 500
-
-
-class TestMultiScaleDatasetWrapperMethods:
-    """Test MultiScaleDatasetWrapper methods."""
-    
-    def test_set_step(self):
-        """Test set_step updates scheduler step."""
-        mock_dataset = MockDataset([])
-        config = ResolutionBudgetConfig(
-            budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
-        )
-        wrapper = MultiScaleDatasetWrapper(
-            dataset=mock_dataset,
-            config=config,
-        )
-        
-        wrapper.set_step(500)
-        
-        assert wrapper.scheduler._current_step == 500
-    
-    def test_get_sampler_stats(self):
-        """Test get_sampler_stats returns scheduler stats."""
-        mock_dataset = MockDataset([])
-        config = ResolutionBudgetConfig(
-            budgets=[
-                ResolutionBudget(512, 4),
-                ResolutionBudget(1024, 2),
-            ],
-            start_weights=[0.8, 0.2],
-            end_weights=[0.2, 0.8],
-        )
-        wrapper = MultiScaleDatasetWrapper(
-            dataset=mock_dataset,
-            config=config,
-            total_steps=1000,
-        )
-        wrapper.set_step(250)
-        
-        stats = wrapper.get_sampler_stats()
-        
-        assert stats["step"] == 250
-        assert "weights" in stats
-        assert 512 in stats["weights"]
-        assert 1024 in stats["weights"]
 
 
 class TestMultiScaleDatasetWrapperIteration:
@@ -561,8 +364,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],  # batch_size=4
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -587,8 +388,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -618,8 +417,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -650,8 +447,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -675,8 +470,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 50)],  # Large batch size
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -696,8 +489,6 @@ class TestMultiScaleDatasetWrapperIteration:
         
         config = ResolutionBudgetConfig(
             budgets=[ResolutionBudget(512, 4)],
-            start_weights=[1.0],
-            end_weights=[1.0],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
@@ -725,14 +516,12 @@ class TestMultiScaleDatasetWrapperMultiResolution:
                 ResolutionBudget(512, 8),
                 ResolutionBudget(1024, 4),
             ],
-            start_weights=[0.5, 0.5],
-            end_weights=[0.5, 0.5],
         )
         wrapper = MultiScaleDatasetWrapper(
             dataset=mock_dataset,
             config=config,
         )
         
-        # Scheduler should have aspect ratio dicts for both resolutions
-        assert 512 in wrapper.scheduler.aspect_ratio_dicts
-        assert 1024 in wrapper.scheduler.aspect_ratio_dicts
+        # Wrapper should have aspect ratio dicts for both resolutions
+        assert 512 in wrapper._aspect_ratios
+        assert 1024 in wrapper._aspect_ratios

@@ -4,7 +4,6 @@ from .image import (
     Text2ImageDataset, 
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
-    ResolutionBudgetScheduler,
     Chat2ImageDataset
 )
 
@@ -15,6 +14,5 @@ __all__ = [
     'Text2ImageDataset',
     'Token2ImageDataset',
     'MultiScaleDatasetWrapper',
-    'ResolutionBudgetScheduler',
     'Chat2ImageDataset'
 ]

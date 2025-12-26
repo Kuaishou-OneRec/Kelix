@@ -169,14 +169,6 @@ def get_argument_parser():
     parser.add_argument("--resolution-budgets", type=str, default=None,
                         help="Resolution budgets as 'size:batch_size,...' "
                              "Example: '512:32,768:16,1024:8'")
-    
-    parser.add_argument("--resolution-start-weights", type=str, default=None,
-                        help="Starting weights for each resolution (low-res heavy). "
-                             "Example: '0.7,0.2,0.1' means 70%% 512, 20%% 768, 10%% 1024")
-    
-    parser.add_argument("--resolution-end-weights", type=str, default=None,
-                        help="Ending weights for each resolution (high-res heavy). "
-                             "Example: '0.1,0.2,0.7' means 10%% 512, 20%% 768, 70%% 1024")
 
     ############ Diffusion args ############
     parser.add_argument("--num-timesteps", type=int, default=1000,
@@ -699,39 +691,24 @@ def train():
     dataset = Token2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     
-    # Store wrapper reference for step updates (used in training loop)
-    multi_scale_wrapper = None
-    
     if args.multi_scale:
         # Parse resolution budget config or create single-resolution default
         if args.resolution_budgets:
-            budget_config = parse_resolution_budgets(
-                args.resolution_budgets,
-                args.resolution_start_weights,
-                args.resolution_end_weights,
-            )
+            budget_config = parse_resolution_budgets(args.resolution_budgets)
         else:
-            # Single resolution default - no curriculum scheduling
+            # Single resolution default
             budget_config = ResolutionBudgetConfig(
                 budgets=[ResolutionBudget(args.image_size, args.batch_size)],
-                start_weights=[1.0],
-                end_weights=[1.0],
             )
         
-        print_rank_0(f"Multi-scale training with curriculum scheduling:")
-        print_rank_0(f"  Total steps: {args.num_training_steps}")
-        for b, sw, ew in zip(budget_config.budgets, 
-                              budget_config.start_weights, 
-                              budget_config.end_weights):
-            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
-                         f"weight {sw:.2f} -> {ew:.2f}")
+        print_rank_0(f"Multi-scale training configuration:")
+        for b in budget_config.budgets:
+            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}")
         
-        # Wrap with multi-scale wrapper (supports both fixed and dynamic resolution)
+        # Wrap with multi-scale wrapper
         multi_scale_wrapper = MultiScaleDatasetWrapper(
             dataset=dataset,
             config=budget_config,
-            # We should scale total_steps, cause each worker update once in `num_workers` steps.
-            total_steps=args.num_training_steps // args.num_workers,
             drop_last=True
         )
         
