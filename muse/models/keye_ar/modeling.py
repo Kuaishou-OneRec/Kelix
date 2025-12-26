@@ -817,7 +817,6 @@ class KeyeARModel(Model):
             raise ValueError(f"input_ids维度必须是2或3，当前为{input_ids.dim()}")
         
         prompt_groups = current_ids.shape[1]  # prompt的组数
-        cache = None  # 初始化KV Cache
         
         # ==============================================
         # 辅助函数：采样单个token组
