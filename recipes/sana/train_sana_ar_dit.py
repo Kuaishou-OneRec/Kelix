@@ -1278,8 +1278,7 @@ def train():
         multi_scale_wrapper = MultiScaleDatasetWrapper(
             dataset=dataset,
             config=budget_config,
-            total_steps=args.num_training_steps,
-            drop_last=True,
+            drop_last=True
         )
         
         dataloader = DataLoader(
