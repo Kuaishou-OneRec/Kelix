@@ -37,9 +37,10 @@ SECOND_LAST_DIR=$(basename "$(dirname "${SCRIPT_DIR}")")
 
 # 4. 提取最后一级目录名
 LAST_DIR=$(basename "${SCRIPT_DIR}")
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/${SECOND_LAST_DIR}/${LAST_DIR}
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_DIR}
 echo "Output: $OUTPUT_DIR"
-exit
+
+
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
