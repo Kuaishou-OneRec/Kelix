@@ -812,7 +812,9 @@ class Token2ImageDataset(DistributedDataset):
 
         target_h, target_w = self.image_size
 
-        if self.multi_scale:
+        # Handle multi-scale: check if target dimensions are provided (from MultiScaleDatasetWrapper)
+        # If not provided, use default dimensions
+        if self.multi_scale and "target_height" in sample and "target_width" in sample:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
             # Apply same Resize + CenterCrop but keep as PIL image for processor
@@ -1171,11 +1173,13 @@ class Chat2ImageDataset(Token2ImageDataset):
         if image.mode != "RGB":
             image = image.convert("RGB")
 
-        if self.multi_scale:
-            print(f"sample keys={sample.keys()}")
+        # Handle multi-scale: check if target dimensions are provided (from MultiScaleDatasetWrapper)
+        # If not provided, use default transform
+        if self.multi_scale and "target_height" in sample and "target_width" in sample:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
         else:
+            # Default transform for fixed resolution or when target dimensions not available
             target_image = self.transform(image)
 
         # Get message from sample for chat template processing
