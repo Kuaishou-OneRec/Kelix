@@ -355,13 +355,11 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
-        #print(f"uuuu1111", tokens.shape)
         if tokens.size(-1) == 1:
             tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
                 tokens=tokens,
             )
-        #print(f"uuuu22222", tokens.shape)
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             tokens=tokens,
@@ -585,6 +583,9 @@ class KeyeARModel(Model):
         返回值：
             expanded_ids: 拓展后的矩阵，维度为 (batch_size, len, 1 + n_q_tokens)
         """
+        if tokens.ndim == 3 and tokens.size(2) != 1:
+            return tokens # 已经拓展过了
+        
         # 记录原始维度
         original_shape = tokens.shape
         batch_size = original_shape[0]
@@ -686,3 +687,225 @@ class KeyeARModel(Model):
             **kwargs
         )
         return outputs
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids,
+        max_new_tokens=18,  # 指的是原始token数量 (未repeat前的)
+        temperature=0.7,
+        top_k=50,
+        top_p=0.9,
+        return_1d_ids=False,
+        **model_kwargs
+    ):
+        """
+        多模态生成函数，处理image token扩展和循环生成逻辑
+
+            输入的input_ids可以是batchsize x length，也可以是batchsize x length x (n_q_tokens + 1)
+        如果是batchsize x length，你需要自动repeat到batchsize x length x (n_q_tokens + 1)
+            规则是，如果id位置是self.config.qwen_config.image_token_id，则将拓展之后的前n_q_tokens个id替换为self.config.qwen_config.image_token_id，最后一个替换为self.config.qwen_config.q_eos_token
+            否则，第二个位置就替换为self.config.qwen_config.q_eos_token，其余位置是0。
+        
+        模型每次输出的logits是batchsize x length x 9 x voc_size, 其中有一个token是self.config.qwen_config.q_eos_token, 实际有效的token是self.config.qwen_config.q_eos_token之前token。
+        你需要根据这个输出的logits，恢复出batchsize x length x 9 input_ids，然后输回模型。
+
+        input_ids: batchsize x length, 输入的token id，其中第一个位置是self.config.q_bos_token，其余位置是0。
+        
+        自动从model_kwargs中移除attention_mask以适配flash attention。
+
+        note:
+            这个方法及其消耗显存
+
+        Args:
+            input_ids: 输入token，支持shape=(batch, len)或(batch, len, 9)
+            max_new_tokens: 最大生成步数
+            temperature: 采样温度
+            top_k: Top-K采样参数
+            top_p: Top-P采样参数
+            **model_kwargs: 其他模型参数
+        
+        Returns:
+            generated_ids: 生成的token，shape=(batch, gen_len, 9)
+        
+        """
+        self.eval()
+        
+        # 核心参数定义
+        n_q_tokens = self.config.vision_config.n_q_tokens  # 8
+        n_tokens = n_q_tokens + 1  # 每组token数（9）
+        batch_size = input_ids.size[0]
+        image_token_id = self.config.qwen_config.image_token_id
+        q_eos_token = self.config.qwen_config.q_eos_token
+        pad_token_id = q_eos_token  # self.config.pad_token_id if hasattr(self.config, 'pad_token_id') else 0
+
+        input_seq_len = input_ids.size(1)
+
+        # 处理max_new_tokens参数
+        if max_new_tokens is not None:
+            # 如果指定了max_new_tokens，计算生成的总长度
+            max_length = input_seq_len + max_new_tokens
+
+        self.model.model.setup_caches(
+            batch_size=batch_size,
+            dtype=next(self.model.model.parameters()).dtype,
+            decoder_max_seq_len=max_length
+        )
+
+        # 删除attention_mask以适配flash attention
+        model_kwargs.pop('attention_mask', None)
+        
+        # ==============================================
+        # 1. 输入处理：将2D input_ids扩展为3D (batch, len, 9)
+        # ==============================================
+        if input_ids.dim() == 2:
+            batch_size, seq_len = input_ids.shape
+            # 初始化扩展后的tensor
+            expanded_ids = torch.full(
+                (batch_size, seq_len, n_tokens),
+                pad_token_id,
+                dtype=input_ids.dtype,
+                device=input_ids.device
+            )
+            
+            # 填充第一个token（保持原输入）
+            expanded_ids[:, :, 0] = input_ids
+            
+            # 识别image token位置
+            image_mask = (input_ids == image_token_id)
+
+            # 处理image组：前8个设为image_token_id，最后一个设为q_eos_token
+            expanded_ids[..., :n_q_tokens][image_mask] = image_token_id
+            expanded_ids[..., -1][image_mask] = q_eos_token
+            
+            # 处理文本组：第二个位置设为q_eos_token，其余保持pad
+            non_image_mask = ~image_mask
+            expanded_ids[..., 1][non_image_mask] = q_eos_token
+            
+            current_ids = expanded_ids  # (batch, prompt_groups, 9)
+        elif input_ids.dim() == 3:
+            # 已为3D输入，直接使用
+            current_ids = input_ids.clone()
+        else:
+            raise ValueError(f"input_ids维度必须是2或3，当前为{input_ids.dim()}")
+        
+        prompt_groups = current_ids.shape[1]  # prompt的组数
+        cache = None  # 初始化KV Cache
+        
+        # ==============================================
+        # 辅助函数：采样单个token组
+        # ==============================================
+        def _sample_group(logits, temperature, top_k, top_p):
+            """采样一组token（9个）"""
+            # temperature缩放
+            if temperature > 0:
+                logits = logits / (temperature + 1e-5)
+            
+            # Top-K过滤
+            if top_k > 0:
+                top_k = min(top_k, logits.size(-1))
+                values, indices = torch.topk(logits, top_k, dim=-1)
+                logits = torch.full_like(logits, float('-inf')).scatter_(-1, indices, values)
+            
+            # Top-P过滤
+            if top_p < 1.0:
+                sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+                cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                mask = cumulative_probs > top_p
+                mask[..., 0] = False  # 至少保留第一个token
+                sorted_logits[mask] = float('-inf')
+                logits = torch.gather(sorted_logits, -1, torch.argsort(sorted_indices, dim=-1))
+            
+            # 采样
+            probs = torch.softmax(logits, dim=-1)
+            next_tokens = torch.multinomial(probs.reshape(-1, probs.size(-1)), num_samples=1)[..., 0]
+            #print(f"next_tokens={next_tokens.shape}, probs={probs.shape}") # next_tokens=torch.Size([350, 1]), probs=torch.Size([350, 217472])
+            #print(next_tokens)
+            #print(probs[-1])
+            next_tokens = next_tokens.reshape(batch_size, -1, next_tokens.shape[-1])
+            #print(f"next_tokensnext_tokens", next_tokens.shape)
+            #print(f"next_tokens={next_tokens}")
+            next_tokens[...,-1] = q_eos_token
+            #print(f"new_next_tokens", next_tokens)
+
+            # 处理组内EOS：EOS之后的token保持pad值
+            eos_mask = (next_tokens == q_eos_token)
+            eos_indices = eos_mask.int().argmax(dim=-1)  # 每组第一个EOS的位置
+            pos_indices = torch.arange(n_tokens, device=next_tokens.device).expand(batch_size, -1)
+            keep_pad_mask = pos_indices > eos_indices.unsqueeze(-1)
+            #print(f"keep_pad_mask: {keep_pad_mask.shape}\n{keep_pad_mask}")
+            #print(f"next_tokens: {next_tokens.shape}\n{next_tokens}")
+            next_tokens = torch.where(keep_pad_mask, pad_token_id, next_tokens)
+            #print(f"n333333", next_tokens.shape)
+            #print(next_tokens)
+            return next_tokens
+        
+        # ==============================================
+        # 2. 生成逻辑：Prefill + Decode
+        # ==============================================
+        # Prefill阶段：首次输入完整prompt，获取初始cache
+        if prompt_groups > 0:
+            prefill_pos = torch.arange(input_seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
+            outputs = self(
+                input_ids=current_ids,
+                input_pos=prefill_pos,
+                **model_kwargs
+            )
+            logits = outputs.logits  # (batch, 9, vocab_size)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
+
+            #print(f"logits0000={logits.shape}")
+            logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
+            
+            #print(f"logits={logits.shape}")
+            # 采样最后一个prompt group的下一个group
+            last_group_logits = logits[:, -1, :]  # (batch, 9, vocab_size)
+            next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
+            #print(f"next_group={next_group.shape}, current_ids={current_ids.shape}") #  current_ids=
+            #print(f"current_ids={current_ids}")
+            # next_group=torch.Size([1, 350, 9]), current_ids=torch.Size([1, 350, 9])
+            current_ids = torch.cat([current_ids, next_group], dim=1)
+        
+        # Decode阶段：增量生成，仅输入新增group
+        for step in range(1, max_new_tokens):
+            #print(f"\n\n\n")
+            # 仅取最后一个group作为输入（增量生成）
+            last_group = current_ids[:, -1:, :]  # (batch, 1, 9)
+            current_pos = torch.tensor([[step]], device=input_ids.device).expand(batch_size, -1)
+
+            # 移除不需要的视觉参数
+            for key in ["pixel_values", "image_grid_thw", "video_grid_thw", 
+                    "fast_video_grid_thw", "pixel_values_videos", "input_image_ids"]:
+                model_kwargs.pop(key, None)
+            
+            #print(f"input last_group={last_group}")
+            # 模型前向（使用cache）
+            outputs = self(
+                input_ids=last_group,
+                input_pos=current_pos,
+                **model_kwargs
+            )
+            logits = outputs.logits  # (batch, 1, 9, vocab_size)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=q_eos_token)
+
+            # 采样新group
+            current_logits = logits[:, :, :]  # (batch, 9, vocab_size)
+            next_group = _sample_group(current_logits, temperature, top_k, top_p)
+
+            # Append新生成的group
+            current_ids = torch.cat([current_ids, next_group], dim=1)
+            
+            # 提前终止：新增group的第一个token是EOS
+            # next_group, batchsize x length x n_tokens
+            if (next_group[..., 0] == self.config.eos_token_id).all():
+                break
+        
+        self.model.model.reset_caches()
+
+        # ==============================================
+        # 3. 返回结果
+        # ==============================================
+        generated_ids = current_ids
+        
+        if return_1d_ids:
+            generated_ids = generated_ids[...,0]
+        return generated_ids
