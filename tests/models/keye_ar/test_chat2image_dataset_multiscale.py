@@ -16,14 +16,15 @@ from muse.data.utils import ResolutionBudget, ResolutionBudgetConfig
 
 
 def demo_chat2image_dataset_multiscale(
-    sources: str = "path/to/parquet/files",
-    processor_path: str = "Qwen/Qwen2-VL-7B-Instruct",
+    sources: str = "/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
+    processor_path: str = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
     image_size: int = 1024,
-    batch_size: int = 8,
-    max_condition_length: int = 384,
+    batch_size: int = 1,
+    max_condition_length: int = 324,
     num_workers: int = 0,
     use_multi_scale: bool = True,
     resolution_budgets: List[tuple] = None,
+    center_crop: bool = True,
 ) -> DataLoader:
     """
     Demo function showing how to use Chat2ImageDataset with MultiScaleDatasetWrapper.
@@ -31,31 +32,59 @@ def demo_chat2image_dataset_multiscale(
     This demonstrates the typical pattern used in recipes/sana/train_sana_ar_dit.py
     for setting up multi-scale training with chat-style image generation datasets.
     
+    Based on: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.sh
+    
+    Configuration Sources:
+    - Dataset config: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.json
+    - Training script: recipes/sana/train_sana_ar_dit.py
+    - Model/Processor: KEYE_AR_DIR from training config
+    
     Args:
-        sources: Path to parquet files or directory containing dataset
-        processor_path: Path to processor (e.g., "Qwen/Qwen2-VL-7B-Instruct")
-        image_size: Base image size for fixed-size training
-        batch_size: Batch size for fixed-size training
-        max_condition_length: Maximum condition sequence length for processor
-        num_workers: Number of dataloader workers
-        use_multi_scale: Whether to enable multi-scale training
+        sources: Path to parquet index file or directory containing dataset
+                Default from run_ar_dit_lzx_4096_v2_1024im.json:
+                /llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json
+        
+        processor_path: Path to Keye AR processor/model for Chat2ImageDataset
+                       Default from run_ar_dit_lzx_4096_v2_1024im.sh KEYE_AR_DIR:
+                       /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted
+        
+        image_size: Base image size in pixels (default: 1024)
+                   From run_ar_dit_lzx_4096_v2_1024im.sh --image-size
+        
+        batch_size: Batch size for single-scale training (default: 1)
+                   From run_ar_dit_lzx_4096_v2_1024im.sh --batch-size
+        
+        max_condition_length: Maximum condition sequence length for processor (default: 324)
+                            From run_ar_dit_lzx_4096_v2_1024im.sh --max-condition-length
+                            and run_ar_dit_lzx_4096_v2_1024im.json
+        
+        num_workers: Number of dataloader workers (default: 0)
+        
+        use_multi_scale: Whether to enable multi-scale training (default: True)
+                        From run_ar_dit_lzx_4096_v2_1024im.sh --multi-scale flag
+        
         resolution_budgets: List of (resolution, batch_size) tuples for multi-scale training
-                           If None, creates a single-resolution config
+                           If None, uses single resolution config (default behavior when
+                           --resolution-budgets is not specified in training script)
+        
+        center_crop: Whether to center crop images (default: True)
+                    From run_ar_dit_lzx_4096_v2_1024im.json
     
     Returns:
         Configured DataLoader with appropriate collate_fn
     
     Example:
-        >>> # Fixed-size training
+        >>> # Multi-scale training with single resolution (default, matches run_ar_dit_lzx_4096_v2_1024im.sh)
+        >>> dataloader = demo_chat2image_dataset_multiscale()
+        
+        >>> # Fixed-size training (no multi-scale)
         >>> dataloader = demo_chat2image_dataset_multiscale(
-        ...     sources="/path/to/data",
         ...     use_multi_scale=False,
-        ...     batch_size=8
+        ...     batch_size=1
         ... )
         
-        >>> # Multi-scale training with custom budgets
+        >>> # Multi-scale with custom budgets
         >>> dataloader = demo_chat2image_dataset_multiscale(
-        ...     sources="/path/to/data",
         ...     use_multi_scale=True,
         ...     resolution_budgets=[(512, 32), (1024, 8)]
         ... )
@@ -63,13 +92,15 @@ def demo_chat2image_dataset_multiscale(
     
     # ====================================================================================
     # Step 1: Prepare dataset configuration
+    # Based on: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.json
     # ====================================================================================
     dataset_config = {
         "sources": sources,
         "image_size": image_size,
         "processor_path": processor_path,
         "max_condition_length": max_condition_length,
-        "center_crop": True,
+        "center_crop": center_crop,
+        "packing": False,
         "multi_scale": use_multi_scale,
     }
     
@@ -88,6 +119,9 @@ def demo_chat2image_dataset_multiscale(
     
     # ====================================================================================
     # Step 3: Configure multi-scale training if enabled
+    # Note: When using --multi-scale flag without --resolution-budgets in the training script,
+    # it creates a single-resolution budget (no curriculum scheduling).
+    # See: recipes/sana/train_sana_ar_dit.py lines 1217-1221
     # ====================================================================================
     if use_multi_scale:
         # Create resolution budget configuration
@@ -206,36 +240,41 @@ if __name__ == "__main__":
     """
     Quick test of the demo functions.
     Note: Requires valid dataset path and processor path to run fully.
+    
+    Configuration based on: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.sh
     """
     print("Chat2ImageDataset + MultiScaleDatasetWrapper Demo")
     print("=" * 80)
     
-    # Example 1: Multi-scale training with custom budgets
-    print("\nExample 1: Multi-scale training with custom resolution budgets")
+    # Example 1: Multi-scale training with single resolution (default config)
+    # Mirrors: examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im.sh
+    print("\nExample 1: Multi-scale training with single resolution (default)")
     print("-" * 80)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
-            sources="path/to/parquet/files",  # Replace with actual path
-            processor_path="Qwen/Qwen2-VL-7B-Instruct",
+            sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
+            processor_path="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
             image_size=1024,
+            batch_size=1,
+            max_condition_length=324,
             use_multi_scale=True,
-            resolution_budgets=[(512, 32), (1024, 8)],
             num_workers=0,
         )
         # example_iterate_dataloader(dataloader, max_batches=1)
-        print("✓ Multi-scale dataloader created successfully")
+        print("✓ Multi-scale dataloader (single resolution) created successfully")
     except Exception as e:
         print(f"✗ Error creating multi-scale dataloader: {e}")
     
-    # Example 2: Fixed-size training
+    # Example 2: Fixed-size training (no multi-scale wrapper)
     print("\n\nExample 2: Fixed-size training (no multi-scale)")
     print("-" * 80)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
-            sources="path/to/parquet/files",  # Replace with actual path
-            processor_path="Qwen/Qwen2-VL-7B-Instruct",
+            sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
+            processor_path="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
             image_size=1024,
-            batch_size=8,
+            batch_size=1,
+            max_condition_length=324,
             use_multi_scale=False,
             num_workers=0,
         )
@@ -244,20 +283,22 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Error creating fixed-size dataloader: {e}")
     
-    # Example 3: Multi-scale with single resolution (default)
-    print("\n\nExample 3: Multi-scale wrapper with single resolution (default)")
+    # Example 3: Multi-scale with custom resolution budgets
+    print("\n\nExample 3: Multi-scale training with custom resolution budgets")
     print("-" * 80)
     try:
         dataloader = demo_chat2image_dataset_multiscale(
-            sources="path/to/parquet/files",  # Replace with actual path
-            processor_path="Qwen/Qwen2-VL-7B-Instruct",
+            sources="/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
+            processor_path="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
             image_size=1024,
-            batch_size=8,
+            batch_size=1,
+            max_condition_length=324,
             use_multi_scale=True,
-            resolution_budgets=None,  # Uses default single-resolution config
+            resolution_budgets=[(512, 32), (1024, 8)],
             num_workers=0,
         )
-        print("✓ Multi-scale dataloader (single resolution) created successfully")
+        # example_iterate_dataloader(dataloader, max_batches=1)
+        print("✓ Multi-scale dataloader (custom budgets) created successfully")
     except Exception as e:
         print(f"✗ Error creating multi-scale dataloader: {e}")
     
