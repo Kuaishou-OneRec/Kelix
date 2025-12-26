@@ -674,12 +674,18 @@ class KeyeARModel(Model):
     def forward(
         self,
         tokens: torch.LongTensor = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         input_pos: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs
-    ):                
+    ):
+        assert int(input_ids is not None) + int(tokens is not None) <= 1, "Only one of tokens or input_ids can be provided."
+        
+        if input_ids is not None: 
+            tokens = input_ids
+
         if pixel_values is not None:
             with torch.no_grad():
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
