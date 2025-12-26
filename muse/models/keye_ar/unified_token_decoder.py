@@ -342,14 +342,14 @@ class UnifiedTokenDecoder(Model):
             # 初始化logits存储
             logits_list = []
             
-            print(f"UnifiedTokenDecoder: step generating")
-            import IPython
-            IPython.embed()
+        #     print(f"UnifiedTokenDecoder: step generating")
+        #     import IPython
+        #     IPython.embed()
 
 
-        logits_list = []
-        generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
-        current_embeddings = input_embeddings.clone()
+        # logits_list = []
+        # generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
+        # current_embeddings = input_embeddings.clone()
         # 2. 自回归生成循环（始终用embeddings输入）
         for _ in range(max_new_tokens):
             # 序列长度限制检查
