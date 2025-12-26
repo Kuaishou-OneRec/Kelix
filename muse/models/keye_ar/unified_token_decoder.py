@@ -421,13 +421,13 @@ class UnifiedTokenDecoder(Model):
             else:
                 print(f"  reduce=False且lm_head=None，transformer.output使用Identity，无需权重")
         
-        # 打印转换统计信息
-        print(f"转换状态字典统计:")
-        print(f"  总键数: {total_count}")
-        print(f"  转换成功: {converted_count}")
-        print(f"  跳过键数: {len(skipped_keys)}")
-        if skipped_keys:
-            print(f"  跳过的键: {skipped_keys}")
+        # # 打印转换统计信息
+        # print(f"转换状态字典统计:")
+        # print(f"  总键数: {total_count}")
+        # print(f"  转换成功: {converted_count}")
+        # print(f"  跳过键数: {len(skipped_keys)}")
+        # if skipped_keys:
+        #     print(f"  跳过的键: {skipped_keys}")
         
         return converted_state_dict
 
