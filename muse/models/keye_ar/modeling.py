@@ -739,7 +739,7 @@ class KeyeARModel(Model):
         
         """
         self.eval()
-        assert self.config.qwen_config.token_decoder_with_teacher_forcing == self.model.model.token_decoder_with_teacher_forcing == True, \
+        assert self.config.qwen_config.token_decoder_with_teacher_forcing == self.model.model.token_decoder_with_teacher_forcing == False, \
             "token_decoder_with_teacher_forcing must be True, but get configured as {} and param set as {}".format(
                 self.config.qwen_config.token_decoder_with_teacher_forcing,
                 self.model.model.token_decoder_with_teacher_forcing
