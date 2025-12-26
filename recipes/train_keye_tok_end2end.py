@@ -613,6 +613,25 @@ def train():
     
     # Load weights or initialize parameters
     if args.model_dir:
+        # Filter out buffers that should be initialized by rope_init
+        # These buffers may exist in checkpoint but should not be loaded
+        # because they will be re-initialized dynamically
+        rope_buffer_patterns = [
+            "position_ids",
+            "inv_freq",
+        ]
+        if state_dict is not None and dist.get_rank() == 0:
+            keys_to_remove = []
+            for key in state_dict.keys():
+                for pattern in rope_buffer_patterns:
+                    if pattern in key:
+                        keys_to_remove.append(key)
+                        break
+            for key in keys_to_remove:
+                print_rank_0(f"Removing buffer from state_dict (will be initialized by rope_init): {key}")
+                del state_dict[key]
+        dist.barrier()
+        
         with Timer("Load state dict"):
             load_from_full_model_state_dict(
                 model=model, full_sd=state_dict,

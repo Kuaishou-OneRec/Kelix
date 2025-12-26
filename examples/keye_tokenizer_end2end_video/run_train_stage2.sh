@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video
+MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_3_video
 
 OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage2
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
@@ -27,7 +27,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="keye_tokenizer_end2end_image_train_video_stage1"
+comment="keye_tokenizer_end2end_image_train_video_stage2"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -137,8 +137,6 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
-                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.8_stage1/step9500/ \
-                --resume_from_tag global_step9500 \
                 --comment '$comment' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
