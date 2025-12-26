@@ -911,7 +911,7 @@ class KeyeARModel(Model):
             
             # 提前终止：新增group的第一个token是EOS
             # next_group, batchsize x length x n_tokens
-            if (next_group[..., 0] == self.config.eos_token_id).all():
+            if (next_group[..., 0] == self.config.qwen_config.eos_token_id).all():
                 break
         
         self.model.model.reset_caches()
