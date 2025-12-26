@@ -104,7 +104,7 @@ from muse.utils.common import (
     to_device,
     dist_reduce_dict
 )
-from muse.data.datasets import ChatCompletionVisionDataset,ChatCompletionVisionDataset_keye_vitrope_slowfast
+from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
 
 from muse.config import load_config
 
@@ -951,7 +951,6 @@ def train():
     total_data_source_tokens = collections.defaultdict(int)
     batch_data_source_loss = collections.defaultdict(float)
     batch_data_source_tokens = collections.defaultdict(int)
-
     print_rank_0("Starting training...")
     model.train()
     
@@ -981,6 +980,7 @@ def train():
             # Extract data source info (for monitoring)
             data_source = batch.pop("data_source", None)  # dataset source list for current batch
             sample_idx = batch.get("sample_idx", None)  # sample index for packing
+
 
             # Extract batch data for KeyeTokenizerEnd2EndImage
             input_ids = batch["input_ids"]

@@ -57,7 +57,6 @@ from collections import defaultdict
 
 torch.autograd.set_detect_anomaly(True)
 import gc
-# 注意: 不再禁用gc，防止内存泄漏
 gc.disable()
 
 process_group_timeout = datetime.timedelta(minutes=60*24)
@@ -992,12 +991,6 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
             position_ids = batch.get("position_ids", None)
-
-            # Debug: Check if batch contains video data
-            if pixel_values_videos is not None:
-                print_rank_0(f"[DEBUG] Batch contains video data: pixel_values_videos.shape={pixel_values_videos.shape}")
-            else:
-                print_rank_0(f"[DEBUG] Batch contains NO video data")
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
