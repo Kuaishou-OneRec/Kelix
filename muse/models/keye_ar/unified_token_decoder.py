@@ -393,6 +393,7 @@ class UnifiedTokenDecoder(Model):
     
         if return_logits and logits_list:
             logits_tensor = torch.stack(logits_list, dim=1)
+            print(f"logits_tensor.shape={logits_tensor.shape}, argmax(-1)={logits_tensor.argmax(-1)}")
             return generated_ids, logits_tensor
             
         return generated_ids

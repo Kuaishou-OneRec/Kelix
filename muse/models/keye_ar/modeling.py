@@ -286,6 +286,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 max_new_tokens=self.token_head_max_new_tokens
             )
             self.token_head.reset_infer_funcs()
+            print(111, f"oken_head.generate_output={output.shape}")
             output = h
 
         # Output list if hidden states are requested, otherwise just the output
@@ -892,7 +893,7 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
             logits = outputs
-
+            print(f"logits_from_generate", logits.shape, logits.argmax(-1))
             # logits = outputs.logits  # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
 
