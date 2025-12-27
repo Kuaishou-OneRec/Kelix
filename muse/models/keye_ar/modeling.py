@@ -894,8 +894,7 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
             print("keye ar generation")
-            # import IPython
-            # IPython.embed()
+
 
             # batchsize x word_length x subword_length x vocab_size
             logits = outputs
