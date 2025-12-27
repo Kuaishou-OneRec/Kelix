@@ -238,7 +238,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             input_pos=input_pos,
             input_embeds=input_embeds,
         )
-        print(f"unifed tokendecoder tokens: {tokens}, input_embeds is None={input_embeds is None}")
+
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
 
@@ -280,14 +280,14 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 self.tok_embeddings._get_token_embeddings, 
                 self.unembed
             )
-            print(1111, 'token_head.generate', h.shape, h.flatten(0,1)[:,None].shape)
+
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
                 max_new_tokens=self.token_head_max_new_tokens
             ) # (batchsize x word_length) x subword_length x vocab_size
             self.token_head.reset_infer_funcs()
-            print(111, f"oken_head.generate_output={output.shape}, batchsize={batchsize}")
+
             output = output.reshape(batchsize, -1, *output.shape[1:]) # batchsize x word_length x subword_length x vocab_size
 
         # Output list if hidden states are requested, otherwise just the output
@@ -374,16 +374,13 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
-        print(f"unified_token_decoder.py: forward input tokens={tokens}")
-        # import IPython
-        # IPython.embed()
 
         if tokens.size(-1) == 1:
             tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
                 tokens=tokens,
             )
-        print(f"unified_token_decoder.py: forward expand_input_ids tokens={tokens}")
+
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             tokens=tokens,
@@ -676,7 +673,7 @@ class KeyeARModel(Model):
     def forward_image_tokens(
             self,
             pixel_values,
-            image_grid_thw,
+            生成结果:image_grid_thw,
             **kwargs
             ):
         vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
@@ -713,15 +710,12 @@ class KeyeARModel(Model):
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
-        print(f"expand_with_image_tokensexpand_with_image_tokens")
-        # import IPython
-        # IPython.embed()
         tokens = self.expand_with_image_tokens(aligned_indices, tokens)
         assert input_pos.ndim == 2, "input_pos must be 2D"
         assert tokens.ndim == 3, "tokens must be 3D after expansion, get {}".format(tokens.shape)
         assert tokens.size(2) == self.config.qwen_config.n_q_tokens + 1, \
             "tokens must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, tokens.size(2), aligned_indices)
-        # print(f"tokens={tokens.shape}, input_pos={input_pos.shape}")
+
         # 调用Qwen3Model
         outputs = self.model(
             tokens=tokens,
@@ -893,14 +887,11 @@ class KeyeARModel(Model):
                 input_pos=prefill_pos,
                 **model_kwargs
             )
-            print("keye ar generation")
-
 
             # batchsize x word_length x subword_length x vocab_size
             logits = outputs
 
-            print(f"logits_from_generate", logits.shape, logits.argmax(-1))
-            # logits = outputs.logits  # (batch, 9, vocab_size)
+            # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=0)
 
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
@@ -913,7 +904,6 @@ class KeyeARModel(Model):
         next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
         current_ids = torch.cat([current_ids, next_group], dim=1)
-        print(f"prefill current_ids={current_ids}")
 
         # Decode阶段：增量生成，仅输入新增group
         for step in range(input_seq_len, input_seq_len + max_new_tokens):
@@ -925,7 +915,7 @@ class KeyeARModel(Model):
             for key in ["pixel_values", "image_grid_thw", "video_grid_thw", 
                     "fast_video_grid_thw", "pixel_values_videos", "input_image_ids"]:
                 model_kwargs.pop(key, None)
-            print(f"decode last_group={last_group}")
+
             # 模型前向（使用cache）
             outputs = self(
                 last_group,
@@ -941,7 +931,6 @@ class KeyeARModel(Model):
 
             # Append新生成的group
             current_ids = torch.cat([current_ids, next_group], dim=1)
-            print(f"ar next_group={next_group}")
 
             # 提前终止：新增group的第一个token是EOS
             # next_group, batchsize x length x n_tokens
@@ -1068,9 +1057,7 @@ class KeyeARModel(Model):
             
             # 插入token
             result_list = result_list[:insert_pos] + tokens_to_insert + result_list[insert_pos:]
-            
-            # print(f"在位置 {pos} 插入了 {num_im_tokens} 个151655 token")
-        
+                    
         # 转换回张量并放回原设备
         result_tensor = torch.tensor([result_list], device=input_ids.device)
         

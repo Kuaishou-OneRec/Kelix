@@ -207,15 +207,15 @@ def demo_keyear_forward():
 
     # 准备输入文本
     for messages in[
-            # [
-            #     {"role": "user", "content": "Give me a short introduction to large language model."}
-            # ],
-            # [
-            #     {"role": "user", "content": [
-            #         {"type": "image", "image": generate_circle_image()}, 
-            #         {"type": "text", "text": "What's in the image?"}
-            #     ]}
-            # ],
+            [
+                {"role": "user", "content": "Give me a short introduction to large language model."}
+            ],
+            [
+                {"role": "user", "content": [
+                    {"type": "image", "image": generate_circle_image()}, 
+                    {"type": "text", "text": "What's in the image?"}
+                ]}
+            ],
             [{"role": "user", "content": "Generate an image of cat."}]
         ]:
         print(f"\n\n\nmessages=\n{messages}")
@@ -253,7 +253,6 @@ def demo_keyear_forward():
         print("\n生成结果:")
         print(generated_text)
     
-    exit()
     generate_and_understanding(muse_model, processor)
     edit_and_understanding(muse_model, processor)
 

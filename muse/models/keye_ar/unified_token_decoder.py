@@ -342,14 +342,6 @@ class UnifiedTokenDecoder(Model):
             # 初始化logits存储
             logits_list = []
             
-        #     print(f"UnifiedTokenDecoder: step generating")
-        #     import IPython
-        #     IPython.embed()
-
-
-        # logits_list = []
-        # generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
-        # current_embeddings = input_embeddings.clone()
         # 2. 自回归生成循环（始终用embeddings输入）
         for _ in range(max_new_tokens):
             # 序列长度限制检查
@@ -360,7 +352,7 @@ class UnifiedTokenDecoder(Model):
             logits = self.forward(current_embeddings)
             
             next_token_logits = logits[:, -1, :]
-            print(f"next_token_logits.shape={next_token_logits.shape}", next_token_logits.argmax(dim=-1))
+
             # 保存logits
             if return_logits:
                 logits_list.append(next_token_logits)
@@ -393,7 +385,6 @@ class UnifiedTokenDecoder(Model):
     
         if return_logits and logits_list:
             logits_tensor = torch.stack(logits_list, dim=1)
-            print(f"logits_tensor.shape={logits_tensor.shape}, argmax(-1)={logits_tensor.argmax(-1)}")
             return generated_ids, logits_tensor
             
         return generated_ids
@@ -411,9 +402,7 @@ class UnifiedTokenDecoder(Model):
         skipped_keys = []
         converted_count = 0
         total_count = len(state_dict)
-        
-        # print(f"原始模型状态字典键数: {total_count}")
-        
+                
         for key, value in state_dict.items():
             new_key = None
             
@@ -527,14 +516,6 @@ class UnifiedTokenDecoder(Model):
                 print(f"  为reduce=False模式创建单位矩阵transformer.output.weight，维度: {d_model}")
             else:
                 print(f"  reduce=False且lm_head=None，transformer.output使用Identity，无需权重")
-        
-        # # 打印转换统计信息
-        # print(f"转换状态字典统计:")
-        # print(f"  总键数: {total_count}")
-        # print(f"  转换成功: {converted_count}")
-        # print(f"  跳过键数: {len(skipped_keys)}")
-        # if skipped_keys:
-        #     print(f"  跳过的键: {skipped_keys}")
         
         return converted_state_dict
 
