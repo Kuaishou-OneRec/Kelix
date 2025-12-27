@@ -14,6 +14,7 @@ from muse.models.keye_ar import KeyeARModel
 from muse.training.common import set_default_dtype
 from PIL import Image, ImageDraw
 
+
 def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
     """
     生成一个包含一个圆的 PIL Image 对象，用于测试。
