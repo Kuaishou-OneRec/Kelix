@@ -16,8 +16,8 @@ import numpy as np
 # =========================================================================
 
 # 两个脚本保存的 logits 路径
-MUSE_LOGITS_PATH = "/llm_reco/maosiyang/muse_model_logits_video.pt"
-HF_LOGITS_PATH = "/llm_reco/maosiyang/hf_logits_video_new.pt"
+MUSE_LOGITS_PATH = "/llm_reco/maosiyang/muse_model_logits_video_origin.pt"
+HF_LOGITS_PATH = "/llm_reco/maosiyang/muse_model_logits_video_now.pt"
 
 # =========================================================================
 # Main
