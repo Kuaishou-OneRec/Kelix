@@ -905,18 +905,18 @@ class KeyeARModel(Model):
 
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
             
-            # 采样最后一个prompt group的下一个group
-            last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
+        # 采样最后一个prompt group的下一个group
+        last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
 
-            import IPython
-            IPython.embed()
-            next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
+        # import IPython
+        # IPython.embed()
+        next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
-            current_ids = torch.cat([current_ids, next_group], dim=1)
-            print(f"prefill current_ids={current_ids}")
+        current_ids = torch.cat([current_ids, next_group], dim=1)
+        print(f"prefill current_ids={current_ids}")
 
         # Decode阶段：增量生成，仅输入新增group
-        for step in range(1, max_new_tokens):
+        for step in range(input_seq_len, input_seq_len + max_new_tokens):
             # 仅取最后一个group作为输入（增量生成）
             last_group = current_ids[:, -1:, :]  # (batch, 1, 9)
             current_pos = torch.tensor([[step]], device=input_ids.device).expand(batch_size, -1)
@@ -933,7 +933,7 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
             logits = outputs  # (batch, 1, 9, vocab_size)
-            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=q_eos_token)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=q_eos_token)
 
             # 采样新group
             current_logits = logits[:, :, :]  # (batch, 9, vocab_size)
