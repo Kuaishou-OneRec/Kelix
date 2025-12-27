@@ -210,13 +210,13 @@ def demo_keyear_forward():
             # [
             #     {"role": "user", "content": "Give me a short introduction to large language model."}
             # ],
-            [
-                {"role": "user", "content": [
-                    {"type": "image", "image": generate_circle_image()}, 
-                    {"type": "text", "text": "What's in the image?"}
-                ]}
-            ],
-            # [{"role": "user", "content": "Generate an image of cat."}]
+            # [
+            #     {"role": "user", "content": [
+            #         {"type": "image", "image": generate_circle_image()}, 
+            #         {"type": "text", "text": "What's in the image?"}
+            #     ]}
+            # ],
+            [{"role": "user", "content": "Generate an image of cat."}]
         ]:
         print(f"\n\n\nmessages=\n{messages}")
         # 应用chat template并编码
@@ -230,7 +230,7 @@ def demo_keyear_forward():
         
         # 设置生成参数
         generate_params = {
-            "max_new_tokens": 10,
+            "max_new_tokens": 450,
             "top_k": 1,
             # "eos_token_id": tokenizer.eos_token_id
         }
