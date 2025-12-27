@@ -673,7 +673,7 @@ class KeyeARModel(Model):
     def forward_image_tokens(
             self,
             pixel_values,
-            生成结果:image_grid_thw,
+            image_grid_thw,
             **kwargs
             ):
         vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
