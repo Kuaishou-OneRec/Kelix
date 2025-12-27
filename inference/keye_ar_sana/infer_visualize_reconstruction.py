@@ -77,6 +77,31 @@ def parse_args():
     return parser.parse_args()
 
 
+def setup_distributed_environment() -> bool:
+    """
+    Initialize distributed environment for single-process inference runs using the
+    same approach as our tests: TCP init on localhost (gloo backend).
+
+    Returns:
+        True if distributed was initialized successfully, otherwise False.
+    """
+    if dist.is_available() and not dist.is_initialized():
+        try:
+            dist.init_process_group(
+                backend='gloo',
+                init_method='tcp://127.0.0.1:29500',
+                rank=args.rank if 'args' in globals() else 0,
+                world_size=args.world_size if 'args' in globals() else 1,
+            )
+            print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to initialize distributed environment: {e}")
+            print("Will attempt to run without distributed mode...")
+            return False
+    return True
+
+
 def main():
     args = parse_args()
 
@@ -87,12 +112,7 @@ def main():
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
     if args.initialize_dist:
-        try:
-            if not dist.is_initialized():
-                dist.init_process_group(backend="gloo", rank=args.rank, world_size=args.world_size)
-                print(f"Initialized local distributed process group (rank={args.rank}, world_size={args.world_size})")
-        except Exception as e:
-            print(f"Warning: failed to initialize local distributed group: {e}")
+        setup_distributed_environment()
 
     # 1) Load model config and instantiate model for visualization
     if args.model_config:
@@ -142,7 +162,17 @@ def main():
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
     print("Loading Keye AR tokenizer/processor...")
-    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+    try:
+        image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+    except FileNotFoundError as e:
+        # Provide clearer guidance to the user
+        print("Failed to load Keye AR tokenizer/processor:", e)
+        print("Please ensure --keye-ar-dir points to the Keye AR model directory containing 'config.json'.")
+        print("If your Keye AR checkpoint is in DCP/FSDP format, convert it with 'python muse/tools/dcp2torch.py <checkpoint_dir>'")
+        raise
+    except Exception as e:
+        print(f"Error loading Keye AR tokenizer/processor: {e}")
+        raise
 
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:

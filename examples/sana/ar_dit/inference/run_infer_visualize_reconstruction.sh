@@ -7,6 +7,9 @@
 
 set -euo pipefail
 
+# Ensure project root is on PYTHONPATH so 'recipes' and 'muse' imports resolve
+export PYTHONPATH="${PYTHONPATH:-.}"
+
 # ---- Defaults (edit or override via env) ----
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/"
 VAE_DIR="/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
@@ -24,7 +27,7 @@ CFG_SCALE=1.0
 MAX_CONDITION_LENGTH=2560
 IMAGE_SIZE=1024
 SEED=42
-INITIALIZE_DIST=true   # initialize a local single-process dist group (recommended)
+INITIALIZE_DIST=false  # initialize a local single-process dist group (set to true only if needed)
 RANK=0
 WORLD_SIZE=1
 
