@@ -894,15 +894,15 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
             print("keye ar generation")
-            import IPython
-            IPython.embed()
+            # import IPython
+            # IPython.embed()
 
             # batchsize x word_length x subword_length x vocab_size
             logits = outputs
 
             print(f"logits_from_generate", logits.shape, logits.argmax(-1))
             # logits = outputs.logits  # (batch, 9, vocab_size)
-            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=0)
 
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
             
