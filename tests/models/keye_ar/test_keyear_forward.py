@@ -192,7 +192,7 @@ def demo_keyear_forward():
     device = "cuda:0"
     # 检查预训练模型路径是否存在
     checkpoint_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
-
+    checkpoint_dir = "/llm_reco_ssd/lingzhixin/models/tmp2"
     processor = AutoProcessor.from_pretrained(
             checkpoint_dir, 
             trust_remote_code=True

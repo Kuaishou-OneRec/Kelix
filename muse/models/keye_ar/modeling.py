@@ -280,10 +280,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 self.tok_embeddings._get_token_embeddings, 
                 self.unembed
             )
-            # print(f"hshape {h.shape}")
-            # print(f"pos1111")
-            # import IPython
-            # IPython.embed()
+
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
@@ -885,10 +882,8 @@ class KeyeARModel(Model):
             # logits = outputs.logits  # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
 
-            #print(f"logits0000={logits.shape}")
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
             
-            #print(f"logits={logits.shape}")
             # 采样最后一个prompt group的下一个group
             last_group_logits = logits[:, -1, :]  # (batch, 9, vocab_size)
             next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
@@ -906,7 +901,6 @@ class KeyeARModel(Model):
                     "fast_video_grid_thw", "pixel_values_videos", "input_image_ids"]:
                 model_kwargs.pop(key, None)
             
-            #print(f"input last_group={last_group}")
             # 模型前向（使用cache）
             outputs = self(
                 last_group,
@@ -1020,9 +1014,6 @@ class KeyeARModel(Model):
         for i in range(len(input_list) - 1):
             if input_list[i] == vision_start_token_id and input_list[i + 1] == vision_end_token_id:
                 positions.append(i)
-        
-        # print(f"找到了 {len(positions)} 个151652-151653组合")
-        # print(f"有 {len(sequences)} 个序列可用于确定插入数量")
         
         # 确保位置和序列数量匹配
         if len(positions) != len(sequences):
