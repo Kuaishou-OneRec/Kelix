@@ -464,7 +464,7 @@ def run_comparison():
     save_dir.mkdir(parents=True, exist_ok=True)
     
     # [FIX] Save individual logits files as well
-    torch.save(muse_logits.detach().cpu(), save_dir / "muse_model_logits_video.pt")
+    torch.save(muse_logits.detach().cpu(), save_dir / "muse_model_logits_video_now.pt")
     torch.save(origin_logits.detach().cpu(), save_dir / "origin_model_logits_video.pt")
     
     # Save dictionary
