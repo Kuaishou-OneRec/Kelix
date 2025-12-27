@@ -704,6 +704,7 @@ class KeyeARModel(Model):
         input_pos: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
+        input_image_ids: Optional[torch.LongTensor] = None,
         **kwargs
     ):
         assert int(input_ids is not None) + int(tokens is not None) <= 1, "Only one of tokens or input_ids can be provided."
@@ -721,6 +722,9 @@ class KeyeARModel(Model):
                 aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
                     to(tokens)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
 
+        elif input_image_ids is not None:
+            # 推理的时候允许提供input_image_ids
+            aligned_indices = input_image_ids
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
