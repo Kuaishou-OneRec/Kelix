@@ -906,7 +906,10 @@ class KeyeARModel(Model):
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
             
             # 采样最后一个prompt group的下一个group
-            last_group_logits = logits[:, -1, :]  # (batch, 9, vocab_size)
+            last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
+
+            import IPython
+            IPython.embed()
             next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
             current_ids = torch.cat([current_ids, next_group], dim=1)
