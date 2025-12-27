@@ -162,6 +162,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         encoder_mask: Optional[torch.Tensor] = None,
         input_pos: Optional[torch.Tensor] = None,
         input_embeds: Optional[torch.Tensor] = None,
+        output_last_token_logits_only: Optional[torch.Tensor] = False,
         **kwargs,
     ) -> Union[torch.Tensor, list[torch.Tensor]]:
         """
@@ -200,6 +201,8 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 This parameter is required during inference if caches have been setup. Default is None.
             input_embeds (Optional[torch.Tensor]): Pass these instead of tokens to short-circuit token embeddings
                 and skip straight to the transformer layers. Shape ``[b x s x d]``. Default: None
+            output_last_token_logits_only (Optional[torch.Tensor]):
+                If True, return only the logits of the last token. It could be used for inference to reduce memory overhead.
             **kwargs: Additional arguments to pass to transformer layers and attention. Common kwargs include:
                 - cu_seqlens (torch.Tensor): cumulative sequence lengths for packed sequences
                 - window_size (int): sliding window size for local attention
@@ -963,15 +966,15 @@ class KeyeARModel(Model):
         # 基础校验：确保输入是二维tensor
         assert input_tensor.dim() == 2, f"Input must be 2D tensor, got {input_tensor.dim()}D"
         seq_len, vocab_dim = input_tensor.shape
-        if seq_len == 0 or vocab_dim < self.config.vision_config.n_q_tokens:
+        if seq_len == 0 or vocab_dim < self.config.qwen_config.n_q_tokens:
             return []
         
         # 提取第一列用于定位标记
         first_col = input_tensor[:, 0]
         
         # 找出所有start和end标记的位置（按出现顺序排序）
-        start_indices = torch.where(first_col == self.config.vision_start_token_id)[0].tolist()
-        end_indices = torch.where(first_col == self.config.vision_end_token_id)[0].tolist()
+        start_indices = torch.where(first_col == self.config.qwen_config.vision_start_token_id)[0].tolist()
+        end_indices = torch.where(first_col == self.config.qwen_config.vision_end_token_id)[0].tolist()
         
         if not start_indices or not end_indices:
             return []  # 无任何标记时返回空列表
@@ -998,7 +1001,7 @@ class KeyeARModel(Model):
                 continue  # 无实际图像token行，跳过
             
             # 提取：start之后 → end之前的行，取前n_q_tokens列
-            image_tokens = input_tensor[start_idx + 1 : end_idx, :self.config.vision_config.n_q_tokens]
+            image_tokens = input_tensor[start_idx + 1 : end_idx, :self.config.qwen_config.n_q_tokens]
             image_token_list.append(image_tokens)
         
         return image_token_list
@@ -1020,9 +1023,9 @@ class KeyeARModel(Model):
         # 将输入转换为一维列表以便处理
         input_list = input_ids.squeeze(0).tolist()
         
-        vision_start_token_id = self.config.vision_start_token_id
-        vision_end_token_id = self.config.vision_end_token_id
-        image_token_id = self.config.image_token_id
+        vision_start_token_id = self.config.qwen_config.vision_start_token_id
+        vision_end_token_id = self.config.qwen_config.vision_end_token_id
+        image_token_id = self.config.qwen_config.image_token_id
 
         # 找到所有151652后面紧跟着151653的位置
         positions = []
