@@ -80,8 +80,8 @@ def generate_and_understanding(model, processor):
         }
     ]
     inputs = process_message(
-        processor, model.device, messages)
-    output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=450)
+        processor, next(model.parameters()).device, messages)
+    output_ids = model.generate_multimodal(**inputs.to(next(model.parameters()).device), top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
     print(f"输入:\n{messages}")
@@ -98,10 +98,10 @@ def generate_and_understanding(model, processor):
             ],
         }
     ]
-    inputs = process_message(processor, model.device, messages)
+    inputs = process_message(processor, next(model.parameters()).device, messages)
     inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
     inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
-    output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=450)
+    output_ids = model.generate_multimodal(**inputs.to(next(model.parameters()).device), top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
     print(f"输入:\n{messages}")
@@ -128,7 +128,7 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理消息并生成多模态输出
-        inputs = process_message(processor, model.device, messages)
+        inputs = process_message(processor, next(model.parameters()).device, messages)
         output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=400)
 
         # 解码输出token为文本内容
@@ -148,7 +148,7 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理编辑指令并生成输出
-        inputs = process_message(processor, model.device, messages)
+        inputs = process_message(processor, next(model.parameters()).device, messages)
         output_ids = model.generate_multimodal(**inputs, top_k=1, max_new_tokens=450)
         output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
         content = processor.decode(output_ids[:,0].long().tolist())
@@ -170,10 +170,10 @@ def edit_and_understanding(model, processor):
             }
         ]
         # 处理纯文本查询并生成输出
-        inputs = process_message(processor, model.device, messages)
+        inputs = process_message(processor, next(model.parameters()).device, messages)
         inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
         inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
-        output_ids = model.generate_multimodal(**inputs.to(model.device), top_k=1, max_new_tokens=400)
+        output_ids = model.generate_multimodal(**inputs.to(next(model.parameters()).device), top_k=1, max_new_tokens=400)
         output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
         content = processor.decode(output_ids[:,0].long().tolist())
         print(f"setting: size={size}x{size}")
@@ -222,7 +222,7 @@ def demo_keyear_forward():
         print(f"\n\n\nmessages=\n{messages}")
         # 应用chat template并编码
         inputs = process_message(processor, device, messages)
-        
+        print(f"inputs={inputs}")
             
         # 调用generate函数生成文本
         print("\n" + "=" * 60)
