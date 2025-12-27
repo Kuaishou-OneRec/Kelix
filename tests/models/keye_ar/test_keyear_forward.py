@@ -101,7 +101,14 @@ def generate_and_understanding(model, processor):
     inputs = process_message(processor, next(model.parameters()).device, messages)
     inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
     inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
-    output_ids = model.generate(**inputs.to(next(model.parameters()).device), top_k=1, max_new_tokens=450)
+    for k,v in inputs.items():
+        try:
+            print(f"{k}: {v.shape}")
+        except:
+            print(f"{k}: {v}")
+
+    inputs = inputs.to(next(model.parameters()).device)
+    output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
     print(f"输入:\n{messages}")
@@ -204,7 +211,7 @@ def demo_keyear_forward():
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     muse_model.config.qwen_config.token_decoder_with_teacher_forcing = muse_model.model.model.token_decoder_with_teacher_forcing = False
     
-
+    generate_and_understanding(muse_model, processor); exit()
     # 准备输入文本
     for messages in[
             [

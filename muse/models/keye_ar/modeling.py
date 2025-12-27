@@ -287,8 +287,10 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
-                max_new_tokens=self.token_head_max_new_tokens
+                max_new_tokens=self.token_head_max_new_tokens,
+                only_last=output_last_token_logits_only
             ) # (batchsize x word_length) x subword_length x vocab_size
+
             self.token_head.reset_infer_funcs()
 
             output = output.reshape(batchsize, -1, *output.shape[1:]) # batchsize x word_length x subword_length x vocab_size
@@ -489,6 +491,15 @@ class KeyeARModel(Model):
         # LM头
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
         self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
+
+    def set_token_decoder_with_teacher_forcing(self, teacher_forcing):
+        """
+        设置是否使用teacher forcing
+        一般训练的时候使用teacher forcing，generate的时候不使用
+        """
+        self.config.qwen_config.token_decoder_with_teacher_forcing = teacher_forcing
+        self.model.model.token_decoder_with_teacher_forcing = teacher_forcing
+        return teacher_forcing
 
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
@@ -740,14 +751,14 @@ class KeyeARModel(Model):
     ):
         """
         多模态生成函数，处理image token扩展和循环生成逻辑
-
             输入的input_ids可以是batchsize x length，也可以是batchsize x length x (n_q_tokens + 1)
+
         如果是batchsize x length，你需要自动repeat到batchsize x length x (n_q_tokens + 1)
             规则是，如果id位置是self.config.qwen_config.image_token_id，则将拓展之后的前n_q_tokens个id替换为self.config.qwen_config.image_token_id，最后一个替换为self.config.qwen_config.q_eos_token
             否则，第二个位置就替换为self.config.qwen_config.q_eos_token，其余位置是0。
         
         模型每次输出的logits是batchsize x length x 9 x voc_size, 其中有一个token是self.config.qwen_config.q_eos_token, 实际有效的token是self.config.qwen_config.q_eos_token之前token。
-        你需要根据这个输出的logits，恢复出batchsize x length x 9 input_ids，然后输回模型。
+        根据这个输出的logits，恢复出batchsize x length x 9 input_ids，然后输回模型。
 
         input_ids: batchsize x length, 输入的token id，其中第一个位置是self.config.q_bos_token，其余位置是0。
         
@@ -762,6 +773,7 @@ class KeyeARModel(Model):
             temperature: 采样温度
             top_k: Top-K采样参数
             top_p: Top-P采样参数
+            return_1d_ids: 是否返回1D的ids，默认为False，返回9个token
             **model_kwargs: 其他模型参数
         
         Returns:
@@ -769,6 +781,8 @@ class KeyeARModel(Model):
         
         """
         self.eval()
+
+        self.set_token_decoder_with_teacher_forcing(False)
         assert self.config.qwen_config.token_decoder_with_teacher_forcing == self.model.model.token_decoder_with_teacher_forcing == False, \
             "token_decoder_with_teacher_forcing must be True, but get configured as {} and param set as {}".format(
                 self.config.qwen_config.token_decoder_with_teacher_forcing,
