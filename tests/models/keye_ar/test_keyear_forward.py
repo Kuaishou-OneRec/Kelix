@@ -108,6 +108,8 @@ def generate_and_understanding(model, processor):
             print(f"{k}: {v}")
 
     inputs = inputs.to(next(model.parameters()).device)
+    import IPython
+    IPython.embed()
     output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
