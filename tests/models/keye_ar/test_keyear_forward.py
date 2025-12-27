@@ -211,11 +211,9 @@ def demo_keyear_forward():
             #     {"role": "user", "content": "Give me a short introduction to large language model."}
             # ],
             [
-                {"role": "user", "content": [{
-                    "type": "image",
-                    "image": generate_circle_image()
-                }, 
-                {"type": "text", "content": "What's in the image?"}
+                {"role": "user", "content": [
+                    {"type": "image", "image": generate_circle_image()}, 
+                    {"type": "text", "content": "What's in the image?"}
                 ]}
             ],
             # [{"role": "user", "content": "Generate an image of cat."}]
