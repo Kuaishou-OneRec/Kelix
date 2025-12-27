@@ -183,3 +183,15 @@ class VectorQuantizer(nn.Module):
             result["sampling_probs"] = sampling_probs
             
         return result
+    
+    def lookup(self, indices):
+        if self.add_voc_reducer:
+            embedding = self.voc_reducer.T @ self.embedding.weight[self.slice_indices]
+        else:
+            embedding = self.embedding.weight[self.slice_indices]
+
+        quant_codebook = self.embedding_proj(embedding)
+        quant_codebook = self.q_norm(quant_codebook)
+        e = quant_codebook[indices]
+
+        return e
