@@ -373,11 +373,13 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
+        print(f"unified_token_decoder.py: forward input tokens={tokens}")
         if tokens.size(-1) == 1:
             tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
                 tokens=tokens,
             )
+        print(f"unified_token_decoder.py: forward expand_input_ids tokens={tokens}")
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             tokens=tokens,

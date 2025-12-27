@@ -253,6 +253,7 @@ def demo_keyear_forward():
         print("\n生成结果:")
         print(generated_text)
     
+    exit()
     generate_and_understanding(muse_model, processor)
     edit_and_understanding(muse_model, processor)
 
