@@ -213,7 +213,7 @@ def demo_keyear_forward():
             [
                 {"role": "user", "content": [
                     {"type": "image", "image": generate_circle_image()}, 
-                    {"type": "text", "content": "What's in the image?"}
+                    {"type": "text", "text": "What's in the image?"}
                 ]}
             ],
             # [{"role": "user", "content": "Generate an image of cat."}]
