@@ -239,7 +239,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             input_pos=input_pos,
             input_embeds=input_embeds,
         )
-
+        print(f"unifed tokendecoder tokens: {tokens}")
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
 
@@ -609,6 +609,7 @@ class KeyeARModel(Model):
         if tokens.ndim == 3 and tokens.size(2) == self.config.qwen_config.n_q_tokens + 1:
             # 满足上面这个if分支，理论上tokens已经是拓展过了，但是并不保证image_token_id被替换过
             # 这里加一个判断，不存在image_token_id，说明纯文本，或者已经替换过image_token_id了，直接返回
+            # 这里之所以要支持多种格式，是因为要兼顾训练和推理。
             if not torch.any(tokens == self.config.qwen_config.image_token_id):
                 return tokens
             
@@ -915,7 +916,7 @@ class KeyeARModel(Model):
             for key in ["pixel_values", "image_grid_thw", "video_grid_thw", 
                     "fast_video_grid_thw", "pixel_values_videos", "input_image_ids"]:
                 model_kwargs.pop(key, None)
-            
+            print(f"decode last_group={last_group}")
             # 模型前向（使用cache）
             outputs = self(
                 last_group,
