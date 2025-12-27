@@ -287,7 +287,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 max_new_tokens=self.token_head_max_new_tokens
             )
             self.token_head.reset_infer_funcs()
-            print(111, f"oken_head.generate_output={output.shape}")
+            print(111, f"oken_head.generate_output={output.shape}, batchsize={batchsize}")
             output = h.reshape(batchsize, -1, *output.shape[1:]) # batchsize x word_length x subword_length x vocab_size
 
         # Output list if hidden states are requested, otherwise just the output
