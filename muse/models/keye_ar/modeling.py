@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 import logging
 from einops import rearrange
-
+import warnings
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig, UnifiedQwen3Config
@@ -686,7 +686,10 @@ class KeyeARModel(Model):
         **kwargs
     ):
         assert int(input_ids is not None) + int(tokens is not None) <= 1, "Only one of tokens or input_ids can be provided."
-        
+        if kwargs.get('position_ids', None) is not None:
+            input_pos = kwargs["position_ids"]
+            warnings.warn("position_ids is deprecated and going to be removed, please use input_pos instead.")
+
         if input_ids is not None: 
             tokens = input_ids
 

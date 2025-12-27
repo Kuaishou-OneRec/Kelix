@@ -91,7 +91,8 @@ from muse.utils.common import (
     print_rank_0,
     print_rank_n,
     to_cuda,
-    dist_reduce_dict
+    dist_reduce_dict,
+    parse_config_overrides
 )
 from muse.data.datasets import (
     Token2ImageDataset, 
@@ -112,49 +113,6 @@ from muse.training.ema import EMAModel, ema_update
 
 
 logger = logging.getLogger(__name__)
-
-
-def parse_config_overrides(overrides: list) -> dict:
-    """Parse config override strings into a dictionary.
-    
-    Args:
-        overrides: List of strings in format "key=value"
-        
-    Returns:
-        Dictionary of parsed overrides with appropriate types
-        
-    Example:
-        >>> parse_config_overrides(["use_pe=true", "pe_interpolation=1.0"])
-        {"use_pe": True, "pe_interpolation": 1.0}
-    """
-    result = {}
-    for override in overrides:
-        if "=" not in override:
-            raise ValueError(f"Invalid override format: {override}. Expected key=value")
-        
-        key, value = override.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        
-        # Parse value to appropriate type
-        if value.lower() == "true":
-            result[key] = True
-        elif value.lower() == "false":
-            result[key] = False
-        elif value.lower() == "none":
-            result[key] = None
-        else:
-            # Try to parse as number
-            try:
-                if "." in value:
-                    result[key] = float(value)
-                else:
-                    result[key] = int(value)
-            except ValueError:
-                # Keep as string
-                result[key] = value
-    
-    return result
 
 
 def get_argument_parser():
@@ -204,20 +162,9 @@ def get_argument_parser():
                         help="Enable multi-scale training with variable aspect ratios. "
                              "Use --resolution-budgets for curriculum scheduling.")
 
-    parser.add_argument("--max-resolution-level", type=int, default=1024,
-                        help="Maximum resolution level for multi-scale training")
-    
     parser.add_argument("--resolution-budgets", type=str, default=None,
                         help="Resolution budgets as 'size:batch_size,...' "
                              "Example: '512:32,768:16,1024:8'")
-    
-    parser.add_argument("--resolution-start-weights", type=str, default=None,
-                        help="Starting weights for each resolution (low-res heavy). "
-                             "Example: '0.7,0.2,0.1' means 70%% 512, 20%% 768, 10%% 1024")
-    
-    parser.add_argument("--resolution-end-weights", type=str, default=None,
-                        help="Ending weights for each resolution (high-res heavy). "
-                             "Example: '0.1,0.2,0.7' means 10%% 512, 20%% 768, 70%% 1024")
 
     ############ Diffusion args ############
     parser.add_argument("--num-timesteps", type=int, default=1000,
@@ -337,7 +284,7 @@ def get_argument_parser():
 
     ############ Visualization Args ############
     
-    parser.add_argument("--cfg-scale", type=float, default=4.5,
+    parser.add_argument("--cfg-scale", type=float, default=1.0,
                         help="CFG scale for validation sampling")
     
     parser.add_argument("--num-sampling-steps", type=int, default=20,
@@ -392,13 +339,12 @@ class VisReconstructionLoader:
         
         texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
         batch_size = len(original_images)
-        
+        print_rank_0(f"Loaded {len(original_images)} images for visualization, pixel_values shape: {pixel_values.shape}")
         # Add text information to TensorBoard
         if tb_writer is not None and texts:
             for i, text in enumerate(texts):
                 # Truncate text if too long for TensorBoard display
                 truncated_text = text[:200] + "..." if len(text) > 200 else text
-                # print(f"truncated_text={truncated_text}")
                 tb_writer.add_text(tag=f"visualization/text_sample_{i}", text_string=truncated_text, global_step=0)
 
         # 1. VAE Reconstruction: encode -> decode
@@ -507,6 +453,7 @@ def tokenize_images(tokenizer,
             # Fallback: create input_pos from input_ids shape
             input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
+        print_rank_0(f"tokenize_images: pixel_values={pixel_values.shape}")
         # Call KeyeARModel forward method
         outputs = tokenizer(
             tokens=input_ids,
@@ -1017,6 +964,12 @@ def train():
             else:
                 raise ValueError(f"Unknown model config field: {key}")
     
+    # Save model config to output_dir before training
+    if dist.get_rank() == 0:
+        config_save_path = os.path.join(args.output_dir, "config.json")
+        model_config.save(config_save_path)
+        print_rank_0(f"Saved model config to: {config_save_path}")
+    
     model_class_name = model_config.model_class
     # Get model class from registry
     print_rank_0(f"Available models: {list_models()}")
@@ -1143,6 +1096,7 @@ def train():
     total_params = sum(p.numel() for p in model.parameters())
     trainable_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print_rank_0(f"Total params: {total_params:,}, Trainable: {trainable_count:,} ({100*trainable_count/total_params:.2f}%)")
+
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable
     vae = None
@@ -1170,7 +1124,6 @@ def train():
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
-    print(f"args.learning_rate={args.learning_rate}")
     optimizer = torch.optim.AdamW(
         model.get_optimizer_grouped_parameters(
             learning_rate=args.learning_rate,
@@ -1188,6 +1141,7 @@ def train():
         num_training_steps=args.num_training_steps,
         min_lr=args.min_lr
     )
+
     # Create loss function
     loss_fn = FlowMatchingLoss(
         num_timesteps=args.num_timesteps,
@@ -1236,43 +1190,34 @@ def train():
         dataset_config["rank"] = dist.get_rank()
         dataset_config["world_size"] = dist.get_world_size()
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
+    
+    dataset_config["multi_scale"] = args.multi_scale
+    dataset_config["max_condition_length"] = args.max_condition_length
+
+
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Chat2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
-
-    # Store wrapper reference for step updates (used in training loop)
-    multi_scale_wrapper = None
     
     if args.multi_scale:
         # Parse resolution budget config or create single-resolution default
         if args.resolution_budgets:
-            budget_config = parse_resolution_budgets(
-                args.resolution_budgets,
-                args.resolution_start_weights,
-                args.resolution_end_weights,
-            )
+            budget_config = parse_resolution_budgets(args.resolution_budgets)
         else:
             # Single resolution default - no curriculum scheduling
             budget_config = ResolutionBudgetConfig(
                 budgets=[ResolutionBudget(args.image_size, args.batch_size)],
-                start_weights=[1.0],
-                end_weights=[1.0],
             )
         
-        print_rank_0(f"Multi-scale training with curriculum scheduling:")
-        print_rank_0(f"  Total steps: {args.num_training_steps}")
-        for b, sw, ew in zip(budget_config.budgets, 
-                              budget_config.start_weights, 
-                              budget_config.end_weights):
-            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
-                         f"weight {sw:.2f} -> {ew:.2f}")
+        print_rank_0(f"Multi-scale training configuration:")
+        for b in budget_config.budgets:
+            print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}")
         
         # Wrap with multi-scale wrapper (supports both fixed and dynamic resolution)
         multi_scale_wrapper = MultiScaleDatasetWrapper(
             dataset=dataset,
             config=budget_config,
-            total_steps=args.num_training_steps,
-            drop_last=True,
+            drop_last=True
         )
         
         dataloader = DataLoader(
@@ -1284,7 +1229,6 @@ def train():
         
         print_rank_0("Multi-scale training enabled")
     else:
-        print(f"no multi scale", collate_fn)
         dataloader = DataLoader(
             dataset,
             batch_size=args.batch_size,
@@ -1402,8 +1346,6 @@ def train():
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
 
-
-
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
                 for k, v in batch.items():
@@ -1412,12 +1354,8 @@ def train():
                             device=torch.cuda.current_device(),
                             dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                         )
-            # print(f"batch={batch}")
+
             scheduler.step()
-            
-            # # Update multi-scale weights based on training progress
-            # if multi_scale_wrapper is not None:
-            #     multi_scale_wrapper.set_step(scheduler.global_step)
 
             # 3. VAE Encode (get latents)
             with record_function("VAE_Encode"):
@@ -1483,18 +1421,6 @@ def train():
             # Logging
             if scheduler.should_logging():
                 metrics.write_logs(scheduler.global_step)
-                
-                # Log curriculum weight progression for multi-scale
-                if multi_scale_wrapper is not None:
-                    stats = multi_scale_wrapper.get_sampler_stats()
-                    weight_str = ", ".join(
-                        f"{size}:{w:.2f}" 
-                        for size, w in stats["weights"].items()
-                    )
-                    print_rank_0(
-                        f"[step={stats['step']}] progress={stats['progress']:.1%}, "
-                        f"weights=[{weight_str}]"
-                    )
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
