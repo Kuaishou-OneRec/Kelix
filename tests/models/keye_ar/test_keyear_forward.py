@@ -101,15 +101,7 @@ def generate_and_understanding(model, processor):
     inputs = process_message(processor, next(model.parameters()).device, messages)
     inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
     inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
-    for k,v in inputs.items():
-        try:
-            print(f"{k}: {v.shape}")
-        except:
-            print(f"{k}: {v}")
-
     inputs = inputs.to(next(model.parameters()).device)
-    import IPython
-    IPython.embed()
     output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
@@ -190,30 +182,8 @@ def edit_and_understanding(model, processor):
         print(f"生成内容: {content}\n")
 
 
-def demo_keyear_forward():
-    """
-    KeyeAR模型前向计算的demo，严格参考tests/test_keyear.py的实现
-    """
-    # 设置随机种子
-    torch.manual_seed(0)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(0)
-    device = "cuda:0"
-    # 检查预训练模型路径是否存在
-    checkpoint_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
-    checkpoint_dir = "/llm_reco_ssd/lingzhixin/models/tmp2"
-    processor = AutoProcessor.from_pretrained(
-            checkpoint_dir, 
-            trust_remote_code=True
-        )
-
-    # 创建Muse模型实例
-    model_dtype = torch.bfloat16
-    with set_default_dtype(model_dtype):
-        muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
-    muse_model.config.qwen_config.token_decoder_with_teacher_forcing = muse_model.model.model.token_decoder_with_teacher_forcing = False
-    
-    generate_and_understanding(muse_model, processor); exit()
+def general_chatting(model, processor):
+    device = next(model.parameters()).device
     # 准备输入文本
     for messages in[
             [
@@ -241,7 +211,6 @@ def demo_keyear_forward():
         generate_params = {
             "max_new_tokens": 450,
             "top_k": 1,
-            # "eos_token_id": tokenizer.eos_token_id
         }
         
 
@@ -249,7 +218,7 @@ def demo_keyear_forward():
         print(f"生成参数: {generate_params}")
         print("开始生成...")
         
-        generated_ids = muse_model.generate(
+        generated_ids = model.generate(
             **inputs, 
             **generate_params
         )
@@ -261,11 +230,35 @@ def demo_keyear_forward():
         
         print("\n生成结果:")
         print(generated_text)
+
+
+def test_keyear_forward():
+    """
+    KeyeAR模型前向计算的demo，严格参考tests/test_keyear.py的实现
+    """
+    # 设置随机种子
+    torch.manual_seed(0)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(0)
+    device = "cuda:0"
+
+    # 检查预训练模型路径是否存在
+    checkpoint_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
+    processor = AutoProcessor.from_pretrained(
+            checkpoint_dir, 
+            trust_remote_code=True
+        )
+
+    # 创建Muse模型实例
+    model_dtype = torch.bfloat16
+    with set_default_dtype(model_dtype):
+        muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     
+    general_chatting(muse_model, processor)
     generate_and_understanding(muse_model, processor)
     edit_and_understanding(muse_model, processor)
 
 
 
 if __name__ == "__main__":
-    demo_keyear_forward()
+    test_keyear_forward()
