@@ -217,7 +217,7 @@ def demo_keyear_forward():
                 }, 
                 {"type": "text", "content": "What's in the image?"}]}
             ],
-            [{"role": "user", "content": "Generate an image of cat."}]
+            # [{"role": "user", "content": "Generate an image of cat."}]
         ]:
         print(f"\n\n\nmessages=\n{messages}")
         # 应用chat template并编码
@@ -231,7 +231,7 @@ def demo_keyear_forward():
         
         # 设置生成参数
         generate_params = {
-            "max_new_tokens": 450,
+            "max_new_tokens": 10,
             "temperature": 0.8,
             "top_k": 1,
             "top_p": 0.95,

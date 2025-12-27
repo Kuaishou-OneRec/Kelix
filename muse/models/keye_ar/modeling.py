@@ -889,7 +889,8 @@ class KeyeARModel(Model):
             next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
             current_ids = torch.cat([current_ids, next_group], dim=1)
-        
+            print(f"prefill current_ids={current_ids}")
+
         # Decode阶段：增量生成，仅输入新增group
         for step in range(1, max_new_tokens):
             # 仅取最后一个group作为输入（增量生成）
@@ -916,7 +917,8 @@ class KeyeARModel(Model):
 
             # Append新生成的group
             current_ids = torch.cat([current_ids, next_group], dim=1)
-            
+            print(f"ar next_group={next_group}")
+
             # 提前终止：新增group的第一个token是EOS
             # next_group, batchsize x length x n_tokens
             if (next_group[..., 0] == self.config.qwen_config.eos_token_id).all():
