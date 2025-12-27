@@ -23,7 +23,7 @@ from PIL import Image
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
 from tests.models.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
 from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
-from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig, KeyeTokenizerEnd2EndImageConfig
 from muse.training.common import set_default_dtype
 
 # 导入 Origin 模型的 RoPE debug 变量
@@ -484,16 +484,19 @@ def test_pipeline_alignment():
     
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
 
+    # --- Build Muse Model Config ---
+    model_cfg = KeyeTokenizerEnd2EndImageConfig(
+        qwen_config=qwen_cfg,
+        vision_config=vision_cfg,
+        tokenizer_config=tokenizer_cfg,
+        image_token_id=raw_cfg.get("image_token_id", 151655),
+        pool="sum",
+    )
+
     # --- Initialize Models ---
     with set_default_dtype(dtype):
         logger.info("Initializing Muse Model...")
-        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
-            qwen_config=qwen_cfg,
-            vision_config=vision_cfg,
-            tokenizer_config=tokenizer_cfg,
-            image_token_id=raw_cfg.get("image_token_id", 151655),
-            pool="sum"
-        ).to(device)
+        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(model_cfg).to(device)
         
         logger.info("Initializing Origin Model...")
         origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg).to(device, dtype)
