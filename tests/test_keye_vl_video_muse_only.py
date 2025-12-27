@@ -134,6 +134,7 @@ def main():
     
     # --- 6. 执行推理并保存 Logits ---
     logger.info("🔥 Running forward pass...")
+    inputs.pop("num_frames", None)
     with torch.no_grad():
         outputs = model(**inputs)
         
