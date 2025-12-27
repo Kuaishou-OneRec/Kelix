@@ -133,6 +133,7 @@ def main():
         logger.info(f"   Video Grid THW: {inputs['video_grid_thw'].tolist()}")
     
     # --- 6. 执行推理并保存 Logits ---
+    inputs.pop("num_frames", None)
     logger.info("🔥 Running forward pass...")
     with torch.no_grad():
         outputs = model(**inputs)
