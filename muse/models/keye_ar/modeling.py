@@ -374,6 +374,9 @@ class UnifiedQwen3Model(Qwen3Model):
             cache_position: 缓存位置
         """
         print(f"unified_token_decoder.py: forward input tokens={tokens}")
+        import IPython
+        IPython.embed()
+
         if tokens.size(-1) == 1:
             tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
@@ -702,6 +705,9 @@ class KeyeARModel(Model):
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
+        print(f"expand_with_image_tokensexpand_with_image_tokens")
+        import IPython
+        IPython.embed()
         tokens = self.expand_with_image_tokens(aligned_indices, tokens)
         assert input_pos.ndim == 2, "input_pos must be 2D"
         assert tokens.ndim == 3, "tokens must be 3D after expansion, get {}".format(tokens.shape)
