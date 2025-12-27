@@ -94,9 +94,6 @@ class UnifiedTokenEmbedding(nn.Module):
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
             aggregated_embeddings = self._embedding_aggregation(extended_tokens, embeddings)
-            torch.save(aggregated_embeddings, "aggregated_embeddings2.pt")
-            torch.save(embeddings, "embeddings2.pt")
-            exit()
             return aggregated_embeddings
         else:
             return embeddings
@@ -282,7 +279,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 self.tok_embeddings._get_token_embeddings, 
                 self.unembed
             )
-
+            print(1111, 'token_head.generate', h.shape, h.flatten(0,1)[:,None].shape)
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
