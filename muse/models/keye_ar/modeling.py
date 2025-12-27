@@ -287,7 +287,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             )
             self.token_head.reset_infer_funcs()
             print(111, f"oken_head.generate_output={output.shape}")
-            output = h
+            output = h.reshape(*h.shape[:2], *output.shape[2:]) # batchsize x word_length x subword_length x vocab_size
 
         # Output list if hidden states are requested, otherwise just the output
         # TODO: always output a list to have a consistent output type
@@ -892,7 +892,13 @@ class KeyeARModel(Model):
                 input_pos=prefill_pos,
                 **model_kwargs
             )
+            print("keye ar generation")
+            import IPython
+            IPython.embed()
+
+            # batchsize x word_length x subword_length x vocab_size
             logits = outputs
+
             print(f"logits_from_generate", logits.shape, logits.argmax(-1))
             # logits = outputs.logits  # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=0)
