@@ -599,15 +599,21 @@ class KeyeARModel(Model):
         
         参数说明：
             input_image_ids: 图像索引矩阵，维度为 (im_len, n_q_tokens)
-            tokens: 原始输入ID矩阵，维度为 (batch_size, len) 或 (batch_size, len, 1)
+            tokens: 原始输入ID矩阵，维度为 (batch_size, len) 或 (batch_size, len, 1) 或 (batch_size, len, n_q_tokens + 1)
             padded_token: 填充标记的整数ID
             image_token_id: 用于标识需要替换为图像tokens的特殊标记ID
         
         返回值：
             expanded_ids: 拓展后的矩阵，维度为 (batch_size, len, 1 + n_q_tokens)
         """
-        if tokens.ndim == 3 and tokens.size(2) != 1:
-            return tokens # 已经拓展过了
+        if tokens.ndim == 3 and tokens.size(2) == self.config.qwen_config.n_q_tokens + 1:
+            # 满足上面这个if分支，理论上tokens已经是拓展过了，但是并不保证image_token_id被替换过
+            # 这里加一个判断，不存在image_token_id，说明纯文本，或者已经替换过image_token_id了，直接返回
+            if not torch.any(tokens == self.config.qwen_config.image_token_id):
+                return tokens
+            
+            # 否则，还需要做一次image token id的替换
+            tokens = tokens[:, :, 0]
         
         # 记录原始维度
         original_shape = tokens.shape
