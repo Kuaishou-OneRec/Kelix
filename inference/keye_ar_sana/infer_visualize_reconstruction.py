@@ -10,7 +10,7 @@ Usage example:
     python inference/keye_ar_sana/infer_visualize_reconstruction.py \
         --model-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
         --vae-dir /llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/ \
-        --keye-ar-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4/./step23000/global_step23000/muse_converted \
+        --keye-ar-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted \
         --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
         --parquet-path /mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet \
         --output-dir /tmp/vis_demo --num-images 8
