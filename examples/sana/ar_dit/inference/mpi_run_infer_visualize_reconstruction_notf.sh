@@ -31,8 +31,6 @@ MAX_CONDITION_LENGTH=2560
 IMAGE_SIZE=1024
 SEED=42
 INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
-RANK=0
-WORLD_SIZE=1
 MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=1280 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
@@ -58,17 +56,9 @@ MAX_CONDITION_LENGTH=${MAX_CONDITION_LENGTH:-$MAX_CONDITION_LENGTH}
 IMAGE_SIZE=${IMAGE_SIZE:-$IMAGE_SIZE}
 SEED=${SEED:-$SEED}
 INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
-RANK=${RANK:-$RANK}
-WORLD_SIZE=${WORLD_SIZE:-$WORLD_SIZE}
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
 DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
 DCP_TAG=${DCP_TAG:-$DCP_TAG}
-
-# ---- Prepare flags ----
-INIT_DIST_FLAG=""
-if [ "$INITIALIZE_DIST" = true ] || [ "$INITIALIZE_DIST" = "True" ]; then
-  INIT_DIST_FLAG="--initialize-dist --rank ${RANK} --world-size ${WORLD_SIZE}"
-fi
 
 # Prepare model config overrides flag
 MODEL_CONFIG_OVERRIDES_FLAG=""
@@ -182,6 +172,5 @@ nohup mpirun --allow-run-as-root \
       --seed ${SEED} \
       --results-dir "${RESULTS_DIR}" \
       --teacher-forcing ${TEACHER_FORCING} \
-      ${INIT_DIST_FLAG} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

@@ -182,7 +182,6 @@ def tokenize_images(ar_processor : AutoProcessor,
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
     assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
     # input_ids: [batch_size, total_seq_len]
-    
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
         # Convert assistant_start_ids to tensor and ensure same device as input_ids

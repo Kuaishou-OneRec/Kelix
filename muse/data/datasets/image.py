@@ -1326,6 +1326,14 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     index   tag     include_class   include_count   include_color   include_position        exclude_class   exclude_count   question
     1       single_object   bench   1                                       a photo of a bench
     2       single_object   cow     1                                       a photo of a cow
+
+    a resulted sample is like 
+    {'messages': [
+        {'role': 'system', 'content': 'You are a helpful assistant.'}, 
+        {'role': 'user', 'content': [{'type': 'text', 'text': 'a photo of a bench'}]}], 
+        'metadata': {'index': 1, 'tag': 'single_object', 'include_class': 'bench', 
+        'include_count': '1', 'include_color': None, 'include_position': None, 'exclude_class': None, 
+        'exclude_count': None, 'question': 'a photo of a bench'}}
     """
     def __init__(self, 
                  gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 

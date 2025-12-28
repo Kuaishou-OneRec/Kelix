@@ -34,6 +34,7 @@ import argparse
 import os
 import json
 import torch
+import easydict
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -48,6 +49,7 @@ from muse.config import load_config
 from muse.models import get_model_class
 from muse.models.keye_ar import KeyeARModel
 from muse.utils.common import parse_config_overrides
+from muse.data.datasets.image import GenEvalInferenceDataset
 
 
 def parse_args():
@@ -91,19 +93,13 @@ def parse_args():
     parser.add_argument("--results-dir", type=str, default="./results",
                         help="Directory to save generated DiT JPEGs and messages JSON")
 
-    # Distributed options: Chat2ImageDataset/Token2ImageDataset expect rank/world_size
-    parser.add_argument("--initialize-dist", action="store_true",
-                        help="Initialize a local single-process distributed group for dataset compatibility")
-    parser.add_argument("--rank", type=int, default=0,
-                        help="Distributed rank to set in dataset config (default: 0)")
-    parser.add_argument("--world-size", type=int, default=1,
-                        help="Distributed world_size to set in dataset config (default: 1)")
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
+
     return parser.parse_args()
 
 
-def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
+def setup_distributed_environment() -> bool:
     """
     Initialize distributed environment for single-process inference runs using the
     same approach as our tests: TCP init on localhost (gloo backend).
@@ -111,14 +107,16 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     Returns:
         True if distributed was initialized successfully, otherwise False.
     """
-    print(f"going to init: {rank}/{world_size}")
-    dist.init_process_group(
-        backend='gloo',
-        init_method='tcp://127.0.0.1:29500',
-        rank=rank,
-        world_size=world_size,
+
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+    local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
+    torch.cuda.set_device(local_rank)
+    torch.distributed.init_process_group(
+        rank=rank, world_size=world_size,
+        timeout=3600
     )
-    print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
     return True
 
 
@@ -323,7 +321,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
-    setup_distributed_environment(args.rank, args.world_size)
+    setup_distributed_environment()
 
     # Convert DCP checkpoint if needed
     model_dir = args.model_dir
@@ -408,11 +406,10 @@ def main():
     dataset_cfg['image_size'] = args.image_size
     dataset_cfg['max_condition_length'] = args.max_condition_length
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
-    dataset_cfg['rank'] = args.rank
-    dataset_cfg['world_size'] = args.world_size
+
 
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
-    dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
+    dataset = GenEvalInferenceDataset(**dataset_cfg)
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
     print("Running DiT sampling and saving results...")
@@ -420,28 +417,21 @@ def main():
     from diffusers import FlowMatchEulerDiscreteScheduler
     import time
 
-    try:
+
+    latent_channels = model_for_vis.config.caption_channels
+    latent_size = model_for_vis.config.hidden_size
+    for samples in dataset:
+        samples = easydict.EasyDict(samples)
+        print(f"samples: {samples}")
         with torch.no_grad():
-            # Load samples / preprocess
-            loaded = train_rec.VisReconstructionLoader()(
-                args.parquet_path,
-                dataset,
-                args.image_size,
-                device,
-                dtype,
-                args.num_images,
-                None,
-                vae,
-            )
+            batchsize = samples.input_ids.shape[0]
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
-                pixel_values=loaded.pixel_values.to(device=device),
-                image_grid_thw=loaded.image_grid_thw.to(device=device),
-                batch_size=loaded.batch_size,
+                batch_size=batchsize,
                 max_condition_length=args.max_condition_length,
-                input_ids=loaded.input_ids.to(device=device),
+                input_ids=samples.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
             )
@@ -449,15 +439,15 @@ def main():
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding
             seq_len = min(null_embed.shape[0], args.max_condition_length)
-            uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(loaded.batch_size, -1, -1)
+            uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(batchsize, -1, -1)
             if seq_len < args.max_condition_length:
                 padding = torch.zeros(
-                    loaded.batch_size, args.max_condition_length - seq_len, uncond_embeds.shape[-1],
+                    batchsize, args.max_condition_length - seq_len, uncond_embeds.shape[-1],
                     device=device, dtype=dtype
                 )
                 uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
             uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
-            uncond_mask = torch.zeros(loaded.batch_size, args.max_condition_length, device=device)
+            uncond_mask = torch.zeros(batchsize, args.max_condition_length, device=device)
             uncond_mask[:, :seq_len] = 1
             uncond_mask = uncond_mask[:, None, None, :]
 
@@ -467,7 +457,7 @@ def main():
 
             generator = torch.Generator(device=device).manual_seed(args.seed)
             dit_latents = torch.randn(
-                (loaded.batch_size, loaded.latent_channels, loaded.latent_size, loaded.latent_size),
+                (batchsize, latent_channels, latent_size, latent_size),
                 generator=generator,
                 device=device,
                 dtype=dtype,
@@ -494,7 +484,7 @@ def main():
             os.makedirs(results_step_dir, exist_ok=True)
 
             dit_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
-            messages = list(getattr(loaded, 'texts', []))
+            messages = list(getattr(samples[0], 'texts', []))
             mapping = {}
             for i in range(len(dit_np)):
                 img = Image.fromarray((dit_np[i] * 255).round().astype("uint8"))
@@ -507,9 +497,7 @@ def main():
                 json.dump(mapping, f, ensure_ascii=False, indent=2)
 
             print(f"Saved {len(dit_np)} DiT images and messages to: {results_step_dir}")
-    except Exception as e:
-        print(f"Error running DiT sampling: {e}")
-        raise
+
 
 
 if __name__ == "__main__":
