@@ -51,8 +51,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", type=str, required=True,
                         help="Directory containing pretrained model or checkpoint")
-    parser.add_argument("--dcp-source-dir", type=str, default=None,
-                        help="Source directory for DCP checkpoint conversion (required if --dcp-tag is used)")
+    parser.add_argument("--dcp-ckpt-dir", type=str, default=None,
+                        help="CKPT directory for DCP checkpoint conversion (required if --dcp-tag is used)")
     parser.add_argument("--dcp-tag", type=str, default=None,
                         help="Tag for DCP checkpoint (e.g., global_step8000)")
     parser.add_argument("--model-config", type=str, default=None,
