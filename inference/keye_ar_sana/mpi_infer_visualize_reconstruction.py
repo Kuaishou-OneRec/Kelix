@@ -413,10 +413,8 @@ def main():
     # 3) Load VAE and Keye AR ar_model/processor
     print("Loading VAE...")
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
-    print(vae)
 
     latent_channels = vae.config.latent_channels
-    print(f"latent_channels: {latent_channels}")
 
     print("Loading Keye AR ar_model/processor...")
 
@@ -468,7 +466,6 @@ def main():
 
         with torch.no_grad():
             batch_size = samples.input_ids.shape[0]
-            print(f"batch_size: {batch_size}")
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
