@@ -96,6 +96,8 @@ TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+echo "Going to output dir: "$OUTPUT_DIR
+
 PYTHONPATH=. \
 nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
