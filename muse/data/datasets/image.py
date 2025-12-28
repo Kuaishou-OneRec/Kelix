@@ -1404,11 +1404,8 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
             tokenize=False
         )
 
-        image_inputs, _, _ = process_vision_info(templated_messages)
-
         inputs = self.processor(
             text=[text],
-            images=image_inputs,
             padding=False,
             truncation=False,
             return_tensors="pt",
