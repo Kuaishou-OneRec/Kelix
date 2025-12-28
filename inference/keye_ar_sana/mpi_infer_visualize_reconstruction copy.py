@@ -263,7 +263,9 @@ def main():
     dataset = GenEvalInferenceDataset(
         processor_path=args.keye_ar_dir, 
         gen_eval_csv_path=args.gen_eval_csv_path,
-        infer_repeats=args.infer_repeats)
+        infer_repeats=args.infer_repeats,
+        **dataset_cfg
+        )
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
     print("Running DiT sampling and saving results...")
