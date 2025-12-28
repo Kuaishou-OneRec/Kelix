@@ -507,7 +507,6 @@ class KeyeARModel(Model):
         """
         设置是否输出hidden states
         """
-        self.config.qwen_config.output_hidden_states = output_hidden_states
         self.model.model.output_hidden_states = output_hidden_states
         return output_hidden_states
 
