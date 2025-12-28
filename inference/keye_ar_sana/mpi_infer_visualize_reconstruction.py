@@ -441,7 +441,7 @@ def main():
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
 
     dataset = GenEvalInferenceDataset(
-        processor_path=args.keye_ar_dir, 
+        # processor_path=args.keye_ar_dir, 
         gen_eval_csv_path=args.gen_eval_csv_path,
         infer_repeats=args.infer_repeats,
         **dataset_cfg
