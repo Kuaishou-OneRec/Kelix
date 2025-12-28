@@ -85,21 +85,15 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     Returns:
         True if distributed was initialized successfully, otherwise False.
     """
-    if dist.is_available() and not dist.is_initialized():
-        try:
-            dist.init_process_group(
-                backend='gloo',
-                init_method='tcp://127.0.0.1:29500',
-                rank=rank,
-                world_size=world_size,
-            )
-            print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
-            return True
-        except Exception as e:
-            print(f"Warning: Failed to initialize distributed environment: {e}")
-            print("Will attempt to run without distributed mode...")
-            return False
+    dist.init_process_group(
+        backend='gloo',
+        init_method='tcp://127.0.0.1:29500',
+        rank=rank,
+        world_size=world_size,
+    )
+    print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
     return True
+
 
 
 def main():
@@ -111,8 +105,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
-    if args.initialize_dist:
-        setup_distributed_environment(args.rank, args.world_size)
+    setup_distributed_environment(args.rank, args.world_size)
 
     # 1) Load model config and instantiate model for visualization
     if args.model_config:
