@@ -37,6 +37,7 @@ import torch
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
+from transformers import AutoProcessor
 
 # Import DCP to torch converter
 from muse.tools.dcp2torch import convert as dcp_to_torch_convert
@@ -45,6 +46,7 @@ from muse.tools.dcp2torch import convert as dcp_to_torch_convert
 from recipes.sana import train_sana_ar_dit as train_rec
 from muse.config import load_config
 from muse.models import get_model_class
+from muse.models.keye_ar import KeyeARModel
 from muse.utils.common import parse_config_overrides
 
 
@@ -96,6 +98,8 @@ def parse_args():
                         help="Distributed rank to set in dataset config (default: 0)")
     parser.add_argument("--world-size", type=int, default=1,
                         help="Distributed world_size to set in dataset config (default: 1)")
+    parser.add_argument("--teacher_forcing", type=bool, action="store_true",
+                        help="Enable teacher forcing during inference")
     return parser.parse_args()
 
 
@@ -118,17 +122,39 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     return True
 
 
-def tokenize_images(tokenizer,
+
+def get_model_embedding_and_tokens(
+        model: KeyeARModel,
+        teacher_forcing: bool = False,
+        input_ids: Optional[torch.Tensor] = None,
+        **kwargs
+    ):
+    if teacher_forcing:
+        outputs = model(**kwargs)
+        embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
+        return embeddings, embeddings
+    else:
+        tokens, embeddings = model.generate(
+            input_ids=input_ids,
+            **kwargs
+        )
+        return tokens, embeddings
+        
+
+def tokenize_images(ar_processor : AutoProcessor,
+                    ar_model : KeyeARModel,
                     pixel_values: torch.Tensor,
                     image_grid_thw: torch.Tensor,
                     batch_size: int,
                     max_condition_length: int,
                     input_ids: Optional[torch.Tensor] = None,
-                    cu_seqlens: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+                    cu_seqlens: Optional[torch.Tensor] = None,
+                    teacher_forcing: bool = False,
+                    ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
     Args:
-        tokenizer: KeyeARModel instance
+        ar_model: KeyeARModel instance
         pixel_values: Pixel values tensor [num_total_patches, ...]
         image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
         batch_size: Batch size (number of packed sequences)
@@ -141,6 +167,16 @@ def tokenize_images(tokenizer,
         - embeddings: [B, max_condition_length, embed_dim]
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
+    assistant_start_ids = ar_processor.decode("<|im_start|>assistant")
+    print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
+    if not teacher_forcing:
+        # find assistant_start_ids in input_ids and delete the tokens after
+        assistant_start_idx = (input_ids == assistant_start_ids).nonzero(as_tuple=True)[0]
+        if len(assistant_start_idx) > 0:
+            assistant_start_idx = assistant_start_idx[0]
+            input_ids = input_ids[:assistant_start_idx]
+    print(f"input_ids after assistant_start_ids={input_ids}")
+
     with torch.no_grad():
         
         # Create input_pos using cu_seqlens if provided
@@ -157,21 +193,30 @@ def tokenize_images(tokenizer,
             # Fallback: create input_pos from input_ids shape
             input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
-        print(f"tokenize_images: pixel_values={pixel_values.shape}")
-        # Call KeyeARModel forward method
-        outputs = tokenizer(
-            tokens=input_ids,
+        # print(f"tokenize_images: pixel_values={pixel_values.shape}")
+        # # Call KeyeARModel forward method
+        # outputs = ar_model(
+        #     tokens=input_ids,
+        #     pixel_values=pixel_values,
+        #     image_grid_thw=image_grid_thw,
+        #     input_pos=input_pos,
+        #     cu_seqlens=cu_seqlens,
+        # )
+        
+        # embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
+        input_ids, embeddings = get_model_embedding_and_tokens(
+            model=ar_model,
+            teacher_forcing=teacher_forcing,
+            input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
         )
         
-        embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
-        
         # Extract embeddings between vision_start_id and vision_end_id
-        vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
-        vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
+        vision_start_id = ar_model.config.qwen_config.vision_start_token_id
+        vision_end_id = ar_model.config.qwen_config.vision_end_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
@@ -315,15 +360,20 @@ def main():
     model_for_vis.to(device).bfloat16()
     model_for_vis.eval()
 
-    # 3) Load VAE and Keye AR tokenizer/processor
+    # 3) Load VAE and Keye AR ar_model/processor
     print("Loading VAE...")
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
-    print("Loading Keye AR tokenizer/processor...")
+    print("Loading Keye AR ar_model/processor...")
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
-    # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
+    # Ensure ar_model/model is on the intended device (Triton kernels expect CUDA tensors)
     
+    ar_processor = AutoProcessor.from_pretrained(
+        args.keye_ar_dir,
+        trust_remote_code=True
+    )
+
     image_tokenizer = image_tokenizer.to(device)
 
     # 4) Build dataset using provided dataset config (for processing helpers)
@@ -365,12 +415,14 @@ def main():
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
-                tokenizer=image_tokenizer,
+                ar_model=image_tokenizer,
                 pixel_values=loaded.pixel_values.to(device=device),
                 image_grid_thw=loaded.image_grid_thw.to(device=device),
                 batch_size=loaded.batch_size,
                 max_condition_length=args.max_condition_length,
                 input_ids=loaded.input_ids.to(device=device),
+                teacher_forcing=args.teacher_forcing,
+                ar_processor=ar_processor,
             )
 
             # Prepare unconditional embeddings for CFG
