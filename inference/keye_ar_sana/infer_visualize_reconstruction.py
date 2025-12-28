@@ -169,16 +169,36 @@ def tokenize_images(ar_processor : AutoProcessor,
     """
     import IPython
     IPython.embed()
-    assistant_start_ids = ar_processor.encode("<|im_start|>assistant")
+    assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
+    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
     print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
+    # input_ids: [batch_size, total_seq_len]
+
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
-        assistant_start_idx = (input_ids == assistant_start_ids).nonzero(as_tuple=True)[0]
-        if len(assistant_start_idx) > 0:
-            assistant_start_idx = assistant_start_idx[0]
-            input_ids = input_ids[:assistant_start_idx]
+        # Convert assistant_start_ids to tensor and ensure same device as input_ids
+        assistant_start_tensor = torch.tensor(assistant_start_ids, device=input_ids.device, dtype=input_ids.dtype)
+        
+        # Get the sequence lengths
+        seq_len = input_ids.size(1)
+        assistant_len = len(assistant_start_ids)
+        assistant_start_idx = -1
+        
+        # Search for the complete assistant_start_ids sequence
+        if seq_len >= assistant_len:
+            for i in range(seq_len - assistant_len + 1):
+                # Check if the current window matches assistant_start_ids
+                window = input_ids[0, i:i+assistant_len]
+                if torch.all(window == assistant_start_tensor):
+                    assistant_start_idx = i
+                    break
+        
+        if assistant_start_idx != -1:
+            # Keep only the tokens before assistant_start_ids
+            input_ids = input_ids[:, :assistant_start_idx]
+            print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
     print(f"input_ids after assistant_start_ids={input_ids}")
-
+    IPython.embed()
     with torch.no_grad():
         
         # Create input_pos using cu_seqlens if provided
