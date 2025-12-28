@@ -264,9 +264,10 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         if self.output_last_hidden_states_only:
             return h
 
+        print(f"len(self.layers)={len(self.layers)}", output_hidden_states)
         if len(self.layers) in output_hidden_states:
             hidden.append(h)
-
+        print(f"len_hidden={len(hidden)}")
 
         if self.token_decoder_with_teacher_forcing:
             token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
@@ -996,8 +997,10 @@ class KeyeARModel(Model):
             generated_ids = generated_ids[...,0]
 
         if hidden_states_list:
-            hidden_states = torch.stack(hidden_states_list, dim=1)
-            return generated_ids, hidden_states
+            result_hidden_states = []
+            for i in range(len(hidden_states_list[0])):
+                result_hidden_states.append(torch.stack([h_by_pos[i] for h_by_pos in hidden_states_list], dim=1))
+            return generated_ids, result_hidden_states
         else:
             return generated_ids
     
