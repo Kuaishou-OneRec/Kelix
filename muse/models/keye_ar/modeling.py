@@ -261,14 +261,11 @@ class UnifiedTransformerDecoder(TransformerDecoder):
                 **kwargs,
             )
         
-        print(f"self.output_last_hidden_states_only={self.output_last_hidden_states_only}")
         if self.output_last_hidden_states_only:
             return h
 
-        print(f"len(self.layers)={len(self.layers)}", output_hidden_states)
         if len(self.layers) in output_hidden_states:
             hidden.append(h)
-        print(f"len_hidden={len(hidden)}")
 
         if self.token_decoder_with_teacher_forcing:
             token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
@@ -745,7 +742,6 @@ class KeyeARModel(Model):
         assert tokens.size(2) == self.config.qwen_config.n_q_tokens + 1, \
             "tokens must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, tokens.size(2), aligned_indices)
 
-        print(f"unified decoding.....")
         # 调用Qwen3Model
         outputs = self.model(
             tokens=tokens,

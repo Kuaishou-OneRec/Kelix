@@ -179,12 +179,10 @@ def tokenize_images(ar_processor : AutoProcessor,
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
     import IPython
-    #IPython.embed()
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
     assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
-    print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
     # input_ids: [batch_size, total_seq_len]
-
+    
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
         # Convert assistant_start_ids to tensor and ensure same device as input_ids
@@ -208,8 +206,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             # Keep only the tokens before assistant_start_ids
             input_ids = input_ids[:, :assistant_start_idx]
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
-    print(f"input_ids after assistant_start_ids={input_ids}")
-    # IPython.embed()
+
     with torch.no_grad():
         
         # Create input_pos using cu_seqlens if provided
@@ -237,9 +234,6 @@ def tokenize_images(ar_processor : AutoProcessor,
             cu_seqlens=cu_seqlens,
             max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
         )
-        print(f"embeddinggg")
-        import IPython
-        IPython.embed()
 
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = ar_model.config.qwen_config.vision_start_token_id
