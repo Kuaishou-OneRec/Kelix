@@ -27,7 +27,7 @@ CFG_SCALE=1.0
 MAX_CONDITION_LENGTH=2560
 IMAGE_SIZE=1024
 SEED=42
-INITIALIZE_DIST=false  # initialize a local single-process dist group (set to true only if needed)
+INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
 RANK=0
 WORLD_SIZE=1
 
