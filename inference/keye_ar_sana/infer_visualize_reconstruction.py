@@ -139,6 +139,11 @@ def get_model_embedding_and_tokens(
         if "pixel_values" in kwargs:
             del kwargs["pixel_values"]
             del kwargs["image_grid_thw"]
+        if "cu_seqlens" in kwargs:
+            del kwargs["cu_seqlens"]
+        import IPython
+        IPython.embed()
+        model.set_output_hidden_states(True)
         tokens, embeddings = model.generate(
             input_ids=input_ids,
             **kwargs
