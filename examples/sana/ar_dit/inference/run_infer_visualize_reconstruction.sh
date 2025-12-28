@@ -5,7 +5,7 @@
 # Example:
 #   MODEL_DIR=/path/to/model VAEDIR=/path/to/vae KEYE_AR_DIR=/path/to/keye bash $0
 # For DCP checkpoint:
-#   MODEL_DIR=/path/to/dcp/checkpoint DCP_SOURCE_DIR=/path/to/source/dir DCP_TAG=global_step8000 bash $0
+#   MODEL_DIR=/path/to/dcp/checkpoint DCP_CKPT_DIR=/path/to/source/dir DCP_TAG=global_step8000 bash $0
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ INITIALIZE_DIST=true  # initialize a local single-process dist group (set to tru
 RANK=0
 WORLD_SIZE=1
 MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=3000 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
-DCP_SOURCE_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
 
 # Allow overrides from environment
@@ -57,7 +57,7 @@ INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
 RANK=${RANK:-$RANK}
 WORLD_SIZE=${WORLD_SIZE:-$WORLD_SIZE}
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
-DCP_SOURCE_DIR=${DCP_SOURCE_DIR:-$DCP_SOURCE_DIR}
+DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
 DCP_TAG=${DCP_TAG:-$DCP_TAG}
 
 # ---- Prepare flags ----
@@ -76,8 +76,8 @@ fi
 DCP_FLAGS=""
 if [ -n "$DCP_TAG" ]; then
   DCP_FLAGS="--dcp-tag $DCP_TAG"
-  if [ -n "$DCP_SOURCE_DIR" ]; then
-    DCP_FLAGS="$DCP_FLAGS --dcp-source-dir $DCP_SOURCE_DIR"
+  if [ -n "$DCP_CKPT_DIR" ]; then
+    DCP_FLAGS="$DCP_FLAGS --dcp-source-dir $DCP_CKPT_DIR"
   fi
 fi
 

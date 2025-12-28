@@ -133,12 +133,12 @@ def main():
     if args.dcp_tag:
         print(f"Detected DCP checkpoint conversion parameters:")
         print(f"  DCP Checkpoint Dir: {model_dir}")
-        print(f"  DCP Source Dir: {args.dcp_source_dir}")
+        print(f"  DCP Source Dir: {args.dcp_ckpt_dir}")
         print(f"  DCP Tag: {args.dcp_tag}")
         
         # Call DCP to torch conversion
         dcp_to_torch_convert(
-            checkpoint_dir=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/,
+            checkpoint_dir=args.dcp_ckpt_dir,
             tag=args.dcp_tag,
             source_dir=model_dir
         )
