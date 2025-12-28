@@ -754,6 +754,10 @@ class KeyeARModel(Model):
         **model_kwargs
     ):
         """
+        用于双transformers的多模态生成函数
+        传统上的一个token都被编码为一组token，一组token最多有n_q_tokens + 1个子token，具体长度由q_eos_token标记。
+        对于输入，q_eos_token之前的token embedding被求和输入到llm中。随遇输出，会用一个小transformers进行自回归解码，得到一组token。
+
         多模态生成函数，处理image token扩展和循环生成逻辑
             输入的input_ids可以是batchsize x length，也可以是batchsize x length x (n_q_tokens + 1)
 
