@@ -4,7 +4,8 @@ from .image import (
     Text2ImageDataset, 
     Token2ImageDataset,
     MultiScaleDatasetWrapper,
-    Chat2ImageDataset
+    Chat2ImageDataset,
+    GenEvalInferenceDataset
 )
 
 # Backward compatibility - expose all classes
@@ -14,5 +15,6 @@ __all__ = [
     'Text2ImageDataset',
     'Token2ImageDataset',
     'MultiScaleDatasetWrapper',
-    'Chat2ImageDataset'
+    'Chat2ImageDataset',
+    'GenEvalInferenceDataset'
 ]
