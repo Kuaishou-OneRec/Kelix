@@ -1361,11 +1361,11 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                     'index': int(row['index']),
                     'tag': row['tag'],
                     'include_class': row['include_class'],
-                    'include_count': int(row['include_count']) if row['include_count'] else None,
+                    'include_count': row['include_count'] if row['include_count'] else None,
                     'include_color': row['include_color'] or None,
                     'include_position': row['include_position'] or None,
                     'exclude_class': row['exclude_class'] or None,
-                    'exclude_count': int(row['exclude_count']) if row['exclude_count'] else None,
+                    'exclude_count': row['exclude_count'] if row['exclude_count'] else None,
                     'question': row['question']
                 }
                 all_data.append(sample_dict)
