@@ -117,6 +117,136 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     return True
 
 
+def tokenize_images(tokenizer,
+                    pixel_values: torch.Tensor,
+                    image_grid_thw: torch.Tensor,
+                    batch_size: int,
+                    max_condition_length: int,
+                    input_ids: Optional[torch.Tensor] = None,
+                    cu_seqlens: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Tokenize images using KeyeARModel.
+    
+    Args:
+        tokenizer: KeyeARModel instance
+        pixel_values: Pixel values tensor [num_total_patches, ...]
+        image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
+        batch_size: Batch size (number of packed sequences)
+        max_condition_length: Maximum condition sequence length for padding
+        input_ids: Input token IDs [1, total_seq_len] (packed sequences)
+        cu_seqlens: Cumulative sequence lengths for flash attention
+    
+    Returns:
+        Tuple of (embeddings, attention_mask):
+        - embeddings: [B, max_condition_length, embed_dim]
+        - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
+    """
+    with torch.no_grad():
+        
+        # Create input_pos using cu_seqlens if provided
+        if cu_seqlens is not None:
+            # Calculate input_pos based on cu_seqlens
+            # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
+            input_pos = []
+            for i in range(len(cu_seqlens) - 1):
+                seq_len = cu_seqlens[i+1] - cu_seqlens[i]
+                pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
+                input_pos.append(pos_ids)
+            input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
+        else:
+            # Fallback: create input_pos from input_ids shape
+            input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+        
+        print(f"tokenize_images: pixel_values={pixel_values.shape}")
+        # Call KeyeARModel forward method
+        outputs = tokenizer(
+            tokens=input_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            input_pos=input_pos,
+            cu_seqlens=cu_seqlens,
+        )
+        
+        embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
+        
+        # Extract embeddings between vision_start_id and vision_end_id
+        vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
+        vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
+        
+        # Find the positions of vision_start_id and vision_end_id in input_ids
+        # input_ids shape is [1, total_seq_len] in packing case
+        vision_start_mask = (input_ids == vision_start_id)
+        vision_end_mask = (input_ids == vision_end_id)
+        
+        # For packing case: input_ids shape is [1, total_seq_len]
+        # We need to find all vision_start_id and vision_end_id pairs in the sequence
+        vision_embeddings_list = []
+        vision_seq_lens = []
+        
+        # Get the flat input_ids (remove batch dimension for packing case)
+        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
+        
+        # Find all start and end positions
+        start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
+        end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
+        
+        # Check if we have matching number of start and end positions
+        if len(start_positions) != len(end_positions):
+            raise ValueError(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens")
+        
+        # Extract embeddings for each vision segment
+        for start_pos, end_pos in zip(start_positions, end_positions):
+            # Check if start_pos comes before end_pos
+            if start_pos >= end_pos:
+                raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
+            
+            # Extract embeddings for this segment
+            # embeddings shape is [1, total_seq_len, embed_dim] in packing case
+            vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+            vision_embeddings_list.append(vision_embeddings)
+            vision_seq_lens.append(vision_embeddings.shape[0])
+        
+        # Check if we extracted the correct number of segments
+        if len(vision_embeddings_list) != batch_size:
+            raise ValueError(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+        
+        # Stack the embeddings and handle variable sequence lengths
+        max_vision_seq_len = max(vision_seq_lens)
+        embed_dim = embeddings.shape[2]
+        processed_embeddings = torch.zeros(batch_size, max_vision_seq_len, embed_dim,
+                                            device=embeddings.device, dtype=embeddings.dtype)
+        
+        # Create attention mask: 1 for valid tokens, 0 for padding
+        attention_mask = torch.zeros(batch_size, max_vision_seq_len,
+                                   device=embeddings.device, dtype=torch.long)
+        
+        for i, emb in enumerate(vision_embeddings_list):
+            seq_len = emb.shape[0]
+            processed_embeddings[i, :seq_len, :] = emb
+            attention_mask[i, :seq_len] = 1
+        
+        # Handle padding to max_condition_length
+        current_seq_len = processed_embeddings.shape[1]
+        if current_seq_len < max_condition_length:
+            # Pad to max_condition_length
+            padding_embeddings = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
+                                           device=processed_embeddings.device, dtype=processed_embeddings.dtype)
+            processed_embeddings = torch.cat([processed_embeddings, padding_embeddings], dim=1)
+            
+            # Extend attention mask with zeros for padding
+            padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
+                                     device=attention_mask.device, dtype=attention_mask.dtype)
+            attention_mask = torch.cat([attention_mask, padding_mask], dim=1)
+        elif current_seq_len > max_condition_length:
+            # Truncate to max_condition_length
+            processed_embeddings = processed_embeddings[:, :max_condition_length, :]
+            attention_mask = attention_mask[:, :max_condition_length]
+
+        # Reshape attention_mask to [B, 1, 1, max_condition_length]
+        attention_mask = attention_mask[:, None, None, :]
+
+    return processed_embeddings, attention_mask
+
+
 def main():
     args = parse_args()
 
@@ -130,21 +260,22 @@ def main():
 
     # Convert DCP checkpoint if needed
     model_dir = args.model_dir
+     
     if args.dcp_tag:
-        print(f"Detected DCP checkpoint conversion parameters:")
-        print(f"  DCP Checkpoint Dir: {model_dir}")
-        print(f"  DCP Source Dir: {args.dcp_ckpt_dir}")
-        print(f"  DCP Tag: {args.dcp_tag}")
-        
-        # Call DCP to torch conversion
-        dcp_to_torch_convert(
-            checkpoint_dir=args.dcp_ckpt_dir,
-            tag=args.dcp_tag,
-            source_dir=model_dir
-        )
-        
+        converted_model_dir = os.path.join(args.dcp_ckpt_dir, args.dcp_tag, "converted")
+        if not os.path.exists(converted_model_dir):
+            print(f"Converting DCP checkpoint from {args.dcp_ckpt_dir} to {converted_model_dir}, dcp_tag={args.dcp_tag}")
+            # Call DCP to torch conversion
+            dcp_to_torch_convert(
+                checkpoint_dir=args.dcp_ckpt_dir,
+                tag=args.dcp_tag,
+                source_dir=model_dir
+            )
+        else:
+            print(f"DCP checkpoint already converted to torch format at: {converted_model_dir}")
+            
         # Update model_dir to the converted directory
-        model_dir = os.path.join(model_dir, args.dcp_tag, "converted")
+        model_dir = converted_model_dir
         print(f"Converted DCP checkpoint available at: {model_dir}")
 
     # 1) Load model config and instantiate model for visualization
@@ -232,7 +363,7 @@ def main():
             )
 
             # Tokenize images to condition embeddings
-            cond_embeds, cond_mask = train_rec.tokenize_images(
+            cond_embeds, cond_mask = tokenize_images(
                 tokenizer=image_tokenizer,
                 pixel_values=loaded.pixel_values.to(device=device),
                 image_grid_thw=loaded.image_grid_thw.to(device=device),
