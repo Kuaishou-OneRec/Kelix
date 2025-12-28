@@ -598,6 +598,11 @@ def main():
             # Combine data into DataFrame rows
             for sample_idx, sample in samples_data.items():
                 metadata = sample['metadata']
+                sample_key = int(sample_idx)
+                
+                # Get prediction images directly from images_data without conversion
+                prediction_images = images_data.get(sample_key, None)
+                
                 row = {
                     "index": int(metadata['index']),
                     "tag": metadata['tag'],
@@ -608,7 +613,7 @@ def main():
                     "exclude_class": metadata['exclude_class'],
                     "exclude_count": metadata['exclude_count'],
                     "question": metadata['question'],
-                    "prediction": images_data.get(sample_idx, None)
+                    "prediction": prediction_images  # Keep as original PIL Image list
                 }
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         
