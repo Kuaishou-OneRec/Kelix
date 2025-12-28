@@ -930,12 +930,8 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
 
-            if self.model.model.output_hidden_states:
-                logits, hidden_states = outputs
-                hidden_states_list.append(hidden_states)
-            else:
-                # batchsize x word_length x subword_length x vocab_size
-                logits = outputs
+            *hidden_states, logits = outputs
+            hidden_states_list.append(hidden_states)
 
             # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=0)
@@ -968,11 +964,8 @@ class KeyeARModel(Model):
                 input_pos=current_pos,
                 **model_kwargs
             )
-            if self.model.model.output_hidden_states:
-                logits, hidden_states = outputs
-                hidden_states_list.append(hidden_states)
-            else:
-                logits = outputs  # (batch, 1, 9, vocab_size)
+            *hidden_states, logits = outputs
+            hidden_states_list.append(hidden_states)
 
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=q_eos_token)
 
@@ -998,7 +991,10 @@ class KeyeARModel(Model):
         if return_1d_ids:
             generated_ids = generated_ids[...,0]
 
-        if hidden_states_list:
+        if len(hidden_states_list) and len(hidden_states_list[0]):
+            print(f"hidden states")
+            import IPython
+            IPython.embed()
             result_hidden_states = []
             for i in range(len(hidden_states_list[0])):
                 result_hidden_states.append(torch.stack([h_by_pos[i] for h_by_pos in hidden_states_list], dim=1))
