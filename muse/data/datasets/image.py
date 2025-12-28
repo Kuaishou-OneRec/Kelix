@@ -1342,6 +1342,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  systemp_prompt="You are a helpful assistant.",
                  infer_repeats=4,
                  ):
+        print(f"GenEvalInferenceDataset-template:{template}")
         self.gen_eval_csv_path = gen_eval_csv_path
         self.packing = False
         self.template = template
