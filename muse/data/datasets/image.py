@@ -1343,7 +1343,6 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  infer_repeats=4,
                  **kwargs
                  ):
-        print(f"GenEvalInferenceDataset-template:{template}")
         self.gen_eval_csv_path = gen_eval_csv_path
         self.packing = False
         self.template = template
