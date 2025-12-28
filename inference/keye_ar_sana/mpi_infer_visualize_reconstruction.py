@@ -111,11 +111,11 @@ def setup_distributed_environment() -> bool:
     rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
     local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
-
+    import datetime
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
         rank=rank, world_size=world_size,
-        timeout=3600
+        timeout=datetime.timedelta(seconds=3600)
     )
     return True
 
