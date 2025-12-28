@@ -116,9 +116,10 @@ def convert(
     tag: Tag for the checkpoint.
     source_dir: Directory containing the source files.
   """
+  checkpoint_dir = Path(checkpoint_dir)
   if tag:
-    checkpoint_dir = Path(checkpoint_dir) / tag
-  output_dir = checkpoint_dir.rstrip("/") + "/converted"
+    checkpoint_dir = checkpoint_dir / tag
+  output_dir = checkpoint_dir / "converted"
 
   dcp_to_torch_save(
     dcp_checkpoint_dir=checkpoint_dir,
