@@ -36,7 +36,7 @@ MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=1280 y_norm_scale
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
 TEACHER_FORCING=0
-
+N_INFER_ITEMS=2
 OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs"
 
 
@@ -61,7 +61,7 @@ INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
 DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
 DCP_TAG=${DCP_TAG:-$DCP_TAG}
-N_INFER_ITEMS=2
+N_INFER_ITEMS=${N_INFER_ITEMS:-$N_INFER_ITEMS}
 
 # Prepare model config overrides flag
 MODEL_CONFIG_OVERRIDES_FLAG=""
