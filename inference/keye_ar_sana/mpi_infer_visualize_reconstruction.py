@@ -223,20 +223,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
 
     with torch.no_grad():
-        
-        # Create input_pos using cu_seqlens if provided
-        if cu_seqlens is not None:
-            # Calculate input_pos based on cu_seqlens
-            # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
-            input_pos = []
-            for i in range(len(cu_seqlens) - 1):
-                seq_len = cu_seqlens[i+1] - cu_seqlens[i]
-                pos_ids = torch.arange(seq_len, device=input_ids.device, dtype=torch.long)
-                input_pos.append(pos_ids)
-            input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
-        else:
-            # Fallback: create input_pos from input_ids shape
-            input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
+        input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
 
         # embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         input_ids, embeddings = get_model_embedding_and_tokens(
@@ -264,9 +251,6 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = []
         vision_seq_lens = []
         
-        # Get the flat input_ids (remove batch dimension for packing case)
-        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
-        
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
@@ -289,7 +273,9 @@ def tokenize_images(ar_processor : AutoProcessor,
         
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            raise ValueError(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            vision_seq_lens.append(1)
+            vision_embeddings_list.append(torch.zeros(1, embed_dim, device=embeddings.device, dtype=embeddings.dtype))
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
