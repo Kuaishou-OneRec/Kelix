@@ -249,7 +249,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
 
         hidden = []
         for i, layer in enumerate(self.layers):
-            if i in output_hidden_states:
+            if output_hidden_states:
                 hidden.append(h)
             # shape: [b, s, d]
             h = layer(
