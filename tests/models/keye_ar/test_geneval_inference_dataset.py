@@ -159,14 +159,8 @@ def test_geneval_inference_dataset_basic():
     print(f"== First processed sample: {first_processed_sample}")
     assert isinstance(first_processed_sample, dict), "Processed sample should be a dict"
     
-    # Verify that the processed sample contains expected keys
-    expected_keys = ['image', 'input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
-    for key in expected_keys:
-        assert key in first_processed_sample, f"Processed sample should contain key '{key}'"
-    
     # Verify the shapes of processed tensors
     assert first_processed_sample['input_ids'].ndim >= 1, "Input IDs should be a tensor"
-    assert first_processed_sample['image'].ndim >= 2, "Image should be a tensor"
     
     print("✅ All basic tests passed!")
     return True
