@@ -507,7 +507,6 @@ def main():
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
             for t in scheduler.timesteps:
-                print(f"dit_latents shape: {dit_latents.shape}")
                 latent_input = torch.cat([dit_latents] * 2)
                 timestep = t.expand(latent_input.shape[0])
                 noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg)
