@@ -153,10 +153,10 @@ def get_model_embedding_and_tokens(
 
 def tokenize_images(ar_processor : AutoProcessor,
                     ar_model : KeyeARModel,
-                    pixel_values: torch.Tensor,
-                    image_grid_thw: torch.Tensor,
                     batch_size: int,
                     max_condition_length: int,
+                    pixel_values: torch.Tensor = None,
+                    image_grid_thw: torch.Tensor = None,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
@@ -215,12 +215,12 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_pos = []
             for i in range(len(cu_seqlens) - 1):
                 seq_len = cu_seqlens[i+1] - cu_seqlens[i]
-                pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
+                pos_ids = torch.arange(seq_len, device=input_ids.device, dtype=torch.long)
                 input_pos.append(pos_ids)
             input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
         else:
             # Fallback: create input_pos from input_ids shape
-            input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+            input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
 
         # embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         input_ids, embeddings = get_model_embedding_and_tokens(
