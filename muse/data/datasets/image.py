@@ -1336,15 +1336,19 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         'exclude_count': None, 'question': 'a photo of a bench'}}
     """
     def __init__(self, 
+                 processor_path,
                  gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 
                  template='{}', 
-                 systemp_prompt="You are a helpful assistant."
+                 systemp_prompt="You are a helpful assistant.",
                  ):
         self.gen_eval_csv_path = gen_eval_csv_path
         self.packing = False
         self.template = template
         self.system_prompt = systemp_prompt
         self.all_data = self._load_all_data()
+        self.processor_path = processor_path
+        self.processor = AutoProcessor.from_pretrained(
+            self.processor_path, trust_remote_code=True)
     
     def _load_all_data(self):
         """
@@ -1395,7 +1399,22 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         messages.append({"role": "user", "content": [
             {"type": "text", "text": self.template.format(sample["question"])},
         ]})
+        text = self.processor.apply_chat_template(
+            messages, 
+            tokenize=False
+        )
+
+        image_inputs, _, _ = process_vision_info(templated_messages)
+
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            padding=False,
+            truncation=False,
+            return_tensors="pt",
+        )
         return {
+            "input_ids": inputs["input_ids"].squeeze(0),
             "messages": messages,
             "metadata": sample
         }

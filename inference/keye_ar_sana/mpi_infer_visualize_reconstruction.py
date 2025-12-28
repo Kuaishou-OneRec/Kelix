@@ -95,7 +95,8 @@ def parse_args():
 
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
-
+    parser.add_argument("--gen_eval_csv_path", type=str, default="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
+                        help="Path to GenEval.tsv file")
     return parser.parse_args()
 
 
@@ -410,7 +411,7 @@ def main():
 
 
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
-    dataset = GenEvalInferenceDataset()
+    dataset = GenEvalInferenceDataset(processor_path=args.keye_ar_dir, gen_eval_csv_path=args.gen_eval_csv_path)
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
     print("Running DiT sampling and saving results...")
@@ -423,6 +424,9 @@ def main():
     latent_size = model_for_vis.config.hidden_size
     for samples in dataset:
         samples = easydict.EasyDict(samples)
+        # samples: 
+        # {'messages': [{'role': 'system', 'content': 'You are a helpful assistant.'}, {'role': 'user', 'content': [{'type': 'text', 'text': 'a photo of a cow'}]}], 'metadata': {'index': 2, 'tag': 'single_object', 'include_class': 'cow', 'include_count': '1', 'include_color': None, 'include_position': None, 'exclude_class': None, 'exclude_count': None, 'question': 'a photo of a cow'}}
+
         print(f"samples: {samples}")
         with torch.no_grad():
             batchsize = samples.input_ids.shape[0]
