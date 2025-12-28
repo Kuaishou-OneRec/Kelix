@@ -157,9 +157,9 @@ def main():
 
     print("Loading Keye AR tokenizer/processor...")
 
-    # Initialize a local single-process distributed group to ensure that
-    # training helpers which call `torch.distributed.get_rank()` behave correctly.
-    setup_distributed_environment(args.rank, args.world_size)
+    # # Initialize a local single-process distributed group to ensure that
+    # # training helpers which call `torch.distributed.get_rank()` behave correctly.
+    # setup_distributed_environment(args.rank, args.world_size)
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
     # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
