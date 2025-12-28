@@ -173,8 +173,7 @@ def main():
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:
         dataset_cfg = json.load(f)
-    # Override sources to point to the specific parquet used for visualization
-    dataset_cfg['sources'] = args.parquet_path
+
     # Ensure processor_path is set to Keye AR if not present
     if not dataset_cfg.get('processor_path'):
         dataset_cfg['processor_path'] = args.keye_ar_dir
