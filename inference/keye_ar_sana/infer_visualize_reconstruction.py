@@ -141,8 +141,7 @@ def get_model_embedding_and_tokens(
             del kwargs["image_grid_thw"]
         if "cu_seqlens" in kwargs:
             del kwargs["cu_seqlens"]
-        import IPython
-        IPython.embed()
+
         model.set_output_hidden_states([len(model.model.model.layers)])
         tokens, embeddings = model.generate(
             input_ids=input_ids,
@@ -234,8 +233,12 @@ def tokenize_images(ar_processor : AutoProcessor,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
+            max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
         )
-        
+        print(f"embeddinggg")
+        import IPython
+        IPython.embed()
+
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = ar_model.config.qwen_config.vision_start_token_id
         vision_end_id = ar_model.config.qwen_config.vision_end_token_id

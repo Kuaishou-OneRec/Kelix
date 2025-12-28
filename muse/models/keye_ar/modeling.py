@@ -919,9 +919,6 @@ class KeyeARModel(Model):
         # 2. 生成逻辑：Prefill + Decode
         # ==============================================
         # Prefill阶段：首次输入完整prompt，获取初始cache
-        print(f"prefilling")
-        import IPython
-        IPython.embed()
         if prompt_groups > 0:
             prefill_pos = torch.arange(input_seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
             outputs = self(
@@ -941,8 +938,6 @@ class KeyeARModel(Model):
         # 采样最后一个prompt group的下一个group
         last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
 
-        # import IPython
-        # IPython.embed()
         next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
         current_ids = torch.cat([current_ids, next_group], dim=1)
@@ -992,12 +987,9 @@ class KeyeARModel(Model):
             generated_ids = generated_ids[...,0]
 
         if len(hidden_states_list) and len(hidden_states_list[0]):
-            print(f"hidden states")
-            import IPython
-            IPython.embed()
             result_hidden_states = []
             for i in range(len(hidden_states_list[0])):
-                result_hidden_states.append(torch.stack([h_by_pos[i] for h_by_pos in hidden_states_list], dim=1))
+                result_hidden_states.append(torch.cat([h_by_pos[i] for h_by_pos in hidden_states_list], dim=1))
             return generated_ids, result_hidden_states
         else:
             return generated_ids
