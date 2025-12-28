@@ -77,7 +77,7 @@ DCP_FLAGS=""
 if [ -n "$DCP_TAG" ]; then
   DCP_FLAGS="--dcp-tag $DCP_TAG"
   if [ -n "$DCP_CKPT_DIR" ]; then
-    DCP_FLAGS="$DCP_FLAGS --dcp-source-dir $DCP_CKPT_DIR"
+    DCP_FLAGS="$DCP_FLAGS --dcp-ckpt-dir $DCP_CKPT_DIR"
   fi
 fi
 
