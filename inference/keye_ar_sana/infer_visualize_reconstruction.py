@@ -77,7 +77,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def setup_distributed_environment() -> bool:
+def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     """
     Initialize distributed environment for single-process inference runs using the
     same approach as our tests: TCP init on localhost (gloo backend).
@@ -90,8 +90,8 @@ def setup_distributed_environment() -> bool:
             dist.init_process_group(
                 backend='gloo',
                 init_method='tcp://127.0.0.1:29500',
-                rank=args.rank if 'args' in globals() else 0,
-                world_size=args.world_size if 'args' in globals() else 1,
+                rank=rank,
+                world_size=world_size,
             )
             print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
             return True
@@ -112,7 +112,7 @@ def main():
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
     if args.initialize_dist:
-        setup_distributed_environment()
+        setup_distributed_environment(args.rank, args.world_size)
 
     # 1) Load model config and instantiate model for visualization
     if args.model_config:
@@ -162,24 +162,13 @@ def main():
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
     print("Loading Keye AR tokenizer/processor...")
-    # Ensure a local single-process distributed group is initialized if required.
-    # Some helpers (from training recipes) call `torch.distributed.get_rank()` which
-    # will raise if the default process group is not initialized. Attempt to
-    # initialize if not already initialized (safe no-op if already initialized).
-    if not dist.is_initialized():
-        setup_distributed_environment()
 
-    try:
-        image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
-    except FileNotFoundError as e:
-        # Provide clearer guidance to the user
-        print("Failed to load Keye AR tokenizer/processor:", e)
-        print("Please ensure --keye-ar-dir points to the Keye AR model directory containing 'config.json'.")
-        print("If your Keye AR checkpoint is in DCP/FSDP format, convert it with 'python muse/tools/dcp2torch.py <checkpoint_dir>'")
-        raise
-    except Exception as e:
-        print(f"Error loading Keye AR tokenizer/processor: {e}")
-        raise
+    # Initialize a local single-process distributed group to ensure that
+    # training helpers which call `torch.distributed.get_rank()` behave correctly.
+    setup_distributed_environment(args.rank, args.world_size)
+
+    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+
 
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:
@@ -293,10 +282,6 @@ def main():
     except Exception as e:
         print(f"Error running DiT sampling: {e}")
         raise
-
-
-if __name__ == "__main__":
-    main()
 
 
 if __name__ == "__main__":
