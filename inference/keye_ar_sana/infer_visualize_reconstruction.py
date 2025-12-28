@@ -134,6 +134,8 @@ def get_model_embedding_and_tokens(
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         return embeddings, embeddings
     else:
+        if "input_pos" in kwargs:
+            del kwargs["input_pos"]
         tokens, embeddings = model.generate(
             input_ids=input_ids,
             **kwargs
@@ -190,7 +192,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                 # Check if the current window matches assistant_start_ids
                 window = input_ids[0, i:i+assistant_len]
                 if torch.all(window == assistant_start_tensor):
-                    assistant_start_idx = i
+                    assistant_start_idx = i + assistant_len
                     break
         
         if assistant_start_idx != -1:
@@ -214,7 +216,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         else:
             # Fallback: create input_pos from input_ids shape
             input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
-        
+
         # print(f"tokenize_images: pixel_values={pixel_values.shape}")
         # # Call KeyeARModel forward method
         # outputs = ar_model(
