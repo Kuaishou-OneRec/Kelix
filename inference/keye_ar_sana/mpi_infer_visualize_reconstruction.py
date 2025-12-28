@@ -50,7 +50,9 @@ from muse.models import get_model_class
 from muse.models.keye_ar import KeyeARModel
 from muse.utils.common import parse_config_overrides
 from muse.data.datasets.image import GenEvalInferenceDataset
-
+from muse.training.parallel import (
+    initialize_model_parallel
+)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -118,6 +120,7 @@ def setup_distributed_environment() -> bool:
         rank=rank, world_size=world_size,
         timeout=datetime.timedelta(seconds=3600)
     )
+    initialize_model_parallel()
     return True
 
 
