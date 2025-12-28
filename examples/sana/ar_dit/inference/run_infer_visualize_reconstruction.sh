@@ -81,7 +81,7 @@ if [ -n "$DCP_TAG" ]; then
   fi
 fi
 
-exit
+
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${RESULTS_DIR}"
 
