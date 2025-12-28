@@ -98,7 +98,7 @@ def parse_args():
                         help="Distributed rank to set in dataset config (default: 0)")
     parser.add_argument("--world-size", type=int, default=1,
                         help="Distributed world_size to set in dataset config (default: 1)")
-    parser.add_argument("--teacher-forcing", action="store_true",
+    parser.add_argument("--teacher-forcing", type=bool, default=True,
                         help="Enable teacher forcing during inference")
     return parser.parse_args()
 
