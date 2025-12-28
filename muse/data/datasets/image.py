@@ -1397,6 +1397,6 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         for sample in self.all_data:
             sample = self._make_sample(sample)
             metadata = sample["metadata"]
-            processed = self._process_pair(sample)
+            processed = self.process(sample)
             processed["metadata"] = metadata
             yield processed
