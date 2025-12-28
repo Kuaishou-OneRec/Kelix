@@ -157,11 +157,6 @@ def main():
 
     print("Loading Keye AR tokenizer/processor...")
 
-    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
-    # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
-    
-    image_tokenizer = image_tokenizer.to(device)
-
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:
         dataset_cfg = json.load(f)
@@ -201,7 +196,7 @@ def main():
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = train_rec.tokenize_images(
-                tokenizer=image_tokenizer,
+                tokenizer=model_for_vis,
                 pixel_values=loaded.pixel_values.to(device=device),
                 image_grid_thw=loaded.image_grid_thw.to(device=device),
                 batch_size=loaded.batch_size,
