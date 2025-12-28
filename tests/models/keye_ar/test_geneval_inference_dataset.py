@@ -61,8 +61,8 @@ def demo_geneval_inference_dataset(
     Example:
         >>> # Use default parameters
         >>> dataset = demo_geneval_inference_dataset()
-        >>> print(f"Loaded {len(dataset.all_data)} samples from GenEval dataset")
-        >>> print(f"First sample: {dataset.all_data[0]}")
+        >>> first_sample = next(iter(dataset))
+        >>> print(f"First processed sample: {first_sample.keys()}")
         
         >>> # Use custom CSV path
         >>> dataset = demo_geneval_inference_dataset(
@@ -106,11 +106,23 @@ def demo_geneval_inference_dataset(
         print(f"  Total samples: {len(dataset.all_data)}")
         
         if len(dataset.all_data) > 0:
-            # Show first sample structure
-            first_sample = dataset.all_data[0]
-            print(f"\nFirst sample structure:")
-            for key, value in first_sample.items():
-                print(f"    - {key}: {value}")
+            # Use iter and next to get the first processed sample
+            try:
+                first_processed_sample = next(iter(dataset))
+                print(f"\nFirst processed sample keys: {first_processed_sample.keys()}")
+                print(f"  - Sample contains image: {'image' in first_processed_sample}")
+                print(f"  - Sample contains input_ids: {'input_ids' in first_processed_sample}")
+                print(f"  - Sample contains attention_mask: {'attention_mask' in first_processed_sample}")
+                
+                if 'input_ids' in first_processed_sample:
+                    print(f"  - Input IDs shape: {first_processed_sample['input_ids'].shape}")
+                if 'image' in first_processed_sample:
+                    print(f"  - Image shape: {first_processed_sample['image'].shape}")
+            except Exception as e:
+                print(f"\nWarning: Failed to get processed sample: {e}")
+                print("  - Raw first sample structure:")
+                for key, value in dataset.all_data[0].items():
+                    print(f"    - {key}: {value}")
             
             # Show tag distribution
             tags = [sample['tag'] for sample in dataset.all_data]
@@ -130,7 +142,7 @@ def test_geneval_inference_dataset_basic():
     Basic test for GenEvalInferenceDataset initialization.
     
     This test checks that the dataset can be initialized with default parameters
-    and that the _load_all_data method works correctly.
+    and that the __iter__ method works correctly.
     """
     print("=== Running GenEvalInferenceDataset Basic Test ===")
     
@@ -142,18 +154,24 @@ def test_geneval_inference_dataset_basic():
     assert isinstance(dataset.all_data, list), "'all_data' should be a list"
     assert len(dataset.all_data) > 0, "'all_data' should not be empty"
     
-    # Verify the structure of first sample
-    first_sample = dataset.all_data[0]
-    expected_keys = ['index', 'tag', 'include_class', 'include_count', 
-                    'include_color', 'include_position', 'exclude_class', 
-                    'exclude_count', 'question']
+    # Test __iter__ method by getting the first sample
+    first_processed_sample = next(iter(dataset))
+    first_processed_sample = next(iter(dataset))
+    print(f"== First processed sample: {first_processed_sample}")
+    assert isinstance(first_processed_sample, dict), "Processed sample should be a dict"
     
+    # Verify that the processed sample contains expected keys
+    expected_keys = ['image', 'input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
     for key in expected_keys:
-        assert key in first_sample, f"Sample should contain key '{key}'"
+        assert key in first_processed_sample, f"Processed sample should contain key '{key}'"
+    
+    # Verify the shapes of processed tensors
+    assert first_processed_sample['input_ids'].ndim >= 1, "Input IDs should be a tensor"
+    assert first_processed_sample['image'].ndim >= 2, "Image should be a tensor"
     
     print("✅ All basic tests passed!")
     return True
-        
+
 
 
 if __name__ == "__main__":
