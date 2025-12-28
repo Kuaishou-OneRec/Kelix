@@ -19,7 +19,8 @@ VAE_DIR="/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted"
 DATASET_CONFIG="examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json"
 PARQUET_PATH="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet"
-OUTPUT_DIR="./vis_output"
+# OUTPUT_DIR="./vis_output"
+
 RESULTS_DIR="./results"
 NUM_IMAGES=1
 DEVICE="cuda"           # set to "cuda" if running on GPU
@@ -36,6 +37,7 @@ DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
 TEACHER_FORCING=0
 
+OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs"
 
 
 # Allow overrides from environment
@@ -59,6 +61,7 @@ INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
 DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
 DCP_TAG=${DCP_TAG:-$DCP_TAG}
+N_INFER_ITEMS=2
 
 # Prepare model config overrides flag
 MODEL_CONFIG_OVERRIDES_FLAG=""
@@ -174,5 +177,6 @@ nohup mpirun --allow-run-as-root \
       --seed ${SEED} \
       --results-dir "${RESULTS_DIR}" \
       --teacher-forcing ${TEACHER_FORCING} \
+      --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

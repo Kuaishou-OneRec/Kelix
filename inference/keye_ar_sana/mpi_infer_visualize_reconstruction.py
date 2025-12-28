@@ -29,12 +29,13 @@ This demo imports and reuses helper functions from
 `recipes/sana/train_sana_ar_dit.py` (e.g., `load_vae`, `load_keye_ar`,
 `visualize_reconstruction`) to ensure parity with the training pipeline.
 """
-
+import tqdm
 import argparse
 import os
 import json
 import torch
 import easydict
+import pickle  # Add pickle import
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -101,6 +102,9 @@ def parse_args():
                         help="Path to GenEval.tsv file")
     parser.add_argument("--infer_repeats", type=int, default=4,
                         help="Number of times to repeat inference for each sample")
+
+    parser.add_argument("--n_infer_items", type=int, default=999999,
+                        help="Number of items to infer")
     return parser.parse_args()
 
 
@@ -442,16 +446,19 @@ def main():
     from diffusers import FlowMatchEulerDiscreteScheduler
     import time
 
-    print(f"model_for_vis={model_for_vis}")
     latent_size = args.image_size // model_for_vis.config.vae_downsample_rate
-    print(f"latent_size: {latent_size}")
+    # Create data structures to store results
+    images_dict = {}  # Key: sample index, Value: list of lists of PIL images
+    samples_dict = {}  # Key: sample index, Value: original sample data
 
-    for samples in dataset:
+    for i_sample, samples in tqdm.tqdm(enumerate(dataset)):
+        if i_sample >= args.n_infer_items:
+            break
+
         samples = easydict.EasyDict(samples)
         # samples: 
         # {'messages': [{'role': 'system', 'content': 'You are a helpful assistant.'}, {'role': 'user', 'content': [{'type': 'text', 'text': 'a photo of a cow'}]}], 'metadata': {'index': 2, 'tag': 'single_object', 'include_class': 'cow', 'include_count': '1', 'include_color': None, 'include_position': None, 'exclude_class': None, 'exclude_count': None, 'question': 'a photo of a cow'}}
 
-        print(f"samples: {samples}")
         with torch.no_grad():
             batch_size = samples.input_ids.shape[0]
             print(f"batch_size: {batch_size}")
@@ -514,20 +521,50 @@ def main():
             os.makedirs(results_step_dir, exist_ok=True)
 
             dit_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
-            messages = list(getattr(samples[0], 'texts', []))
-            mapping = {}
-            for i in range(len(dit_np)):
-                img = Image.fromarray((dit_np[i] * 255).round().astype("uint8"))
-                img_fname = f"dit_{i}.jpg"
-                img.save(os.path.join(results_step_dir, img_fname), quality=95)
-                mapping[img_fname] = messages[i] if i < len(messages) else ""
 
-            # Save messages mapping
-            with open(os.path.join(results_step_dir, "messages.json"), 'w', encoding='utf-8') as f:
-                json.dump(mapping, f, ensure_ascii=False, indent=2)
+            # Convert to PIL images and store in the dictionary
+            sample_index = samples.metadata.index
+            pil_images = []
+            for i in range(batch_size):
+                img_np = dit_np[i]
+                img_pil = Image.fromarray((img_np * 255).astype('uint8'))
+                pil_images.append([img_pil])  # Wrap in a list as per the required format
+            
+            # Add to images_dict
+            if sample_index not in images_dict:
+                images_dict[sample_index] = []
+            images_dict[sample_index].extend(pil_images)
+            
+            # Add to samples_dict if not already present
+            if sample_index not in samples_dict:
+                # Convert easydict to regular dict and remove unnecessary fields
+                sample_data = {
+                    'messages': samples.messages,
+                    'metadata': samples.metadata
+                }
+                samples_dict[sample_index] = sample_data
 
-            print(f"Saved {len(dit_np)} DiT images and messages to: {results_step_dir}")
+    # Save results in the required format after all inference is done
+    print("Saving GenEval results...")
+    ulmeval_dir = os.path.join(args.results_dir, 'ulmeval')
+    os.makedirs(ulmeval_dir, exist_ok=True)
+    
+    world_size = torch.distributed.get_world_size()
+    rank = torch.distributed.get_rank()
 
+    # Save images as pickle file
+    images_filename = f"{rank}{world_size}_GenEval.pkl"
+    images_filepath = os.path.join(ulmeval_dir, images_filename)
+    with open(images_filepath, 'wb') as f:
+        pickle.dump(images_dict, f)
+    
+    # Save samples as json file
+    samples_filename = f"{rank}{world_size}_GenEval.json"
+    samples_filepath = os.path.join(ulmeval_dir, samples_filename)
+    with open(samples_filepath, 'w', encoding='utf-8') as f:
+        json.dump(samples_dict, f, ensure_ascii=False, indent=2)
+    
+    print(f"Results saved to {ulmeval_dir}")
 
 
 if __name__ == "__main__":
