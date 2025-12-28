@@ -336,6 +336,7 @@ def main():
                 tag=args.dcp_tag,
                 source_dir=model_dir
             )
+            print("Conversion complete.")
 
         torch.distributed.barrier()
 
