@@ -388,7 +388,7 @@ def main():
 
     print("Loading Keye AR ar_model/processor...")
 
-    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype, output_last_hidden_states_only=False)
     # Ensure ar_model/model is on the intended device (Triton kernels expect CUDA tensors)
     
     ar_processor = AutoProcessor.from_pretrained(
