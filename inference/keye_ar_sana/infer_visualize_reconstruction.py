@@ -123,7 +123,7 @@ def main():
 
     print(f"Creating visualization model: {model_class_name}")
     with train_rec.set_default_dtype(args.dtype), torch.device("cpu"):
-        model_for_vis = model_cls(model_config).bfloat16()
+        model_for_vis = model_cls(model_config)
 
     # 2) Try to load checkpoint/state dict from model_dir
     try:
@@ -148,7 +148,7 @@ def main():
     except Exception as e:
         print(f"Error loading checkpoint: {e}")
 
-    model_for_vis.to(device)
+    model_for_vis.to(device).bfloat16()
     model_for_vis.eval()
 
     # 3) Load VAE and Keye AR tokenizer/processor
