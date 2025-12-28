@@ -147,6 +147,8 @@ def get_model_embedding_and_tokens(
             input_ids=input_ids,
             **kwargs
         )
+        print(f"after generate")
+        embeddings = embeddings[0]
         return tokens, embeddings
         
 
