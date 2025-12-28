@@ -4,6 +4,8 @@
 #   bash examples/sana/ar_dit/inference/run_infer_visualize_reconstruction.sh
 # Example:
 #   MODEL_DIR=/path/to/model VAEDIR=/path/to/vae KEYE_AR_DIR=/path/to/keye bash $0
+# For DCP checkpoint:
+#   MODEL_DIR=/path/to/dcp/checkpoint DCP_SOURCE_DIR=/path/to/source/dir DCP_TAG=global_step8000 bash $0
 
 set -euo pipefail
 
@@ -30,7 +32,9 @@ SEED=42
 INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
 RANK=0
 WORLD_SIZE=1
-MODEL_CONFIG_OVERRIDES=""  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
+MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=3000 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
+DCP_SOURCE_DIR=""      # Source directory for DCP checkpoint conversion
+DCP_TAG=""             # Tag for DCP checkpoint (e.g., global_step8000)
 
 # Allow overrides from environment
 MODEL_DIR=${MODEL_DIR:-$MODEL_DIR}
@@ -53,6 +57,8 @@ INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
 RANK=${RANK:-$RANK}
 WORLD_SIZE=${WORLD_SIZE:-$WORLD_SIZE}
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
+DCP_SOURCE_DIR=${DCP_SOURCE_DIR:-$DCP_SOURCE_DIR}
+DCP_TAG=${DCP_TAG:-$DCP_TAG}
 
 # ---- Prepare flags ----
 INIT_DIST_FLAG=""
@@ -66,27 +72,12 @@ if [ -n "$MODEL_CONFIG_OVERRIDES" ]; then
   MODEL_CONFIG_OVERRIDES_FLAG="--model-config-overrides $MODEL_CONFIG_OVERRIDES"
 fi
 
-# Detect DCP checkpoint layout in MODEL_DIR and convert if necessary
-if [ -d "${MODEL_DIR}" ]; then
-  # enable nullglob so unmatched globs expand to empty
-  shopt -s nullglob
-  distcp_files=("${MODEL_DIR}"/*.distcp "${MODEL_DIR}"/__*.distcp)
-  shopt -u nullglob
-  if [ ${#distcp_files[@]} -gt 0 ]; then
-    # If already converted, use existing converted directory
-    if [ -d "${MODEL_DIR}/converted" ]; then
-      echo "Found existing converted checkpoint at ${MODEL_DIR}/converted, using that."
-      MODEL_DIR="${MODEL_DIR}/converted"
-    else
-      echo "Detected DCP checkpoint in ${MODEL_DIR}. Converting to safetensors using muse/tools/dcp2torch.py ..."
-      python muse/tools/dcp2torch.py "${MODEL_DIR}" --source-dir "${MODEL_DIR}"
-      if [ $? -ne 0 ]; then
-        echo "Error: dcp2torch conversion failed" >&2
-        exit 1
-      fi
-      MODEL_DIR="${MODEL_DIR}/converted"
-      echo "Converted checkpoint available at ${MODEL_DIR}"
-    fi
+# Prepare DCP flags
+DCP_FLAGS=""
+if [ -n "$DCP_TAG" ]; then
+  DCP_FLAGS="--dcp-tag $DCP_TAG"
+  if [ -n "$DCP_SOURCE_DIR" ]; then
+    DCP_FLAGS="$DCP_FLAGS --dcp-source-dir $DCP_SOURCE_DIR"
   fi
 fi
 
@@ -112,4 +103,5 @@ PYTHONPATH=. python inference/keye_ar_sana/infer_visualize_reconstruction.py \
   --seed ${SEED} \
   --results-dir "${RESULTS_DIR}" \
   ${INIT_DIST_FLAG} \
-  ${MODEL_CONFIG_OVERRIDES_FLAG}
+  ${MODEL_CONFIG_OVERRIDES_FLAG} \
+  ${DCP_FLAGS}

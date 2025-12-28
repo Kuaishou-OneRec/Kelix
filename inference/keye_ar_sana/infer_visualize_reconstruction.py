@@ -14,6 +14,16 @@ Usage example:
         --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
         --parquet-path /mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet \
         --output-dir /tmp/vis_demo --num-images 8
+For DCP checkpoint:
+    python inference/keye_ar_sana/infer_visualize_reconstruction.py \
+        --model-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u \
+        --dcp-source-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
+        --dcp-tag global_step8000 \
+        --vae-dir /llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/ \
+        --keye-ar-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted \
+        --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
+        --parquet-path /mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet \
+        --output-dir /tmp/vis_demo --num-images 8
 
 This demo imports and reuses helper functions from
 `recipes/sana/train_sana_ar_dit.py` (e.g., `load_vae`, `load_keye_ar`,
@@ -27,6 +37,9 @@ import torch
 import torch.distributed as dist
 from pathlib import Path
 
+# Import DCP to torch converter
+from muse.tools.dcp2torch import convert as dcp_to_torch_convert
+
 # Reuse helpers from the training recipe
 from recipes.sana import train_sana_ar_dit as train_rec
 from muse.config import load_config
@@ -38,6 +51,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", type=str, required=True,
                         help="Directory containing pretrained model or checkpoint")
+    parser.add_argument("--dcp-source-dir", type=str, default=None,
+                        help="Source directory for DCP checkpoint conversion (required if --dcp-tag is used)")
+    parser.add_argument("--dcp-tag", type=str, default=None,
+                        help="Tag for DCP checkpoint (e.g., global_step8000)")
     parser.add_argument("--model-config", type=str, default=None,
                         help="Optional model config JSON path (if not using --model-dir/config.json)")
     parser.add_argument("--model-config-overrides", type=str, nargs="*", default=[],
@@ -100,7 +117,6 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     return True
 
 
-
 def main():
     args = parse_args()
 
@@ -112,12 +128,31 @@ def main():
     # Optionally initialize a local single-process distributed group for dataset compatibility
     setup_distributed_environment(args.rank, args.world_size)
 
+    # Convert DCP checkpoint if needed
+    model_dir = args.model_dir
+    if args.dcp_tag:
+        print(f"Detected DCP checkpoint conversion parameters:")
+        print(f"  DCP Checkpoint Dir: {model_dir}")
+        print(f"  DCP Source Dir: {args.dcp_source_dir}")
+        print(f"  DCP Tag: {args.dcp_tag}")
+        
+        # Call DCP to torch conversion
+        dcp_to_torch_convert(
+            checkpoint_dir=model_dir,
+            tag=args.dcp_tag,
+            source_dir=args.dcp_source_dir
+        )
+        
+        # Update model_dir to the converted directory
+        model_dir = os.path.join(model_dir, args.dcp_tag, "converted")
+        print(f"Converted DCP checkpoint available at: {model_dir}")
+
     # 1) Load model config and instantiate model for visualization
     if args.model_config:
         model_config = load_config(args.model_config)
     else:
         # Expect config.json in model dir
-        cfg_path = Path(args.model_dir) / "config.json"
+        cfg_path = Path(model_dir) / "config.json"
         if not cfg_path.exists():
             raise FileNotFoundError(f"Model config not found at {cfg_path}. Provide --model-config if needed.")
         model_config = load_config(cfg_path)
@@ -142,8 +177,8 @@ def main():
         model_for_vis = model_cls(model_config)
 
     # 2) Try to load checkpoint/state dict from model_dir
-    print(f"Loading checkpoint from {args.model_dir}")
-    sd = train_rec.load_hf_checkpoint(args.model_dir)
+    print(f"Loading checkpoint from {model_dir}")
+    sd = train_rec.load_hf_checkpoint(model_dir)
     model_for_vis.load_state_dict(sd, strict=False)
     model_for_vis.to(device).bfloat16()
     model_for_vis.eval()
