@@ -105,6 +105,10 @@ def parse_args():
 
     parser.add_argument("--n_infer_items", type=int, default=999999,
                         help="Number of items to infer")
+    parser.add_argument("--model-tag", type=str, default="BLIP3OTransformersSFT",
+                        help="Tag for model checkpoint (e.g., global_step8000)")
+    parser.add_argument("--eval-id", type=str, default="default",
+                        help="Eval ID for GenEval results")
     return parser.parse_args()
 
 
@@ -546,8 +550,10 @@ def main():
 
     # Save results in the required format after all inference is done
     print("Saving GenEval results...")
-    ulmeval_dir = os.path.join(args.results_dir, 'ulmeval')
+    ulmeval_dir = os.path.join(args.results_dir, 'ulmeval', "subresults")
+    ulmeval_agg_dir = os.path.join(args.results_dir, 'ulmeval', "aggresults")
     os.makedirs(ulmeval_dir, exist_ok=True)
+    os.makedirs(ulmeval_agg_dir, exist_ok=True)
     
     world_size = torch.distributed.get_world_size()
     rank = torch.distributed.get_rank()
@@ -566,6 +572,63 @@ def main():
     
     print(f"Results saved to {ulmeval_dir}")
 
+    torch.distributed.barrier()
+    
+    # Aggregate results from all subresults files
+    if torch.distributed.get_rank() == 0:
+        import pandas as pd
+        import glob
+        import json
+        import pickle
+        
+        # Create aggresults directory if not exists
+        agg_results_dir = os.path.join(args.results_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
+        os.makedirs(agg_results_dir, exist_ok=True)
+        
+        # Find all JSON and PKL files in subresults
+        json_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.json"))
+        pkl_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.pkl"))
+        
+        # Initialize DataFrame with the required columns
+        columns = [
+            "index", "tag", "include_class", "include_count", 
+            "include_color", "include_position", "exclude_class", 
+            "exclude_count", "question", "prediction"
+        ]
+        df = pd.DataFrame(columns=columns)
+        
+        # Process each JSON-PKL pair
+        for json_file, pkl_file in zip(sorted(json_files), sorted(pkl_files)):
+            # Load JSON data
+            with open(json_file, 'r', encoding='utf-8') as f:
+                samples_data = json.load(f)
+            
+            # Load PKL data
+            with open(pkl_file, 'rb') as f:
+                images_data = pickle.load(f)
+            
+            # Combine data into DataFrame rows
+            for sample_idx, sample in samples_data.items():
+                metadata = sample['metadata']
+                row = {
+                    "index": int(metadata['index']),
+                    "tag": metadata['tag'],
+                    "include_class": metadata['include_class'],
+                    "include_count": metadata['include_count'],
+                    "include_color": metadata['include_color'],
+                    "include_position": metadata['include_position'],
+                    "exclude_class": metadata['exclude_class'],
+                    "exclude_count": metadata['exclude_count'],
+                    "question": metadata['question'],
+                    "prediction": images_data.get(sample_idx, None)
+                }
+                df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+        
+        # Sort by index and save to pickle
+        df = df.sort_values('index').reset_index(drop=True)
+        output_pkl = os.path.join(agg_results_dir, "aggregated_results.pkl")
+        df.to_pickle(output_pkl)
+        print(f"Aggregated results saved to: {output_pkl}")
 
 if __name__ == "__main__":
     main()
