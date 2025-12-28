@@ -36,6 +36,7 @@ import json
 import torch
 import torch.distributed as dist
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 # Import DCP to torch converter
 from muse.tools.dcp2torch import convert as dcp_to_torch_convert
@@ -273,7 +274,7 @@ def main():
             )
         else:
             print(f"DCP checkpoint already converted to torch format at: {converted_model_dir}")
-            
+
         # Update model_dir to the converted directory
         model_dir = converted_model_dir
         print(f"Converted DCP checkpoint available at: {model_dir}")
