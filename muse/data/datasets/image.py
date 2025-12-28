@@ -1318,3 +1318,85 @@ class Chat2ImageDataset(Token2ImageDataset):
             result["image"] = torch.stack([s["image"] for s in batch])
             
         return result
+
+
+class GenEvalInferenceDataset(Chat2ImageDataset):
+    """
+    gen_eval_csv_path的内容如下:
+    index   tag     include_class   include_count   include_color   include_position        exclude_class   exclude_count   question
+    1       single_object   bench   1                                       a photo of a bench
+    2       single_object   cow     1                                       a photo of a cow
+    """
+    def __init__(self, 
+                 gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 
+                 template='{}', 
+                 systemp_prompt="You are a helpful assistant."
+                 ):
+        self.gen_eval_csv_path = gen_eval_csv_path
+        self.packing = False
+        self.template = template
+        self.system_prompt = systemp_prompt
+        self.all_data = self._load_all_data()
+    
+    def _load_all_data(self):
+        """
+        _load_all_data 的 Docstring
+
+        return a list of dict:
+            the dict keeps detailed information of each sample
+        """
+        import csv
+        
+        all_data = []
+        
+        # 打开TSV文件并读取内容
+        with open(self.gen_eval_csv_path, 'r', encoding='utf-8') as f:
+            # 使用csv.reader，设置分隔符为制表符
+            reader = csv.DictReader(f, delimiter='\t')
+            
+            # 遍历每一行，将其转换为字典并添加到all_data列表中
+            for row in reader:
+                # 转换数据类型
+                sample_dict = {
+                    'index': int(row['index']),
+                    'tag': row['tag'],
+                    'include_class': row['include_class'],
+                    'include_count': int(row['include_count']) if row['include_count'] else None,
+                    'include_color': row['include_color'] or None,
+                    'include_position': row['include_position'] or None,
+                    'exclude_class': row['exclude_class'] or None,
+                    'exclude_count': int(row['exclude_count']) if row['exclude_count'] else None,
+                    'question': row['question']
+                }
+                all_data.append(sample_dict)
+        from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
+        from muse.data.datasets.base import get_worker_info
+        worker_id, num_workers = get_worker_info()
+        rank, world_size = get_data_parallel_rank(), get_data_parallel_world_size()
+        all_data = all_data[rank::world_size]
+        all_data = all_data[worker_id::num_workers]
+        return all_data
+
+    def extract_image_text(self, sample):
+        return sample
+
+    def _make_sample(self, sample):
+        messages = []
+        if self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": [
+            {"type": "text", "text": self.template.format(sample["question"])},
+        ]})
+        return {
+            "messages": messages,
+            "metadata": sample
+        }
+
+    def __iter__(self):
+        """Iterate through the dataset, processing samples and handling epochs."""
+        for sample in self.all_data:
+            sample = self._make_sample(sample)
+            metadata = sample["metadata"]
+            processed = self._process_pair(sample)
+            processed["metadata"] = metadata
+            yield processed
