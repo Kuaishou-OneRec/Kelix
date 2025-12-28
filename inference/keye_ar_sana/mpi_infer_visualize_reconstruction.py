@@ -429,12 +429,12 @@ def main():
 
         print(f"samples: {samples}")
         with torch.no_grad():
-            batchsize = samples.input_ids.shape[0]
+            batch_size = samples.input_ids.shape[0]
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
-                batch_size=batchsize,
+                batch_size=batch_size,
                 max_condition_length=args.max_condition_length,
                 input_ids=samples.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
@@ -444,15 +444,15 @@ def main():
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding
             seq_len = min(null_embed.shape[0], args.max_condition_length)
-            uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(batchsize, -1, -1)
+            uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(batch_size, -1, -1)
             if seq_len < args.max_condition_length:
                 padding = torch.zeros(
-                    batchsize, args.max_condition_length - seq_len, uncond_embeds.shape[-1],
+                    batch_size, args.max_condition_length - seq_len, uncond_embeds.shape[-1],
                     device=device, dtype=dtype
                 )
                 uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
             uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
-            uncond_mask = torch.zeros(batchsize, args.max_condition_length, device=device)
+            uncond_mask = torch.zeros(batch_size, args.max_condition_length, device=device)
             uncond_mask[:, :seq_len] = 1
             uncond_mask = uncond_mask[:, None, None, :]
 
@@ -462,7 +462,7 @@ def main():
 
             generator = torch.Generator(device=device).manual_seed(args.seed)
             dit_latents = torch.randn(
-                (batchsize, latent_channels, latent_size, latent_size),
+                (batch_size, latent_channels, latent_size, latent_size),
                 generator=generator,
                 device=device,
                 dtype=dtype,
