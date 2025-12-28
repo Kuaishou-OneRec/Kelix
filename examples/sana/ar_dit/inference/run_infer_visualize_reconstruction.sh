@@ -30,7 +30,7 @@ SEED=42
 INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
 RANK=0
 WORLD_SIZE=1
-MODEL_CONFIG_OVERRIDES=""  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
+MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=3000 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
 
 # Allow overrides from environment
 MODEL_DIR=${MODEL_DIR:-$MODEL_DIR}
