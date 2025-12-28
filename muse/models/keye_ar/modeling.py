@@ -249,7 +249,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
 
         hidden = []
         for i, layer in enumerate(self.layers):
-            if output_hidden_states:
+            if i in output_hidden_states:
                 hidden.append(h)
             # shape: [b, s, d]
             h = layer(
@@ -503,7 +503,7 @@ class KeyeARModel(Model):
         self.model.model.token_decoder_with_teacher_forcing = teacher_forcing
         return teacher_forcing
     
-    def set_output_hidden_states(self, output_hidden_states: bool):
+    def set_output_hidden_states(self, output_hidden_states):
         """
         设置是否输出hidden states
         """

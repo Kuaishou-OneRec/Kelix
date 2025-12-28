@@ -143,7 +143,7 @@ def get_model_embedding_and_tokens(
             del kwargs["cu_seqlens"]
         import IPython
         IPython.embed()
-        model.set_output_hidden_states(True)
+        model.set_output_hidden_states([len(model.model.model.layers)])
         tokens, embeddings = model.generate(
             input_ids=input_ids,
             **kwargs
