@@ -622,7 +622,7 @@ def main():
         
         # Sort by index and save to pickle
         df = df.sort_values('index').reset_index(drop=True)
-        output_pkl = os.path.join(agg_results_dir, "aggregated_results.pkl")
+        output_pkl = os.path.join(agg_results_dir, f"{args.model_tag}_GenEval.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 

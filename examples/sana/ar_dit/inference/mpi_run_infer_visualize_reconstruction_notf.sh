@@ -17,7 +17,7 @@ export PYTHONPATH="${PYTHONPATH:-.}"
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/"
 VAE_DIR="/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted"
-DATASET_CONFIG="examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json"
+DATASET_CONFIG="examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json"
 PARQUET_PATH="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet"
 # OUTPUT_DIR="./vis_output"
 
