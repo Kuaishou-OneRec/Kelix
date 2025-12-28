@@ -162,7 +162,6 @@ def get_model_embedding_and_tokens(
             input_ids=input_ids,
             **kwargs
         )
-        print(f"after generate")
         embeddings = embeddings[0]
         return tokens, embeddings
         
@@ -257,7 +256,10 @@ def tokenize_images(ar_processor : AutoProcessor,
         
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
-            raise ValueError(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
+            torch.save(input_ids, "input_ids.pt")
+            print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
+            vision_seq_lens.append(1)
+            vision_embeddings_list.append(torch.zeros(1, embeddings.shape[2], device=embeddings.device, dtype=embeddings.dtype))
         
         # Extract embeddings for each vision segment
         for start_pos, end_pos in zip(start_positions, end_positions):
