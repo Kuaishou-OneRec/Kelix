@@ -453,6 +453,8 @@ def tokenize_images(tokenizer,
             # Fallback: create input_pos from input_ids shape
             input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
         
+        import IPython
+        IPython.embed()
         print_rank_0(f"tokenize_images: pixel_values={pixel_values.shape}")
         # Call KeyeARModel forward method
         outputs = tokenizer(

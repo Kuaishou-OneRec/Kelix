@@ -172,7 +172,6 @@ def main():
     
     image_tokenizer = image_tokenizer.to(device)
 
-
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:
         dataset_cfg = json.load(f)
