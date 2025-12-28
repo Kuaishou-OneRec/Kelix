@@ -168,6 +168,9 @@ def main():
     setup_distributed_environment(args.rank, args.world_size)
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+    # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
+    
+    image_tokenizer = image_tokenizer.to(device)
 
 
     # 4) Build dataset using provided dataset config (for processing helpers)
