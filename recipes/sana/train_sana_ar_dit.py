@@ -401,6 +401,7 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
         z = vae.encode(images)[0]
         z = z * vae.config.scaling_factor
     return z
+
 def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype, output_last_hidden_states_only=True):
 
     from muse.models.keye_ar import KeyeARModel

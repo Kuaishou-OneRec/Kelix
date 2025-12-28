@@ -388,6 +388,9 @@ def main():
     print("Loading VAE...")
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
+    latent_channels = vae.config.latent_channels
+    print(f"latent_channels: {latent_channels}")
+    
     print("Loading Keye AR ar_model/processor...")
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype, output_last_hidden_states_only=False)
@@ -412,8 +415,6 @@ def main():
     dataset_cfg['max_condition_length'] = args.max_condition_length
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
 
-
-    print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
     dataset = GenEvalInferenceDataset(processor_path=args.keye_ar_dir, gen_eval_csv_path=args.gen_eval_csv_path)
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
@@ -475,6 +476,7 @@ def main():
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
             for t in scheduler.timesteps:
+                print(f"dit_latents shape: {dit_latents.shape}")
                 latent_input = torch.cat([dit_latents] * 2)
                 timestep = t.expand(latent_input.shape[0])
                 noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg)
