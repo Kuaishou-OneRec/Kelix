@@ -33,10 +33,17 @@ IMAGE_SIZE=1024
 SEED=42
 INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
 MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=1280 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
+
+#
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
+
+# exp13_run_ar_dit_multiscale_1280tokens_attnrope_128u_lowlr
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp13_run_ar_dit_multiscale_1280tokens_attnrope_128u_lowlr"      # Source directory for DCP checkpoint conversion
+DCP_TAG="global_step21000"             # Tag for DCP checkpoint (e.g., global_step8000)
+
 TEACHER_FORCING=0
-N_INFER_ITEMS="2"
+N_INFER_ITEMS="999999"
 OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs
 
 
