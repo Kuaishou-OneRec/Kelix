@@ -123,7 +123,7 @@ def main():
 
     print(f"Creating visualization model: {model_class_name}")
     with train_rec.set_default_dtype(args.dtype), torch.device("cpu"):
-        model_for_vis = model_cls(model_config)
+        model_for_vis = model_cls(model_config).bfloat16()
 
     # 2) Try to load checkpoint/state dict from model_dir
     try:
@@ -156,10 +156,6 @@ def main():
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
     print("Loading Keye AR tokenizer/processor...")
-
-    # # Initialize a local single-process distributed group to ensure that
-    # # training helpers which call `torch.distributed.get_rank()` behave correctly.
-    # setup_distributed_environment(args.rank, args.world_size)
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
     # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
