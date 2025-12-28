@@ -433,7 +433,7 @@ def main():
         print(f"samples: {samples}")
         with torch.no_grad():
             batch_size = samples.input_ids.shape[0]
-
+            print(f"batch_size: {batch_size}")
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
