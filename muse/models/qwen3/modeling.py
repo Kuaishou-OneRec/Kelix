@@ -405,7 +405,7 @@ class Qwen3Model(Model):
         generated = input_ids.clone()
 
         # 设置KV缓存
-        model.model.setup_caches(
+        self.model.setup_caches(
             batch_size=batch_size,
             dtype=next(model.parameters()).dtype,
             decoder_max_seq_len=max_length
@@ -416,7 +416,7 @@ class Qwen3Model(Model):
             # 创建预热阶段的位置id (从0到input_seq_len-1)
             prefill_pos = torch.arange(input_seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
             # 使用完整的model()调用，并提供正确的input_pos
-            model(generated, input_pos=prefill_pos,# is_causal=True
+            self(generated, input_pos=prefill_pos,# is_causal=True
                 **kwargs)
 
         # 自回归生成阶段
@@ -485,7 +485,7 @@ class Qwen3Model(Model):
                         break
 
 
-        model.model.reset_caches()
+        self.model.reset_caches()
 
         # 将生成的序列转换为列表
         generated_list = generated.tolist()

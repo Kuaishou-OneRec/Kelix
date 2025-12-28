@@ -828,7 +828,8 @@ class KeyeARModel(Model):
                 dtype=next(self.model.model.parameters()).dtype,
                 decoder_max_seq_len=max_length
             )
-        
+        else:
+            self.model.model.reset_caches()
 
         # 删除attention_mask以适配flash attention
         model_kwargs.pop('attention_mask', None)
@@ -981,6 +982,8 @@ class KeyeARModel(Model):
         
         if return_1d_ids:
             generated_ids = generated_ids[...,0]
+
+        self.model.model.reset_caches()
 
         if len(hidden_states_list) and len(hidden_states_list[0]):
             result_hidden_states = []
