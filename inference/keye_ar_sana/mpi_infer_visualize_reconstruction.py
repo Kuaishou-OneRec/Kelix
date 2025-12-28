@@ -233,7 +233,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
+            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
         )
 
         # Extract embeddings between vision_start_id and vision_end_id
@@ -261,18 +261,20 @@ def tokenize_images(ar_processor : AutoProcessor,
             vision_seq_lens.append(1)
             vision_embeddings_list.append(torch.zeros(1, embeddings.shape[2], device=embeddings.device, dtype=embeddings.dtype))
         
-        # Extract embeddings for each vision segment
-        for start_pos, end_pos in zip(start_positions, end_positions):
-            # Check if start_pos comes before end_pos
-            if start_pos >= end_pos:
-                raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
-            
-            # Extract embeddings for this segment
-            # embeddings shape is [1, total_seq_len, embed_dim] in packing case
-            vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-            vision_embeddings_list.append(vision_embeddings)
-            vision_seq_lens.append(vision_embeddings.shape[0])
+        else:
+            # Extract embeddings for each vision segment
+            for start_pos, end_pos in zip(start_positions, end_positions):
+                # Check if start_pos comes before end_pos
+                if start_pos >= end_pos:
+                    raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
+                
+                # Extract embeddings for this segment
+                # embeddings shape is [1, total_seq_len, embed_dim] in packing case
+                vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+                vision_embeddings_list.append(vision_embeddings)
+                vision_seq_lens.append(vision_embeddings.shape[0])
         
+        vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
             print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
