@@ -116,7 +116,7 @@ def convert(
     tag: Tag for the checkpoint.
     source_dir: Directory containing the source files.
   """
-  if not tag:
+  if tag:
     checkpoint_dir = Path(checkpoint_dir) / tag
   output_dir = checkpoint_dir.rstrip("/") + "/converted"
 
