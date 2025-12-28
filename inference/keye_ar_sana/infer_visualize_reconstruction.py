@@ -208,7 +208,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_ids = input_ids[:, :assistant_start_idx]
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
     print(f"input_ids after assistant_start_ids={input_ids}")
-    IPython.embed()
+    # IPython.embed()
     with torch.no_grad():
         
         # Create input_pos using cu_seqlens if provided
