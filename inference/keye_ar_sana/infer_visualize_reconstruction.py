@@ -85,6 +85,7 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     Returns:
         True if distributed was initialized successfully, otherwise False.
     """
+    print(f"going to init: {rank}/{world_size}")
     dist.init_process_group(
         backend='gloo',
         init_method='tcp://127.0.0.1:29500',
