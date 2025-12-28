@@ -19,3 +19,6 @@ build
 *.parquet
 *.ttf
 hostfile
+
+# Ignore inference results produced by visualization scripts
+results/
