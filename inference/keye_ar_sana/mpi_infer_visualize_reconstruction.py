@@ -328,7 +328,7 @@ def main():
      
     if args.dcp_tag:
         converted_model_dir = os.path.join(args.dcp_ckpt_dir, args.dcp_tag, "converted")
-        if not os.path.exists(converted_model_dir):
+        if not os.path.exists(converted_model_dir) and torch.distributed.get_rank() == 0:
             print(f"Converting DCP checkpoint from {args.dcp_ckpt_dir} to {converted_model_dir}, dcp_tag={args.dcp_tag}")
             # Call DCP to torch conversion
             dcp_to_torch_convert(
@@ -336,8 +336,8 @@ def main():
                 tag=args.dcp_tag,
                 source_dir=model_dir
             )
-        else:
-            print(f"DCP checkpoint already converted to torch format at: {converted_model_dir}")
+
+        torch.distributed.barrier()
 
         # Update model_dir to the converted directory
         model_dir = converted_model_dir
