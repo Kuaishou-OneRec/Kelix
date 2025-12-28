@@ -168,11 +168,11 @@ def tokenize_images(ar_processor : AutoProcessor,
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
     import IPython
-    IPython.embed()
+    #IPython.embed()
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
     assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
     print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
-    # input_ids: [batch_size, total_seq_len]
+    input_ids: [batch_size, total_seq_len]
 
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
