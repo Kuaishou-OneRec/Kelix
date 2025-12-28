@@ -37,7 +37,7 @@ DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
 TEACHER_FORCING=0
 N_INFER_ITEMS="2"
-OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs"
+OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs
 
 
 # Allow overrides from environment
