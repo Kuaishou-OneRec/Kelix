@@ -86,7 +86,7 @@ mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${RESULTS_DIR}"
 
 # Run the inference script
-python inference/keye_ar_sana/infer_visualize_reconstruction.py \
+PYTHONPATH=. python inference/keye_ar_sana/infer_visualize_reconstruction.py \
   --model-dir "${MODEL_DIR}" \
   --vae-dir "${VAE_DIR}" \
   --keye-ar-dir "${KEYE_AR_DIR}" \
