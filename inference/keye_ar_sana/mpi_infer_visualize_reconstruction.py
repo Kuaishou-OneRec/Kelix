@@ -54,6 +54,9 @@ from muse.data.datasets.image import GenEvalInferenceDataset
 from muse.training.parallel import (
     initialize_model_parallel
 )
+import pandas as pd
+import glob
+import pickle
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -575,10 +578,7 @@ def main():
     
     # Aggregate results from all subresults files
     if torch.distributed.get_rank() == 0:
-        import pandas as pd
-        import glob
-        import json
-        import pickle
+
         
         # Create aggresults directory if not exists
         agg_results_dir = os.path.join(args.results_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
