@@ -167,7 +167,9 @@ def tokenize_images(ar_processor : AutoProcessor,
         - embeddings: [B, max_condition_length, embed_dim]
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
     """
-    assistant_start_ids = ar_processor.decode("<|im_start|>assistant")
+    import IPython
+    IPython.embed()
+    assistant_start_ids = ar_processor.encode("<|im_start|>assistant")
     print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
