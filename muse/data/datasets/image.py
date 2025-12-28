@@ -1380,7 +1380,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     def extract_image_text(self, sample):
         return sample
 
-    def _make_sample(self, sample):
+    def process(self, sample):
         messages = []
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
@@ -1395,8 +1395,5 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     def __iter__(self):
         """Iterate through the dataset, processing samples and handling epochs."""
         for sample in self.all_data:
-            sample = self._make_sample(sample)
-            metadata = sample["metadata"]
-            processed = self.process(sample)
-            processed["metadata"] = metadata
-            yield processed
+            sample = self.process(sample)
+            yield sample
