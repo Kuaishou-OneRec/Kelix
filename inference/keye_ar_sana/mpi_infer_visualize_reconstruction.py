@@ -410,7 +410,7 @@ def main():
 
 
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
-    dataset = GenEvalInferenceDataset(**dataset_cfg)
+    dataset = GenEvalInferenceDataset()
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
     print("Running DiT sampling and saving results...")
