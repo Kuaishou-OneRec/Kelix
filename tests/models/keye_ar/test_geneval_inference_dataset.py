@@ -156,7 +156,6 @@ def test_geneval_inference_dataset_basic():
     
     # Test __iter__ method by getting the first sample
     first_processed_sample = next(iter(dataset))
-    first_processed_sample = next(iter(dataset))
     print(f"== First processed sample: {first_processed_sample}")
     assert isinstance(first_processed_sample, dict), "Processed sample should be a dict"
     
