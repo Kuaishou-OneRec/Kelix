@@ -35,7 +35,7 @@ WORLD_SIZE=1
 MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=1280 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u"      # Source directory for DCP checkpoint conversion
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
-TEACHER_FORCING=false
+TEACHER_FORCING=0
 
 
 

@@ -98,7 +98,7 @@ def parse_args():
                         help="Distributed rank to set in dataset config (default: 0)")
     parser.add_argument("--world-size", type=int, default=1,
                         help="Distributed world_size to set in dataset config (default: 1)")
-    parser.add_argument("--teacher-forcing", type=bool, default=True,
+    parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
     return parser.parse_args()
 
@@ -172,7 +172,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
     assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
     print(f"input_ids={input_ids}, assistant_start_ids={assistant_start_ids}")
-    input_ids: [batch_size, total_seq_len]
+    # input_ids: [batch_size, total_seq_len]
 
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
