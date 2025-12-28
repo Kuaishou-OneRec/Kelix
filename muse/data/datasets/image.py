@@ -1411,7 +1411,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
             return_tensors="pt",
         )
         return {
-            "input_ids": inputs["input_ids"].squeeze(0),
+            "input_ids": inputs["input_ids"],
             "messages": messages,
             "metadata": sample
         }
