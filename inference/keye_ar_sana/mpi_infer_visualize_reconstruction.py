@@ -275,7 +275,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         if len(vision_embeddings_list) != batch_size:
             print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
             vision_seq_lens.append(1)
-            vision_embeddings_list.append(torch.zeros(1, embed_dim, device=embeddings.device, dtype=embeddings.dtype))
+            vision_embeddings_list.append(torch.zeros(1, embeddings.shape[2], device=embeddings.device, dtype=embeddings.dtype))
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
