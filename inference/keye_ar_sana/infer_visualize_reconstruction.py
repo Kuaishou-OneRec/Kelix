@@ -162,6 +162,13 @@ def main():
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
     print("Loading Keye AR tokenizer/processor...")
+    # Ensure a local single-process distributed group is initialized if required.
+    # Some helpers (from training recipes) call `torch.distributed.get_rank()` which
+    # will raise if the default process group is not initialized. Attempt to
+    # initialize if not already initialized (safe no-op if already initialized).
+    if not dist.is_initialized():
+        setup_distributed_environment()
+
     try:
         image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
     except FileNotFoundError as e:
