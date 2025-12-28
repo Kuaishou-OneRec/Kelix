@@ -126,28 +126,9 @@ def main():
         model_for_vis = model_cls(model_config)
 
     # 2) Try to load checkpoint/state dict from model_dir
-    try:
-        if hasattr(train_rec, 'load_hf_checkpoint'):
-            print(f"Loading checkpoint from {args.model_dir}")
-            sd = train_rec.load_hf_checkpoint(args.model_dir)
-            # Load state into model_for_vis (best-effort)
-            try:
-                model_for_vis.load_state_dict(sd, strict=False)
-                print("Model weights loaded (strict=False)")
-            except Exception as e:
-                print(f"Warning: failed to load state_dict with strict=False: {e}")
-                # Try key 'model' or 'app' wrappers
-                if isinstance(sd, dict) and 'model' in sd:
-                    try:
-                        model_for_vis.load_state_dict(sd['model'], strict=False)
-                        print("Model weights loaded from sd['model']")
-                    except Exception:
-                        print("Failed to load model weights from sd['model']")
-        else:
-            print("load_hf_checkpoint not available in train_rec; skipping checkpoint load")
-    except Exception as e:
-        print(f"Error loading checkpoint: {e}")
-
+    print(f"Loading checkpoint from {args.model_dir}")
+    sd = train_rec.load_hf_checkpoint(args.model_dir)
+    model_for_vis.load_state_dict(sd, strict=False)
     model_for_vis.to(device).bfloat16()
     model_for_vis.eval()
 
@@ -156,6 +137,11 @@ def main():
     vae = train_rec.load_vae(args.vae_dir, device=device, dtype=dtype)
 
     print("Loading Keye AR tokenizer/processor...")
+
+    image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype)
+    # Ensure tokenizer/model is on the intended device (Triton kernels expect CUDA tensors)
+    
+    image_tokenizer = image_tokenizer.to(device)
 
     # 4) Build dataset using provided dataset config (for processing helpers)
     with open(args.dataset_config, encoding='utf-8') as f:
@@ -196,7 +182,7 @@ def main():
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = train_rec.tokenize_images(
-                tokenizer=model_for_vis,
+                tokenizer=image_tokenizer,
                 pixel_values=loaded.pixel_values.to(device=device),
                 image_grid_thw=loaded.image_grid_thw.to(device=device),
                 batch_size=loaded.batch_size,
