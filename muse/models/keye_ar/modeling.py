@@ -917,6 +917,9 @@ class KeyeARModel(Model):
         # 2. 生成逻辑：Prefill + Decode
         # ==============================================
         # Prefill阶段：首次输入完整prompt，获取初始cache
+        print(f"prefilling")
+        import IPython
+        IPython.embed()
         if prompt_groups > 0:
             prefill_pos = torch.arange(input_seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
             outputs = self(
