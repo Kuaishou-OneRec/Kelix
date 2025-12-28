@@ -353,7 +353,7 @@ class VisReconstructionLoader:
         latent_channels = latents.shape[1]
         latent_size = latents.shape[2]
         
-        print_rank_0("  VAE decoding (reconstruction)...")
+        print_rank_0(f"  VAE decoding (reconstruction)...\nlatent_channels={latent_channels}, latent_size={latent_size}")
         vae_recon_latents = latents / vae.config.scaling_factor
         vae_recon_images = vae.decode(vae_recon_latents).sample
         vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)

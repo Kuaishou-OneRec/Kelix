@@ -1340,6 +1340,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 
                  template='{}', 
                  systemp_prompt="You are a helpful assistant.",
+                 infer_repeats=4,
                  ):
         self.gen_eval_csv_path = gen_eval_csv_path
         self.packing = False
@@ -1349,6 +1350,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         self.processor_path = processor_path
         self.processor = AutoProcessor.from_pretrained(
             self.processor_path, trust_remote_code=True)
+        self.infer_repeats = infer_repeats
     
     def _load_all_data(self):
         """
@@ -1418,6 +1420,8 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
 
     def __iter__(self):
         """Iterate through the dataset, processing samples and handling epochs."""
+        import copy
         for sample in self.all_data:
             sample = self.process(sample)
-            yield sample
+            for _ in range(self.infer_repeats):
+                yield copy.deepcopy(sample)

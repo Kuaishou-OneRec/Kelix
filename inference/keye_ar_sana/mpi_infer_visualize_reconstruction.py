@@ -99,6 +99,8 @@ def parse_args():
                         help="Enable teacher forcing during inference")
     parser.add_argument("--gen_eval_csv_path", type=str, default="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
                         help="Path to GenEval.tsv file")
+    parser.add_argument("--infer_repeats", type=int, default=4,
+                        help="Number of times to repeat inference for each sample")
     return parser.parse_args()
 
 
@@ -316,6 +318,19 @@ def tokenize_images(ar_processor : AutoProcessor,
     return processed_embeddings, attention_mask
 
 
+def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
+    """Encode images to latent space.
+    
+    Reference: Sana/diffusion/model/builder.py vae_encode for AutoencoderDC
+    """
+    with torch.no_grad():
+        # VAE runs in float32 for precision, images should already be float32
+        # Use indexing [0] which works for both tuple and EncoderOutput
+        z = vae.encode(images)[0]
+        z = z * vae.config.scaling_factor
+    return z
+
+
 def main():
     args = parse_args()
 
@@ -390,7 +405,7 @@ def main():
 
     latent_channels = vae.config.latent_channels
     print(f"latent_channels: {latent_channels}")
-    
+
     print("Loading Keye AR ar_model/processor...")
 
     image_tokenizer = train_rec.load_keye_ar(args.keye_ar_dir, device=device, dtype=args.dtype, output_last_hidden_states_only=False)
@@ -415,7 +430,10 @@ def main():
     dataset_cfg['max_condition_length'] = args.max_condition_length
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
 
-    dataset = GenEvalInferenceDataset(processor_path=args.keye_ar_dir, gen_eval_csv_path=args.gen_eval_csv_path)
+    dataset = GenEvalInferenceDataset(
+        processor_path=args.keye_ar_dir, 
+        gen_eval_csv_path=args.gen_eval_csv_path,
+        infer_repeats=args.infer_repeats)
 
     # 5) Run DiT sampling pipeline *locally* and save results (DiT JPEGs + messages JSON)
     print("Running DiT sampling and saving results...")
