@@ -442,9 +442,11 @@ def main():
     from diffusers import FlowMatchEulerDiscreteScheduler
     import time
 
-
+    print(f"model_for_vis={model_for_vis}")
     latent_channels = model_for_vis.config.caption_channels
-    latent_size = model_for_vis.config.hidden_size
+    latent_size = args.image_size // model_for_vis.config.vae_downsample_rate
+    print(f"latent_size: {latent_size}")
+
     for samples in dataset:
         samples = easydict.EasyDict(samples)
         # samples: 
