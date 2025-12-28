@@ -138,9 +138,9 @@ def main():
         
         # Call DCP to torch conversion
         dcp_to_torch_convert(
-            checkpoint_dir=model_dir,
+            checkpoint_dir=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/,
             tag=args.dcp_tag,
-            source_dir=args.dcp_source_dir
+            source_dir=model_dir
         )
         
         # Update model_dir to the converted directory
