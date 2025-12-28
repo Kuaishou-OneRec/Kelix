@@ -169,10 +169,10 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         Args:
             tokens (Optional[torch.Tensor]): input tensor with shape ``[b x s]``
             mask (Optional[torch.Tensor]): Used to mask the scores after the query-key multiplication
-and before the softmax. This parameter is required during inference if caches have been setup.
+            and before the softmax. This parameter is required during inference if caches have been setup.
                 Either:
 
-A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
+                A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
                 or ``[b x s x self.encoder_max_cache_seq_len]`` if using KV-cacheing with encoder/decoder layers.
                 A value of True in row ``i`` and column ``j`` means token ``i`` attends to token ``j``. A value of False means
                 token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
@@ -242,12 +242,14 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
             input_embeds=input_embeds,
         )
 
+        output_hidden_states = self.output_hidden_states
+
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
 
         hidden = []
         for i, layer in enumerate(self.layers):
-            if i in self.output_hidden_states:
+            if i in output_hidden_states:
                 hidden.append(h)
             # shape: [b, s, d]
             h = layer(
@@ -262,7 +264,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
         if self.output_last_hidden_states_only:
             return h
 
-        if len(self.layers) in self.output_hidden_states:
+        if len(self.layers) in output_hidden_states:
             hidden.append(h)
 
 
@@ -492,7 +494,7 @@ class KeyeARModel(Model):
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
         self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
 
-    def set_token_decoder_with_teacher_forcing(self, teacher_forcing):
+    def set_token_decoder_with_teacher_forcing(self, teacher_forcing: bool):
         """
         设置是否使用teacher forcing
         一般训练的时候使用teacher forcing，generate的时候不使用
@@ -500,6 +502,14 @@ class KeyeARModel(Model):
         self.config.qwen_config.token_decoder_with_teacher_forcing = teacher_forcing
         self.model.model.token_decoder_with_teacher_forcing = teacher_forcing
         return teacher_forcing
+    
+    def set_output_hidden_states(self, output_hidden_states: bool):
+        """
+        设置是否输出hidden states
+        """
+        self.config.qwen_config.output_hidden_states = output_hidden_states
+        self.model.model.output_hidden_states = output_hidden_states
+        return output_hidden_states
 
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
@@ -791,6 +801,7 @@ class KeyeARModel(Model):
         self.eval()
 
         self.set_token_decoder_with_teacher_forcing(False)
+
         assert self.config.qwen_config.token_decoder_with_teacher_forcing == self.model.model.token_decoder_with_teacher_forcing == False, \
             "token_decoder_with_teacher_forcing must be True, but get configured as {} and param set as {}".format(
                 self.config.qwen_config.token_decoder_with_teacher_forcing,
@@ -806,6 +817,7 @@ class KeyeARModel(Model):
         pad_token_id = q_eos_token  # self.config.pad_token_id if hasattr(self.config, 'pad_token_id') else 0
 
         input_seq_len = input_ids.size(1)
+        hidden_states_list = []
 
         # 处理max_new_tokens参数
         if max_new_tokens is not None:
@@ -913,8 +925,12 @@ class KeyeARModel(Model):
                 **model_kwargs
             )
 
-            # batchsize x word_length x subword_length x vocab_size
-            logits = outputs
+            if self.model.model.output_hidden_states:
+                logits, hidden_states = outputs
+                hidden_states_list.append(hidden_states)
+            else:
+                # batchsize x word_length x subword_length x vocab_size
+                logits = outputs
 
             # (batch, 9, vocab_size)
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=0)
@@ -947,7 +963,12 @@ class KeyeARModel(Model):
                 input_pos=current_pos,
                 **model_kwargs
             )
-            logits = outputs  # (batch, 1, 9, vocab_size)
+            if self.model.model.output_hidden_states:
+                logits, hidden_states = outputs
+                hidden_states_list.append(hidden_states)
+            else:
+                logits = outputs  # (batch, 1, 9, vocab_size)
+
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=q_eos_token)
 
             # 采样新group
@@ -971,7 +992,12 @@ class KeyeARModel(Model):
         
         if return_1d_ids:
             generated_ids = generated_ids[...,0]
-        return generated_ids
+
+        if hidden_states_list:
+            hidden_states = torch.stack(hidden_states_list, dim=1)
+            return generated_ids, hidden_states
+        else:
+            return generated_ids
     
     def extract_image_tokens(self, input_tensor):
         """

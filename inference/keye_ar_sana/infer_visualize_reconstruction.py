@@ -31,6 +31,7 @@ from pathlib import Path
 from recipes.sana import train_sana_ar_dit as train_rec
 from muse.config import load_config
 from muse.models import get_model_class
+from muse.utils.common import parse_config_overrides
 
 
 def parse_args():
@@ -39,6 +40,9 @@ def parse_args():
                         help="Directory containing pretrained model or checkpoint")
     parser.add_argument("--model-config", type=str, default=None,
                         help="Optional model config JSON path (if not using --model-dir/config.json)")
+    parser.add_argument("--model-config-overrides", type=str, nargs="*", default=[],
+                        help="Override model config fields. Format: key=value. "
+                             "Example: --model-config-overrides caption_channels=1024 model_max_length=324")
     parser.add_argument("--vae-dir", type=str, required=True,
                         help="VAE directory")
     parser.add_argument("--keye-ar-dir", type=str, required=True,
@@ -117,6 +121,18 @@ def main():
         if not cfg_path.exists():
             raise FileNotFoundError(f"Model config not found at {cfg_path}. Provide --model-config if needed.")
         model_config = load_config(cfg_path)
+    
+    # Apply model config overrides from command line
+    if args.model_config_overrides:
+        overrides = parse_config_overrides(args.model_config_overrides)
+        print(f"Applying model config overrides: {overrides}")
+        for key, value in overrides.items():
+            if hasattr(model_config, key):
+                old_value = getattr(model_config, key)
+                setattr(model_config, key, value)
+                print(f"  {key}: {old_value} -> {value}")
+            else:
+                raise ValueError(f"Unknown model config field: {key}")
 
     model_class_name = model_config.model_class
     model_cls = get_model_class(model_class_name)
