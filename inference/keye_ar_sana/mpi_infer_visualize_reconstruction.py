@@ -508,8 +508,8 @@ def main():
             dit_recon_images = (dit_recon_images / 2 + 0.5).clamp(0, 1)
 
             # Save DiT JPEGs and messages JSON
-            results_step_dir = os.path.join(args.results_dir, "step_0")
-            os.makedirs(results_step_dir, exist_ok=True)
+            # results_step_dir = os.path.join(args.output_dir, "step_0")
+            # os.makedirs(results_step_dir, exist_ok=True)
 
             dit_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
 
@@ -537,8 +537,8 @@ def main():
 
     # Save results in the required format after all inference is done
     print("Saving GenEval results...")
-    ulmeval_dir = os.path.join(args.results_dir, 'ulmeval', "subresults")
-    ulmeval_agg_dir = os.path.join(args.results_dir, 'ulmeval', "aggresults")
+    ulmeval_dir = os.path.join(args.output_dir, 'ulmeval', "subresults")
+    ulmeval_agg_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults")
     os.makedirs(ulmeval_dir, exist_ok=True)
     os.makedirs(ulmeval_agg_dir, exist_ok=True)
     
@@ -566,8 +566,8 @@ def main():
 
         
         # Create aggresults directory if not exists
-        agg_results_dir = os.path.join(args.results_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
-        os.makedirs(agg_results_dir, exist_ok=True)
+        agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
+        os.makedirs(agg_output_dir, exist_ok=True)
         
         # Find all JSON and PKL files in subresults
         json_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.json"))
@@ -610,7 +610,7 @@ def main():
         
         # Sort by index and save to pickle
         df = df.sort_values('index').reset_index(drop=True)
-        output_pkl = os.path.join(agg_results_dir, f"{args.model_tag}_GenEval.pkl")
+        output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_GenEval.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 
