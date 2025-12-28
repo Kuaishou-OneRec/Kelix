@@ -5,6 +5,7 @@ This test demonstrates how to use GenEvalInferenceDataset with default parameter
 """
 
 import torch
+import torch.distributed as dist
 import pytest
 from pathlib import Path
 from typing import List, Dict, Any
@@ -12,10 +13,38 @@ import os
 
 from muse.data.datasets import GenEvalInferenceDataset
 
+def setup_distributed_environment() -> bool:
+    """
+    Initialize distributed environment for testing.
+    
+    In a single-process test environment, we initialize a local process group
+    to avoid distributed training errors.
+    
+    Returns:
+        True if distributed was already initialized or successfully initialized,
+        False otherwise
+    """
+    if dist.is_available() and not dist.is_initialized():
+        try:
+            # For testing, use the default backend on CPU
+            dist.init_process_group(
+                backend='gloo',
+                init_method='tcp://127.0.0.1:29500',
+                rank=0,
+                world_size=1,
+            )
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to initialize distributed environment: {e}")
+            print("Will attempt to run without distributed mode...")
+            return False
+    return True
+
 def demo_geneval_inference_dataset(
     gen_eval_csv_path: str = None,
     template: str = '{}',
-    systemp_prompt: str = "You are a helpful assistant."
+    systemp_prompt: str = "You are a helpful assistant.",
+    initialize_dist: bool = True
 ) -> GenEvalInferenceDataset:
     """
     Demo function showing how to use GenEvalInferenceDataset with default parameters.
@@ -24,6 +53,7 @@ def demo_geneval_inference_dataset(
         gen_eval_csv_path: Path to GenEval TSV file. If None, uses default path.
         template: Template string for processing questions. Default is '{}'.
         systemp_prompt: System prompt to use. Default is "You are a helpful assistant.".
+        initialize_dist: Whether to initialize distributed environment (default: True).
     
     Returns:
         Initialized GenEvalInferenceDataset instance
@@ -39,6 +69,12 @@ def demo_geneval_inference_dataset(
         ...     gen_eval_csv_path="/path/to/GenEval.tsv"
         ... )
     """
+    
+    # ====================================================================================
+    # Setup: Initialize distributed environment if needed
+    # ====================================================================================
+    if initialize_dist:
+        setup_distributed_environment()
     
     # ====================================================================================
     # Step 1: Create the GenEvalInferenceDataset instance with default parameters
@@ -117,7 +153,7 @@ def test_geneval_inference_dataset_basic():
     
     print("✅ All basic tests passed!")
     return True
-
+        
 
 
 if __name__ == "__main__":
