@@ -254,7 +254,10 @@ def generate_report(
     unmatched1: List[str],
     unmatched2: List[str],
     differences: Dict[str, dict],
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None,
+    show_all: bool = False,
+    sort_by: str = "rel_diff",
+    filter_pattern: Optional[str] = None,
 ) -> str:
     """Generate a human-readable comparison report."""
     
@@ -360,8 +363,22 @@ def generate_report(
     # Filter valid comparisons
     valid_diffs = [(k, v) for k, v in differences.items() if v.get("status") == "ok"]
     
-    # Sort by norm relative difference
-    sorted_diffs = sorted(valid_diffs, key=lambda x: x[1].get("norm_rel_diff", 0), reverse=True)
+    # Apply name filter if provided
+    if filter_pattern:
+        valid_diffs = [(k, v) for k, v in valid_diffs if filter_pattern in k]
+        lines.append(f"\n[Filtered by pattern: '{filter_pattern}', {len(valid_diffs)} matches]")
+    
+    # Sort based on sort_by parameter
+    if sort_by == "rel_diff":
+        sorted_diffs = sorted(valid_diffs, key=lambda x: x[1].get("norm_rel_diff", 0), reverse=True)
+    elif sort_by == "name":
+        sorted_diffs = sorted(valid_diffs, key=lambda x: x[0])
+    elif sort_by == "norm":
+        sorted_diffs = sorted(valid_diffs, key=lambda x: x[1].get("norm_1", 0), reverse=True)
+    elif sort_by == "abs_diff":
+        sorted_diffs = sorted(valid_diffs, key=lambda x: x[1].get("norm_diff", 0), reverse=True)
+    else:
+        sorted_diffs = sorted(valid_diffs, key=lambda x: x[1].get("norm_rel_diff", 0), reverse=True)
     
     # Categorize by severity
     critical = []  # rel_diff > 0.1 (10%)
@@ -411,6 +428,37 @@ def generate_report(
     lines.append(f"### OK Parameters (<1% relative difference): {len(ok)}")
     lines.append("")
     
+    # If show_all, print all parameters in a table format
+    if show_all:
+        lines.append("=" * 120)
+        lines.append("## ALL PARAMETERS DETAILED COMPARISON")
+        lines.append("=" * 120)
+        lines.append("")
+        lines.append(f"{'Parameter Name':<70} {'Norm1':>12} {'Norm2':>12} {'RelDiff':>10} {'Status':>8}")
+        lines.append("-" * 120)
+        
+        for name, diff in sorted_diffs:
+            norm1 = diff.get("norm_1", 0)
+            norm2 = diff.get("norm_2", 0)
+            rel_diff = diff.get("norm_rel_diff", 0)
+            
+            # Determine status
+            if rel_diff > 0.1:
+                status = "CRITICAL"
+            elif rel_diff > 0.01:
+                status = "WARNING"
+            else:
+                status = "OK"
+            
+            # Truncate long names
+            display_name = name if len(name) <= 68 else "..." + name[-65:]
+            
+            lines.append(f"{display_name:<70} {norm1:>12.4e} {norm2:>12.4e} {rel_diff:>9.4%} {status:>8}")
+        
+        lines.append("-" * 120)
+        lines.append(f"Total: {len(sorted_diffs)} parameters")
+        lines.append("")
+    
     # Overall assessment
     lines.append("=" * 80)
     lines.append("## OVERALL ASSESSMENT")
@@ -452,6 +500,13 @@ def main():
                         help="Path to save comparison report")
     parser.add_argument("--verbose", action="store_true",
                         help="Print verbose output")
+    parser.add_argument("--show-all", action="store_true",
+                        help="Show all parameters (not just warnings)")
+    parser.add_argument("--sort-by", type=str, default="rel_diff",
+                        choices=["rel_diff", "name", "norm", "abs_diff"],
+                        help="Sort parameters by: rel_diff, name, norm, abs_diff")
+    parser.add_argument("--filter", type=str, default=None,
+                        help="Filter parameters by name pattern (e.g., 'visual_tokenizer')")
     args = parser.parse_args()
     
     print("=" * 60)
@@ -511,7 +566,10 @@ def main():
         data1, data2,
         matched_pairs, unmatched1, unmatched2,
         differences,
-        args.output
+        args.output,
+        show_all=args.show_all,
+        sort_by=args.sort_by,
+        filter_pattern=args.filter,
     )
     
     # Print report to console
