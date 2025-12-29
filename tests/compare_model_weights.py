@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # =========================================================================
 
 # Muse 版本模型目录（已经是 Muse 格式的 key）
-MUSE_MODEL_DIR = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video"
+MUSE_MODEL_DIR = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2"
 
 # HF 版本模型目录（需要转换 key）
 HF_MODEL_DIR = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_video_baseline"
