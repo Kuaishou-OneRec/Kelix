@@ -171,7 +171,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python inference/keye_ar_sana/mpi_infer_visualize_reconstruction.py \
+        bash -c "python recipes/sana/inference_ar2image.py \
       --model-dir "${MODEL_DIR}" \
       --vae-dir "${VAE_DIR}" \
       --keye-ar-dir "${KEYE_AR_DIR}" \

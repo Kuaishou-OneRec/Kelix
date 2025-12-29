@@ -101,10 +101,6 @@ def parse_args():
 
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
-    parser.add_argument("--gen_eval_csv_path", type=str, default="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
-                        help="Path to GenEval.tsv file")
-    parser.add_argument("--infer_repeats", type=int, default=4,
-                        help="Number of times to repeat inference for each sample")
 
     parser.add_argument("--n_infer_items", type=int, default=999999,
                         help="Number of items to infer")
@@ -432,8 +428,6 @@ def main():
 
     dataset = GenEvalInferenceDataset(
         # processor_path=args.keye_ar_dir, 
-        gen_eval_csv_path=args.gen_eval_csv_path,
-        infer_repeats=args.infer_repeats,
         **dataset_cfg
         )
 
