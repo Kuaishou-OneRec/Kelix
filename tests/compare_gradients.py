@@ -36,17 +36,106 @@ def normalize_param_name(name: str, framework: str) -> str:
     """
     Normalize parameter names to enable matching between frameworks.
     
-    Different frameworks may have slightly different naming conventions.
-    This function attempts to normalize them.
+    Converts msy_master_2/muse naming to end2end/muse (HuggingFace) naming.
+    Based on KeyeTokenizerEnd2EndVideo.convert_hf_state_dict()
     """
-    # Common normalizations
     normalized = name
     
-    # Remove common prefixes that might differ
+    # Remove common prefixes
     prefixes_to_remove = ["module.", "_orig_mod."]
     for prefix in prefixes_to_remove:
         if normalized.startswith(prefix):
             normalized = normalized[len(prefix):]
+    
+    # If it's msy_master_2 format, convert to HF format
+    if framework == "msy_master_2/muse":
+        # ============ LLM Model conversions ============
+        # model.model.tok_embeddings.weight -> model.embed_tokens.weight
+        if normalized == "model.model.tok_embeddings.weight":
+            return "model.embed_tokens.weight"
+        
+        # model.model.norm.scale -> model.norm.weight
+        if normalized == "model.model.norm.scale":
+            return "model.norm.weight"
+        
+        # model.model.output.weight -> lm_head.weight
+        if normalized == "model.model.output.weight":
+            return "lm_head.weight"
+        
+        # model.model.layers.{i}.* -> model.layers.{i}.*
+        if normalized.startswith("model.model.layers."):
+            rest = normalized[len("model.model.layers."):]
+            parts = rest.split(".", 1)
+            if len(parts) == 2:
+                layer_idx, layer_rest = parts
+                
+                # Attention: attn.* -> self_attn.*
+                if layer_rest.startswith("attn."):
+                    attn_rest = layer_rest[len("attn."):]
+                    # output_proj -> o_proj
+                    attn_rest = attn_rest.replace("output_proj", "o_proj")
+                    # q_norm.scale -> q_norm.weight, k_norm.scale -> k_norm.weight
+                    attn_rest = attn_rest.replace(".scale", ".weight")
+                    return f"model.layers.{layer_idx}.self_attn.{attn_rest}"
+                
+                # MLP: w1 -> gate_proj, w2 -> down_proj, w3 -> up_proj
+                if layer_rest.startswith("mlp."):
+                    mlp_rest = layer_rest[len("mlp."):]
+                    mlp_rest = mlp_rest.replace("w1.", "gate_proj.")
+                    mlp_rest = mlp_rest.replace("w2.", "down_proj.")
+                    mlp_rest = mlp_rest.replace("w3.", "up_proj.")
+                    return f"model.layers.{layer_idx}.mlp.{mlp_rest}"
+                
+                # LayerNorms: sa_norm.scale -> input_layernorm.weight
+                if layer_rest == "sa_norm.scale":
+                    return f"model.layers.{layer_idx}.input_layernorm.weight"
+                
+                # mlp_norm.scale -> post_attention_layernorm.weight
+                if layer_rest == "mlp_norm.scale":
+                    return f"model.layers.{layer_idx}.post_attention_layernorm.weight"
+        
+        # ============ Visual Tokenizer conversions ============
+        if normalized.startswith("visual_tokenizer.visual."):
+            vis_rest = normalized[len("visual_tokenizer.visual."):]
+            
+            # embeddings.* -> visual.vision_model.embeddings.*
+            if vis_rest.startswith("embeddings."):
+                return f"visual_tokenizer.visual.vision_model.{vis_rest}"
+            
+            # ln_post.* -> visual.vision_model.post_layernorm.*
+            if vis_rest.startswith("ln_post."):
+                suffix = vis_rest[len("ln_post."):]
+                return f"visual_tokenizer.visual.vision_model.post_layernorm.{suffix}"
+            
+            # encoder.layers.{i}.* -> visual.vision_model.encoder.layers.{i}.*
+            if vis_rest.startswith("encoder.layers."):
+                enc_parts = vis_rest.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
+                if len(enc_parts) >= 4:
+                    layer_idx = enc_parts[2]
+                    layer_rest = enc_parts[3]
+                    
+                    # sa_norm.* -> layer_norm1.*
+                    if layer_rest.startswith("sa_norm."):
+                        suffix = layer_rest[len("sa_norm."):]
+                        return f"visual_tokenizer.visual.vision_model.encoder.layers.{layer_idx}.layer_norm1.{suffix}"
+                    
+                    # mlp_norm.* -> layer_norm2.*
+                    if layer_rest.startswith("mlp_norm."):
+                        suffix = layer_rest[len("mlp_norm."):]
+                        return f"visual_tokenizer.visual.vision_model.encoder.layers.{layer_idx}.layer_norm2.{suffix}"
+                    
+                    # attn.* -> self_attn.*
+                    if layer_rest.startswith("attn."):
+                        attn_rest = layer_rest[len("attn."):]
+                        attn_rest = attn_rest.replace("output_proj", "out_proj")
+                        return f"visual_tokenizer.visual.vision_model.encoder.layers.{layer_idx}.self_attn.{attn_rest}"
+                    
+                    # mlp.w1.* -> mlp.fc1.*, mlp.w2.* -> mlp.fc2.*
+                    if layer_rest.startswith("mlp."):
+                        mlp_rest = layer_rest[len("mlp."):]
+                        mlp_rest = mlp_rest.replace("w1.", "fc1.")
+                        mlp_rest = mlp_rest.replace("w2.", "fc2.")
+                        return f"visual_tokenizer.visual.vision_model.encoder.layers.{layer_idx}.mlp.{mlp_rest}"
     
     return normalized
 
