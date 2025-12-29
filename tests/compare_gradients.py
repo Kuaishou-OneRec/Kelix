@@ -291,10 +291,41 @@ def generate_report(
     lines.append("-" * 40)
     lines.append(f"input_ids_sum 1: {input1.get('input_ids_sum', 'N/A')}")
     lines.append(f"input_ids_sum 2: {input2.get('input_ids_sum', 'N/A')}")
-    lines.append(f"pixel_values_mean 1: {input1.get('pixel_values_mean', 'N/A')}")
-    lines.append(f"pixel_values_mean 2: {input2.get('pixel_values_mean', 'N/A')}")
-    lines.append(f"pixel_values_std 1: {input1.get('pixel_values_std', 'N/A')}")
-    lines.append(f"pixel_values_std 2: {input2.get('pixel_values_std', 'N/A')}")
+    lines.append(f"pixel_values_mean 1: {input1.get('pixel_values_videos_mean', 'N/A')}")
+    lines.append(f"pixel_values_mean 2: {input2.get('pixel_values_videos_mean', 'N/A')}")
+    lines.append(f"pixel_values_std 1: {input1.get('pixel_values_videos_std', 'N/A')}")
+    lines.append(f"pixel_values_std 2: {input2.get('pixel_values_videos_std', 'N/A')}")
+    lines.append("")
+    
+    # Logits stats comparison - KEY FOR DEBUGGING
+    logits1 = data1.get("logits_stats", {})
+    logits2 = data2.get("logits_stats", {})
+    lines.append("## Logits Statistics Comparison (IMPORTANT!)")
+    lines.append("-" * 40)
+    lines.append(f"logits_mean 1: {logits1.get('logits_mean', 'N/A')}")
+    lines.append(f"logits_mean 2: {logits2.get('logits_mean', 'N/A')}")
+    lines.append(f"logits_std 1: {logits1.get('logits_std', 'N/A')}")
+    lines.append(f"logits_std 2: {logits2.get('logits_std', 'N/A')}")
+    lines.append(f"logits_norm 1: {logits1.get('logits_norm', 'N/A')}")
+    lines.append(f"logits_norm 2: {logits2.get('logits_norm', 'N/A')}")
+    lines.append(f"logits_max 1: {logits1.get('logits_max', 'N/A')}")
+    lines.append(f"logits_max 2: {logits2.get('logits_max', 'N/A')}")
+    lines.append(f"logits_min 1: {logits1.get('logits_min', 'N/A')}")
+    lines.append(f"logits_min 2: {logits2.get('logits_min', 'N/A')}")
+    lines.append(f"logits_dtype 1: {logits1.get('logits_dtype', 'N/A')}")
+    lines.append(f"logits_dtype 2: {logits2.get('logits_dtype', 'N/A')}")
+    
+    # Check if logits match
+    if logits1 and logits2:
+        mean_diff = abs(logits1.get('logits_mean', 0) - logits2.get('logits_mean', 0))
+        norm_diff = abs(logits1.get('logits_norm', 0) - logits2.get('logits_norm', 0))
+        lines.append("")
+        if mean_diff < 1e-3 and norm_diff < 1e-3:
+            lines.append("✅ Logits appear to MATCH (forward pass consistent)")
+        else:
+            lines.append("❌ Logits DO NOT MATCH! Forward pass differs!")
+            lines.append(f"   Mean diff: {mean_diff:.6f}")
+            lines.append(f"   Norm diff: {norm_diff:.6f}")
     lines.append("")
     
     # Summary

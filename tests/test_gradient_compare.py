@@ -435,6 +435,22 @@ def main():
     if inputs.get("video_grid_thw") is not None:
         input_stats["video_grid_thw"] = inputs["video_grid_thw"].tolist()
     
+    # Compute logits stats for debugging forward pass differences
+    logits_stats = {
+        "logits_mean": logits.float().mean().item(),
+        "logits_std": logits.float().std().item(),
+        "logits_max": logits.float().max().item(),
+        "logits_min": logits.float().min().item(),
+        "logits_norm": logits.float().norm().item(),
+        "logits_shape": list(logits.shape),
+        "logits_dtype": str(logits.dtype),
+        # Save a small sample of logits for detailed comparison
+        "logits_sample": logits[0, :10, :10].float().cpu().tolist(),
+    }
+    logger.info(f"  Logits mean: {logits_stats['logits_mean']:.6f}")
+    logger.info(f"  Logits std: {logits_stats['logits_std']:.6f}")
+    logger.info(f"  Logits norm: {logits_stats['logits_norm']:.6f}")
+    
     # Save metadata along with gradients
     save_dict = {
         "gradients": grad_dict,
@@ -453,6 +469,7 @@ def main():
             "framework": "msy_master_2/muse",
         },
         "input_stats": input_stats,
+        "logits_stats": logits_stats,
     }
     
     torch.save(save_dict, args.output_path)
