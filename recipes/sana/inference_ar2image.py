@@ -254,8 +254,8 @@ def tokenize_images(ar_processor : AutoProcessor,
         if len(start_positions) != len(end_positions):
             torch.save(input_ids, "input_ids.pt")
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
-            vision_seq_lens.append(1)
-            vision_embeddings_list.append(torch.zeros(1, embeddings.shape[2], device=embeddings.device, dtype=embeddings.dtype))
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
         
         else:
             # Extract embeddings for each vision segment
@@ -274,8 +274,9 @@ def tokenize_images(ar_processor : AutoProcessor,
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
             print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
-            vision_seq_lens.append(1)
-            vision_embeddings_list.append(torch.zeros(1, embeddings.shape[2], device=embeddings.device, dtype=embeddings.dtype))
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
+            
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
