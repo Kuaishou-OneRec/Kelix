@@ -410,6 +410,13 @@ def main():
     logger.info(f"  Parameters with gradients: {params_with_grad}")
     logger.info(f"  Parameters without gradients: {params_without_grad}")
     
+    # Print parameters without gradients
+    if params_without_grad > 0:
+        logger.info("  Parameters without gradients:")
+        for name, info in grad_dict.items():
+            if info.get("no_grad", False):
+                logger.info(f"    - {name} (shape: {info['shape']})")
+    
     # --- 9. Save gradients ---
     logger.info(f"Saving gradients to {args.output_path}...")
     
