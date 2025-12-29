@@ -5,11 +5,10 @@ Purpose: Compare backward gradients between two repositories.
 
 This script:
 1. Loads model from checkpoint
-2. Constructs deterministic fake inputs
-3. Runs forward pass
-4. Computes loss with fake target
-5. Runs backward pass
-6. Saves gradients to file for comparison
+2. Uses real video input via Processor (same as test_keye_vl_video_muse_only.py)
+3. Uses fixed target text for loss computation
+4. Runs forward + backward pass
+5. Saves gradients to file for comparison
 
 Usage:
     cd msy_master_2/muse
@@ -30,11 +29,19 @@ import torch.nn.functional as F
 from pathlib import Path
 from safetensors.torch import load_file
 import tqdm
+from transformers import AutoProcessor
 
 # === Muse imports ===
 from muse.models import get_model_class
 from muse.config import load_config
 from muse.training.common import set_default_dtype
+
+# === Import Processor utils ===
+try:
+    from tests.models.tokenizer_end2end_mt_1drope_video.keye_vl_utils import process_vision_info
+except ImportError:
+    sys.path.append(os.getcwd())
+    from tests.models.tokenizer_end2end_mt_1drope_video.keye_vl_utils import process_vision_info
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -47,6 +54,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL_DIR = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video"
 DEFAULT_OUTPUT_PATH = "/tmp/gradients_msy_master_2.pt"
 
+# Real video input path
+DEFAULT_VIDEO_PATH = "/llm_reco/maosiyang/23b77760a4304e9092eb3b45b7bf8050.mp4"
+
+# Fixed target text for loss computation (must be same across both repos!)
+TARGET_TEXT = "一个男人站在镜头前"
+
 # Fixed seed for reproducibility
 SEED = 42
 
@@ -54,79 +67,112 @@ SEED = 42
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.bfloat16
 
-# Fake input configuration
-FAKE_SEQ_LEN = 512
-FAKE_NUM_VIDEO_PATCHES = 256  # 4 frames * 8*8 spatial
-FAKE_VIDEO_GRID_THW = [4, 8, 8]  # 4 frames, 8x8 patches per frame
-FAKE_PATCH_SIZE = 14
-
 
 def set_seed(seed: int):
     """Set all random seeds for reproducibility."""
+    import random
+    import numpy as np
+    random.seed(seed)
+    np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
 
-def create_fake_inputs(model_config, device, dtype):
+def create_real_inputs(model_dir, video_path, target_text, device, dtype):
     """
-    Create deterministic fake inputs for gradient testing.
+    Create real inputs using Processor, same as test_keye_vl_video_muse_only.py.
+    
+    Args:
+        model_dir: Path to model directory (for loading processor)
+        video_path: Path to input video
+        target_text: Target text for loss computation
+        device: torch device
+        dtype: torch dtype
     
     Returns:
-        dict: Dictionary containing all model inputs
+        dict: Dictionary containing model inputs and labels
     """
-    set_seed(SEED)
+    # Load processor
+    logger.info(f"Loading Processor from {model_dir}...")
+    processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
     
-    # Get token IDs from config
-    video_token_id = getattr(model_config, 'video_token_id', 151656)
-    pad_token_id = 0
+    # Construct input message with video
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "video", "video": video_path},
+            ],
+        }
+    ]
     
-    # Create input_ids with video tokens
-    input_ids = torch.ones(1, FAKE_SEQ_LEN, dtype=torch.long, device=device) * pad_token_id
-    
-    # Insert video tokens at specific positions
-    video_start_pos = 10
-    video_end_pos = video_start_pos + FAKE_NUM_VIDEO_PATCHES
-    input_ids[0, video_start_pos:video_end_pos] = video_token_id
-    
-    # Fill remaining positions with some text tokens
-    set_seed(SEED + 1)
-    text_token_range = (1000, 10000)
-    text_positions = torch.cat([
-        torch.arange(1, video_start_pos),
-        torch.arange(video_end_pos, FAKE_SEQ_LEN)
-    ])
-    for pos in text_positions:
-        input_ids[0, pos] = torch.randint(text_token_range[0], text_token_range[1], (1,)).item()
-    
-    # Create attention mask (all ones for simplicity)
-    attention_mask = torch.ones(1, FAKE_SEQ_LEN, dtype=torch.long, device=device)
-    
-    # Create fake pixel values for video: [num_patches, C, H, W]
-    set_seed(SEED + 2)
-    pixel_values_videos = torch.randn(
-        FAKE_NUM_VIDEO_PATCHES, 3, FAKE_PATCH_SIZE, FAKE_PATCH_SIZE,
-        dtype=dtype, device=device
+    # Apply chat template
+    text = processor.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True
     )
+    logger.info(f"Prompt text: {repr(text[:100])}...")
     
-    # Create video grid THW
-    video_grid_thw = torch.tensor([FAKE_VIDEO_GRID_THW], dtype=torch.long, device=device)
+    # Process vision info
+    image_inputs, video_inputs = process_vision_info(messages)
+    logger.info(f"process_vision_info: images={len(image_inputs) if image_inputs else 0}, videos={len(video_inputs) if video_inputs else 0}")
     
-    # Create labels (same as input_ids for autoregressive)
-    labels = input_ids.clone()
+    # Run processor to get model inputs
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=False,
+        truncation=False,
+        return_tensors="pt",
+    ).to(device)
     
-    # Create loss mask (only compute loss on non-video tokens after video region)
-    loss_mask = torch.zeros(1, FAKE_SEQ_LEN, dtype=torch.long, device=device)
-    loss_mask[0, video_end_pos:] = 1  # Only compute loss after video tokens
+    # Remove num_frames if present (not needed by model)
+    inputs.pop("num_frames", None)
+    
+    # Create labels from target text
+    # We need to create a proper label sequence that matches the input format
+    # The target should come after the video/prompt tokens
+    target_ids = processor.tokenizer.encode(target_text, add_special_tokens=False)
+    target_ids = torch.tensor(target_ids, dtype=torch.long, device=device)
+    
+    # Create labels: copy input_ids and append target
+    input_ids = inputs["input_ids"]
+    seq_len = input_ids.shape[1]
+    
+    # Labels for autoregressive: shift by 1
+    # We compute loss on the target tokens only
+    # Append target_ids to input_ids for the full sequence
+    full_input_ids = torch.cat([input_ids, target_ids.unsqueeze(0)], dim=1)
+    
+    # Labels: same as full_input_ids
+    labels = full_input_ids.clone()
+    
+    # Loss mask: only compute loss on target tokens (after original input)
+    loss_mask = torch.zeros_like(full_input_ids)
+    loss_mask[0, seq_len:] = 1  # Only loss on target portion
+    
+    # Update attention mask
+    attention_mask = inputs.get("attention_mask", torch.ones_like(input_ids))
+    full_attention_mask = torch.cat([
+        attention_mask, 
+        torch.ones(1, len(target_ids), dtype=attention_mask.dtype, device=device)
+    ], dim=1)
     
     return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "pixel_values_videos": pixel_values_videos,
-        "video_grid_thw": video_grid_thw,
+        "input_ids": full_input_ids,
+        "attention_mask": full_attention_mask,
+        "pixel_values_videos": inputs.get("pixel_values_videos"),
+        "video_grid_thw": inputs.get("video_grid_thw"),
+        "pixel_values": inputs.get("pixel_values"),
+        "image_grid_thw": inputs.get("image_grid_thw"),
         "labels": labels,
         "loss_mask": loss_mask,
+        "target_text": target_text,
+        "original_seq_len": seq_len,
     }
 
 
@@ -206,6 +252,10 @@ def main():
     parser = argparse.ArgumentParser(description="Gradient comparison test for msy_master_2/muse")
     parser.add_argument("--model-dir", type=str, default=DEFAULT_MODEL_DIR,
                         help="Path to model directory")
+    parser.add_argument("--video-path", type=str, default=DEFAULT_VIDEO_PATH,
+                        help="Path to input video")
+    parser.add_argument("--target-text", type=str, default=TARGET_TEXT,
+                        help="Target text for loss computation")
     parser.add_argument("--output-path", type=str, default=DEFAULT_OUTPUT_PATH,
                         help="Path to save gradients")
     parser.add_argument("--save-full-grads", action="store_true",
@@ -217,6 +267,8 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Device: {DEVICE}, Dtype: {DTYPE}")
     logger.info(f"Model Dir: {args.model_dir}")
+    logger.info(f"Video Path: {args.video_path}")
+    logger.info(f"Target Text: {args.target_text}")
     logger.info(f"Output Path: {args.output_path}")
     logger.info(f"Seed: {SEED}")
     
@@ -262,26 +314,40 @@ def main():
     logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
     logger.info(f"Trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
     
-    # --- 4. Create fake inputs ---
-    logger.info("Creating fake inputs...")
-    inputs = create_fake_inputs(model_config, DEVICE, DTYPE)
+    # --- 4. Create real inputs using Processor ---
+    logger.info("Creating real inputs from video...")
+    inputs = create_real_inputs(args.model_dir, args.video_path, args.target_text, DEVICE, DTYPE)
     
     logger.info(f"  input_ids shape: {inputs['input_ids'].shape}")
-    logger.info(f"  pixel_values_videos shape: {inputs['pixel_values_videos'].shape}")
-    logger.info(f"  video_grid_thw: {inputs['video_grid_thw'].tolist()}")
+    if inputs.get('pixel_values_videos') is not None:
+        logger.info(f"  pixel_values_videos shape: {inputs['pixel_values_videos'].shape}")
+    if inputs.get('video_grid_thw') is not None:
+        logger.info(f"  video_grid_thw: {inputs['video_grid_thw'].tolist()}")
+    logger.info(f"  target_text: {inputs['target_text']}")
+    logger.info(f"  original_seq_len: {inputs['original_seq_len']}")
     logger.info(f"  labels shape: {inputs['labels'].shape}")
     logger.info(f"  loss_mask sum: {inputs['loss_mask'].sum().item()}")
     
     # --- 5. Forward pass ---
     logger.info("Running forward pass...")
     
-    # Prepare model inputs (exclude loss_mask and labels from model call)
+    # Prepare model inputs (exclude loss_mask, labels, and metadata from model call)
     model_inputs = {
         "input_ids": inputs["input_ids"],
         "attention_mask": inputs["attention_mask"],
-        "pixel_values_videos": inputs["pixel_values_videos"],
-        "video_grid_thw": inputs["video_grid_thw"],
     }
+    
+    # Add video inputs if present
+    if inputs.get("pixel_values_videos") is not None:
+        model_inputs["pixel_values_videos"] = inputs["pixel_values_videos"]
+    if inputs.get("video_grid_thw") is not None:
+        model_inputs["video_grid_thw"] = inputs["video_grid_thw"]
+    
+    # Add image inputs if present
+    if inputs.get("pixel_values") is not None:
+        model_inputs["pixel_values"] = inputs["pixel_values"]
+    if inputs.get("image_grid_thw") is not None:
+        model_inputs["image_grid_thw"] = inputs["image_grid_thw"]
     
     outputs = model(**model_inputs)
     
@@ -350,27 +416,36 @@ def main():
     # Create output directory if needed
     os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
     
+    # Compute input stats
+    input_stats = {
+        "input_ids_sum": inputs["input_ids"].sum().item(),
+        "input_ids_shape": list(inputs["input_ids"].shape),
+    }
+    if inputs.get("pixel_values_videos") is not None:
+        input_stats["pixel_values_videos_mean"] = inputs["pixel_values_videos"].float().mean().item()
+        input_stats["pixel_values_videos_std"] = inputs["pixel_values_videos"].float().std().item()
+        input_stats["pixel_values_videos_shape"] = list(inputs["pixel_values_videos"].shape)
+    if inputs.get("video_grid_thw") is not None:
+        input_stats["video_grid_thw"] = inputs["video_grid_thw"].tolist()
+    
     # Save metadata along with gradients
     save_dict = {
         "gradients": grad_dict,
         "metadata": {
             "model_class": model_class_name,
             "model_dir": args.model_dir,
+            "video_path": args.video_path,
+            "target_text": args.target_text,
             "seed": SEED,
             "dtype": str(DTYPE),
             "device": DEVICE,
-            "seq_len": FAKE_SEQ_LEN,
-            "num_video_patches": FAKE_NUM_VIDEO_PATCHES,
-            "video_grid_thw": FAKE_VIDEO_GRID_THW,
+            "seq_len": inputs["input_ids"].shape[1],
+            "original_seq_len": inputs["original_seq_len"],
             "lm_loss": lm_loss.item(),
             "total_loss": total_loss.item(),
             "framework": "msy_master_2/muse",
         },
-        "input_stats": {
-            "input_ids_sum": inputs["input_ids"].sum().item(),
-            "pixel_values_mean": inputs["pixel_values_videos"].mean().item(),
-            "pixel_values_std": inputs["pixel_values_videos"].std().item(),
-        }
+        "input_stats": input_stats,
     }
     
     torch.save(save_dict, args.output_path)
