@@ -18,6 +18,7 @@ build
 *.ipynb
 *.parquet
 *.ttf
+*.pt
 hostfile
 
 # Ignore inference results produced by visualization scripts
