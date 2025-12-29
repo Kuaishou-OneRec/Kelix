@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_3_video
+MODEL_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1/global_step5000/converted
 
 OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage2
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
@@ -123,11 +123,11 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --max-length 13000 \
+                --max-length 15000 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 500 \
+                --num-warmup-steps 1000 \
                 --logging_per_step 20 \
-                --num-training-steps 10000 \
+                --num-training-steps 50000 \
                 --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \
                 --use-flash-attention-2 \
