@@ -21,7 +21,7 @@ MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_s
 OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
-
+KAI_FLAG_FILE=msy
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
