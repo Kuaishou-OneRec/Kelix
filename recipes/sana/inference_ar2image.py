@@ -187,10 +187,17 @@ def tokenize_images(ar_processor : AutoProcessor,
         Tuple of (embeddings, attention_mask):
         - embeddings: [B, max_condition_length, embed_dim]
         - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
+    
+    >>> m = [{'role':'user','content':'hello'},{'role':'assistant', 'content': {'type': 'image', 'image':im}}]
+    >>> proc.tokenizer.encode(proc.apply_chat_template(m))
+    [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14990, 151645, 198, 151644, 77091, 198, 151652, 151655, 151653, 151645, 198]
+    >>> m = [{'role':'user','content':'hello'}]
+    >>> proc.tokenizer.encode(proc.apply_chat_template(m))
+    [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14990, 151645, 198]
     """
     import IPython
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
-    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
+    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant\n") # [151644, 77091]
     # input_ids: [batch_size, total_seq_len]
     
     if not teacher_forcing:
@@ -217,6 +224,13 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_ids = input_ids[:, :assistant_start_idx]
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
 
+    # Extract embeddings between vision_start_id and vision_end_id
+    vision_start_id = ar_model.config.qwen_config.vision_start_token_id
+    vision_end_id = ar_model.config.qwen_config.vision_end_token_id
+
+    if input_ids[0][-1].item() != vision_start_id:
+        input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
+
     with torch.no_grad():
         input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
 
@@ -231,10 +245,6 @@ def tokenize_images(ar_processor : AutoProcessor,
             cu_seqlens=cu_seqlens,
             max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
         )
-
-        # Extract embeddings between vision_start_id and vision_end_id
-        vision_start_id = ar_model.config.qwen_config.vision_start_token_id
-        vision_end_id = ar_model.config.qwen_config.vision_end_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case

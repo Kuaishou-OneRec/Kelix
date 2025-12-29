@@ -1404,7 +1404,8 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         ]})
         text = self.processor.apply_chat_template(
             messages, 
-            tokenize=False
+            tokenize=False,
+            add_generation_prompt=True
         )
 
         inputs = self.processor(
