@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_auto_encoder.py \
                 --visualize-dir $VISUALIZE_DIR \
-                --visualize-per-step 100 \
+                --visualize-per-step 500 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
