@@ -7,7 +7,7 @@
     "max_visual_tokens_per_frame": 768,
     "video_fps": 2.0,
     "video_max_frames": 40,
-    "base_model_dir": "/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1/global_step5000/converted",
+    "base_model_dir": "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video",
     "shrink_ratio": 0.7,
     "max_retry": 3,
     "multiple_of": 8,
