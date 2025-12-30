@@ -181,6 +181,86 @@ def compute_codebook_metrics(
     return global_perplexities, codebook_usages
 
 
+def compute_combined_codebook_metrics(
+    image_indices: list,
+    video_indices: list,
+    codebook_size: int,
+    n_q_tokens: int = 8
+) -> tuple:
+    """
+    合并图片和视频的indices，计算总的codebook perplexity和usage指标。
+    
+    Args:
+        image_indices: 图片VQ indices列表，每个元素是一个codebook的indices tensor
+        video_indices: 视频VQ indices列表，每个元素是一个codebook的indices tensor
+        codebook_size: 码本大小
+        n_q_tokens: 量化token数量
+        
+    Returns:
+        global_perplexities: 每个codebook的合并perplexity列表
+        codebook_usages: 每个codebook的合并usage列表
+    """
+    if image_indices is None and video_indices is None:
+        return [], []
+    
+    global_perplexities = []
+    codebook_usages = []
+    
+    with torch.no_grad():
+        for i in range(n_q_tokens):
+            # 收集当前codebook的所有indices（图片+视频）
+            all_local_indices = []
+            
+            if image_indices is not None and i < len(image_indices):
+                all_local_indices.append(image_indices[i].flatten())
+            
+            if video_indices is not None and i < len(video_indices):
+                all_local_indices.append(video_indices[i].flatten())
+            
+            if not all_local_indices:
+                continue
+            
+            local_indices = torch.cat(all_local_indices, dim=0)
+            local_batch_size = local_indices.shape[0]
+            
+            world_size = dist.get_world_size()
+            batch_sizes = torch.zeros(world_size, dtype=torch.long, device=local_indices.device)
+            dist.all_gather_into_tensor(
+                batch_sizes, 
+                torch.tensor([local_batch_size], dtype=torch.long, device=local_indices.device)
+            )
+            
+            max_batch_size = batch_sizes.max().item()
+            padded_indices = torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device)
+            padded_indices[:local_batch_size] = local_indices
+            
+            gathered_indices_list = [
+                torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device) 
+                for _ in range(world_size)
+            ]
+            dist.all_gather(gathered_indices_list, padded_indices)
+            
+            global_indices = []
+            for rank_idx, rank_indices in enumerate(gathered_indices_list):
+                valid_size = batch_sizes[rank_idx].item()
+                global_indices.append(rank_indices[:valid_size])
+            global_indices = torch.cat(global_indices, dim=0)
+            
+            counts = torch.bincount(global_indices.long(), minlength=codebook_size)
+            total_samples = global_indices.shape[0]
+            
+            avg_probs = counts.float() / total_samples
+            non_zero_probs = avg_probs[avg_probs > 0]
+            entropy = -torch.sum(non_zero_probs * torch.log(non_zero_probs + 1e-10))
+            global_perplexity = torch.exp(entropy)
+            codebook_usage = (counts > 0).sum().float() / codebook_size
+            
+            global_perplexities.append(global_perplexity.item())
+            codebook_usages.append(codebook_usage.item())
+    
+    return global_perplexities, codebook_usages
+
+
 def get_argument_parser():
     parser = argparse.ArgumentParser()
 
@@ -843,6 +923,15 @@ def train():
         metrics.new(f"video_perplexity_{i}", dtype="float", reduce="mean")
         metrics.new(f"video_codebook_usage_{i}", dtype="float", reduce="mean")
     
+    # Add metrics for combined (image+video) codebook perplexity and usage
+    metrics.new("combined_avg_perplexity", dtype="float", reduce="mean")
+    metrics.new("combined_avg_codebook_usage", dtype="float", reduce="mean")
+    
+    # Add per-codebook metrics for combined (for n_q_tokens codebooks)
+    for i in range(n_q_tokens):
+        metrics.new(f"combined_perplexity_{i}", dtype="float", reduce="mean")
+        metrics.new(f"combined_codebook_usage_{i}", dtype="float", reduce="mean")
+    
     # Track extra metrics for logging
     acc_steps = args.gradient_accumulation_steps
     logging_per_step = args.logging_per_step
@@ -926,6 +1015,29 @@ def train():
         metrics.logger.track(
             video_avg_usg.avg(window=logging_per_step)[::logging_per_step],
             name=f"video_codebook_usage_{i}", group="metrics")
+    
+    # Track combined (image+video) perplexity and codebook usage metrics
+    combined_avg_perplexity = metrics.combined_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
+    combined_avg_usage = metrics.combined_avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
+    metrics.logger.track(
+        combined_avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
+        name="combined_avg_perplexity", group="metrics")
+    metrics.logger.track(
+        combined_avg_usage.avg(window=logging_per_step)[::logging_per_step],
+        name="combined_avg_codebook_usage", group="metrics")
+    
+    # Track per-codebook metrics for combined
+    for i in range(n_q_tokens):
+        combined_ppl_series = getattr(metrics, f"combined_perplexity_{i}")
+        combined_usage_series = getattr(metrics, f"combined_codebook_usage_{i}")
+        combined_avg_ppl = combined_ppl_series.avg(window=acc_steps)[::acc_steps][1:]
+        combined_avg_usg = combined_usage_series.avg(window=acc_steps)[::acc_steps][1:]
+        metrics.logger.track(
+            combined_avg_ppl.avg(window=logging_per_step)[::logging_per_step],
+            name=f"combined_perplexity_{i}", group="metrics")
+        metrics.logger.track(
+            combined_avg_usg.avg(window=logging_per_step)[::logging_per_step],
+            name=f"combined_codebook_usage_{i}", group="metrics")
     
     # Store codebook config for metrics computation
     codebook_size = model_config.tokenizer_config.codebook_size
@@ -1128,6 +1240,25 @@ def train():
                     for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
                         getattr(metrics, f"video_perplexity_{i}").append(ppl)
                         getattr(metrics, f"video_codebook_usage_{i}").append(usage)
+            
+            # ============ Compute combined (image+video) codebook perplexity and usage ============
+            if vq_indices is not None or video_vq_indices is not None:
+                combined_perplexities, combined_usages = compute_combined_codebook_metrics(
+                    image_indices=vq_indices,
+                    video_indices=video_vq_indices,
+                    codebook_size=codebook_size,
+                    n_q_tokens=n_q_tokens
+                )
+                
+                # Record average perplexity and usage for combined
+                if combined_perplexities:
+                    metrics.combined_avg_perplexity.append(sum(combined_perplexities) / len(combined_perplexities))
+                    metrics.combined_avg_codebook_usage.append(sum(combined_usages) / len(combined_usages))
+                    
+                    # Record per-codebook metrics for combined
+                    for i, (ppl, usage) in enumerate(zip(combined_perplexities, combined_usages)):
+                        getattr(metrics, f"combined_perplexity_{i}").append(ppl)
+                        getattr(metrics, f"combined_codebook_usage_{i}").append(usage)
                         
             # ============ Compute data source loss and sample count ============
             if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
