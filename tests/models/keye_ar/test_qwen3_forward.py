@@ -168,7 +168,7 @@ def demo_qwen3_forward():
     max_length = max(len(transformer_text), len(generated_text))
     relative_distance = levenshtein_distance / max_length if max_length > 0 else 0
     print(f"相对编辑距离: {relative_distance:.4f}")
-    
+    assert relative_distance < 0.15, f"相对编辑距离 {relative_distance:.4f} 超过了 0.15"
     # 输出相似度百分比
     similarity = 1 - relative_distance
     print(f"文本相似度: {similarity:.2%}")
