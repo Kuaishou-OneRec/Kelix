@@ -503,10 +503,21 @@ def main():
             cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
+            model_kwargs={
+                # "x_input_pos": x_input_pos,
+                # "cond_input_pos": cond_input_pos
+            }
+            
             for t in scheduler.timesteps:
                 latent_input = torch.cat([dit_latents] * 2)
                 timestep = t.expand(latent_input.shape[0])
-                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg)
+                noise_pred = model_for_vis.forward_with_dpmsolver(
+                    latent_input, 
+                    timestep, 
+                    cond_embeds_cfg, 
+                    mask=mask_cfg,
+                    **model_kwargs
+                    )
                 noise_uncond, noise_cond = noise_pred.chunk(2)
                 noise_pred = noise_uncond + args.cfg_scale * (noise_cond - noise_uncond)
                 dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]

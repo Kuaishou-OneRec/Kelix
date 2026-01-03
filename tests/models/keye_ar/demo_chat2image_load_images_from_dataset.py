@@ -245,6 +245,7 @@ def test_load_visualization_images_with_real_env():
             print(f"  original_images数量: {len(original_images) if original_images else 0}")
             print(f"  pixel_values形状: {pixel_values.shape if pixel_values is not None else None}")
             print(f"  image_grid_thw形状: {image_grid_thw.shape if image_grid_thw is not None else None}")
+            print(f"  image_grid_thw: {image_grid_thw}")
             print(f"  vae_input_images形状: {vae_input_images.shape if vae_input_images is not None else None}")
             
             # 验证返回值是否符合预期
