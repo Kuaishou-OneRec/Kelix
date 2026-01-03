@@ -826,7 +826,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * int(cond_pos_scale)).tolist()
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
-    
+    print(f"cond_input_pos={cond_input_pos}", cond_input_pos['height'].shape, cond_input_pos['height'].cpu().tolist())
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
     cond_seq_len = h_cond * w_cond
     pad_len = max_seq_len - cond_seq_len
