@@ -807,6 +807,7 @@ def _init_profiler(output_dir, with_stack=False) -> None:
 
 def resize_hw(hw, max_tokens):
     import keye_vl_utils
+    print("resize_hwresize_hw", hw, max_tokens)
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 
@@ -821,7 +822,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, devices):
     # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
-    _, h_cond, w_cond = (resize_hw(image_grid_thw // 2, max_seq_len)).tolist()
+    _, h_cond, w_cond = (resize_hw(image_grid_thw[0] // 2, max_seq_len)).tolist()
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=devices)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     
