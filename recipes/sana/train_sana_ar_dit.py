@@ -823,7 +823,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device):
     # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
-    _, h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len)).tolist()
+    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len)).tolist()
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     
