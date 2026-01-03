@@ -807,80 +807,10 @@ def _init_profiler(output_dir, with_stack=False) -> None:
     )
     return torch_profiler
 
-def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4096
-):
-    """Rescales the image so that the following conditions are met:
-
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the image is maintained as closely as possible.
-
-    """
-    #if height < factor or width < factor:
-    #    raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    # if int(height < factor//4) + int(width < factor//4):
-    #     raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
-
-    if height < factor:
-        print(f"smart_resize: height={height} < factor={factor}, reset height=factor")
-        width = round((width * factor) / height) 
-        height = factor
-
-    if width < factor:
-        print(f"smart_resize: width={width} < factor={factor}, reset width=factor")
-        height = round((height * factor) / width)
-        width = factor
-
-    if max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-    return h_bar, w_bar
 
 def resize_hw(hw, max_tokens):
     import keye_vl_utils
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
-
-
-def compute_input_pos_with_group_step(image_grid_thw, cond_pos_scale, max_seq_len, device):
-    '''
-    Compute position ids with group step sampling.
-    Algorithm:
-    1. Scale height and width by cond_pos_scale to get expanded position ids
-    2. Sample every cond_pos_scale-th position id
-    
-    Args:
-        image_grid_thw: [B, 3] tensor where each row is (t, h, w)
-        cond_pos_scale: int, scale factor for position ids
-        max_seq_len: int, maximum sequence length
-        device: torch device
-        
-    Returns:
-        dict: {'height': tensor, 'width': tensor} with sampled position ids
-    '''
-    # Get scaled height and width
-    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * int(cond_pos_scale)).tolist()
-    
-    # Compute full position grid
-    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
-    
-    # Sample every cond_pos_scale-th position id along height and width
-    cond_input_pos['height'] = cond_input_pos['height'][::cond_pos_scale]
-    cond_input_pos['width'] = cond_input_pos['width'][::cond_pos_scale]
-    return cond_input_pos
 
 
 def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1):
@@ -894,10 +824,8 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
-    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * int(cond_pos_scale)).tolist()
-    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
-    cond_input_pos['width'] = cond_input_pos['width'][::cond_pos_scale]
-    cond_input_pos['height'] = cond_input_pos['height'].reshape()
+    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) ).tolist()
+    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device) * int(cond_pos_scale)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     print(f"cond_input_pos={cond_input_pos}", cond_input_pos['height'].shape, cond_input_pos['height'].cpu().tolist())
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
