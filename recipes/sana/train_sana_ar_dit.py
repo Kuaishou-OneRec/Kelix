@@ -653,7 +653,7 @@ def visualize_reconstruction(
           )
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")
-    cond_embeds, cond_mask = tokenize_images(
+    cond_embeds, cond_mask, max_seq_len = tokenize_images(
         tokenizer=image_tokenizer,
         pixel_values=loaded.pixel_values.to(device=device),
         image_grid_thw=loaded.image_grid_thw.to(device=device),
@@ -808,6 +808,37 @@ def _init_profiler(output_dir, with_stack=False) -> None:
 def resize_hw(hw, max_tokens):
     import keye_vl_utils
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
+
+
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, devices):
+    # Compute 2D position ids for RoPE
+    # x_input_pos: for diffusion model's latent patches
+    # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
+    h_latent, w_latent = latent_hw
+    x_input_pos = compute_input_pos(h_latent, w_latent, device=devices)
+    
+    # cond_input_pos: for condition tokens from image tokenizer
+    # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
+    # Use the first sample's grid (assuming same grid for all samples in batch)
+    ## divide by 2 because the token embeddings is merged by 2x2 patches
+    _, h_cond, w_cond = (resize_hw(image_grid_thw[0] // 2, max_seq_len)).tolist()
+    cond_input_pos = compute_input_pos(h_cond, w_cond, device=devices)
+    print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
+    
+    # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
+    cond_seq_len = h_cond * w_cond
+    pad_len = max_seq_len - cond_seq_len
+    if pad_len > 0:
+        cond_input_pos = {
+            "height": F.pad(cond_input_pos["height"], (0, pad_len), value=0),
+            "width": F.pad(cond_input_pos["width"], (0, pad_len), value=0),
+        }
+    return {
+        "x_input_pos": x_input_pos,
+        "cond_input_pos": cond_input_pos,
+    }
+
+
 
 def train():
     arg_parser = get_argument_parser()
@@ -1321,27 +1352,12 @@ def train():
                     cu_seqlens=batch.get("cu_seqlens")
                 )
             
-            # Compute 2D position ids for RoPE
-            # x_input_pos: for diffusion model's latent patches
-            # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
-            h_latent, w_latent = latents.shape[2:]
-            x_input_pos = compute_input_pos(h_latent, w_latent, device=latents.device)
-            
-            # cond_input_pos: for condition tokens from image tokenizer
-            # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
-            # Use the first sample's grid (assuming same grid for all samples in batch)
-            ## divide by 2 because the token embeddings is merged by 2x2 patches
-            _, h_cond, w_cond = (resize_hw(batch["image_grid_thw"][0] // 2, max_seq_len)).tolist()
-            cond_input_pos = compute_input_pos(h_cond, w_cond, device=latents.device)
-            print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
-            # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
-            cond_seq_len = h_cond * w_cond
-            pad_len = max_seq_len - cond_seq_len
-            if pad_len > 0:
-                cond_input_pos = {
-                    "height": F.pad(cond_input_pos["height"], (0, pad_len), value=0),
-                    "width": F.pad(cond_input_pos["width"], (0, pad_len), value=0),
-                }
+            pos_args = compute_pos_args(
+                latent_hw=(latents.shape[2], latents.shape[3]),
+                image_grid_thw=batch["image_grid_thw"],
+                max_seq_len=max_seq_len,
+                devices=latents.device
+            )
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1351,8 +1367,7 @@ def train():
                     y=token_embeds.unsqueeze(1),
                     mask=attention_mask,  # Use attention_mask instead of None
                     model_kwargs={
-                        "x_input_pos": x_input_pos,
-                        "cond_input_pos": cond_input_pos
+                        **pos_args
                     },
                 )
                 loss = loss_dict["loss"]
