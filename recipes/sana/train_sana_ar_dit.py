@@ -811,19 +811,20 @@ def resize_hw(hw, max_tokens):
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 
-def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, devices):
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device):
+    print(f"compute_pos_args: {latent_hw}, {image_grid_thw}, {max_seq_len}, {device}")
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
     # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
     h_latent, w_latent = latent_hw
-    x_input_pos = compute_input_pos(h_latent, w_latent, device=devices)
+    x_input_pos = compute_input_pos(h_latent, w_latent, device=device)
     
     # cond_input_pos: for condition tokens from image tokenizer
     # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
     _, h_cond, w_cond = (resize_hw(image_grid_thw[0] // 2, max_seq_len)).tolist()
-    cond_input_pos = compute_input_pos(h_cond, w_cond, device=devices)
+    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
@@ -1355,9 +1356,9 @@ def train():
             
             pos_args = compute_pos_args(
                 latent_hw=(latents.shape[2], latents.shape[3]),
-                image_grid_thw=batch["image_grid_thw"][0],
+                image_grid_thw=batch["image_grid_thw"],
                 max_seq_len=max_seq_len,
-                devices=latents.device
+                device=latents.device
             )
 
             # 5. Forward + Loss Computation
