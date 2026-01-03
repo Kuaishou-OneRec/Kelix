@@ -145,14 +145,14 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
-                --resolution-budgets "512:2,768:1,1024:1" \
+                --resolution-budgets "512:1" \
                 --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.999 \
-                --batch-size 16 \
+                --batch-size 1 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 1 \
