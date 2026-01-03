@@ -41,7 +41,7 @@ def compute_input_pos_with_group_step(image_grid_thw, cond_pos_scale, max_seq_le
     
     # Compute full position grid
     cond_input_pos = mock_compute_input_pos(h_cond, w_cond, device=device)
-    
+    print(f"cond_input_pos={cond_input_pos}")
     # Sample every cond_pos_scale-th position id along height and width
     cond_input_pos['height'] = cond_input_pos['height'][::cond_pos_scale]
     cond_input_pos['width'] = cond_input_pos['width'][::cond_pos_scale]
