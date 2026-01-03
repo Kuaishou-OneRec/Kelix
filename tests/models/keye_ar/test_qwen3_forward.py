@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, List
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn import functional as F
+import editdistance
 from muse.config import Qwen3Config
 from muse.models.qwen3 import Qwen3Model
 from muse.training.common import set_default_dtype
@@ -112,9 +113,11 @@ def demo_qwen3_forward():
     print("使用Muse模型生成文本")
     print("=" * 60)
     
+    max_new_tokens = 40
+    
     # 设置生成参数
     generate_params = {
-        "max_new_tokens": 20,
+        "max_new_tokens": max_new_tokens,
         "temperature": 0.8,
         "top_k": 1,
         "top_p": 0.95,
@@ -124,11 +127,12 @@ def demo_qwen3_forward():
     print(f"Qwen3 baseline generation:")
     outputs = transformers_model.generate(
             model_inputs["input_ids"],
-            max_new_tokens=20,
+            max_new_tokens=max_new_tokens,
             do_sample=False,
         )
     print(f"Qwen3 baseline outputs: {outputs}")
-    
+    transformer_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print(f"Qwen3 baseline text: {transformer_text}")
 
     # 生成文本
     print(f"生成参数: {generate_params}")
@@ -148,8 +152,36 @@ def demo_qwen3_forward():
     print("\n生成结果:")
     print(generated_text)
     
+    # 计算编辑距离
+    print("\n" + "=" * 60)
+    print("编辑距离分析")
+    print("=" * 60)
+    
+    # 计算编辑距离
+    levenshtein_distance = editdistance.eval(transformer_text, generated_text)
+    
+    print(f"Transformer 文本长度: {len(transformer_text)}")
+    print(f"Generated 文本长度: {len(generated_text)}")
+    print(f"编辑距离: {levenshtein_distance}")
+    
+    # 计算相对编辑距离（相对于较长文本的长度）
+    max_length = max(len(transformer_text), len(generated_text))
+    relative_distance = levenshtein_distance / max_length if max_length > 0 else 0
+    print(f"相对编辑距离: {relative_distance:.4f}")
+    
+    # 输出相似度百分比
+    similarity = 1 - relative_distance
+    print(f"文本相似度: {similarity:.2%}")
+    
+    # 详细比较两个文本
+    print("\n文本对比:")
+    print(f"Transformer: {transformer_text}")
+    print(f"Generated:   {generated_text}")
+
+
     print("\n" + "=" * 60)
     print("Qwen3模型Demo完成")
+    
     print("=" * 60)
 
 
