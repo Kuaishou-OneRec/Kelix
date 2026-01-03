@@ -443,7 +443,7 @@ class MultiHeadCrossAttention(nn.Module):
             print(f"Apply 2D RoPE, x_input_pos={x_input_pos}, q={q.shape}")
             q = self.pos_embeddings(q, input_pos=x_input_pos)
         if self.pos_embeddings is not None and cond_input_pos is not None:
-            print(f"Apply 2D RoPE, cond_input_pos={cond_input_pos}, k={k.shape}")
+            print(f"Apply 2D RoPE, cond_input_pos={cond_input_pos.cpu().tolist()}, k={k.shape}")
             k = self.pos_embeddings(k, input_pos=cond_input_pos)
         
         if self._xformers_available:
