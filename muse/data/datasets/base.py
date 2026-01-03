@@ -66,6 +66,8 @@ def calculate_text_hash(text):
   return hash_object.hexdigest()
 
 def load_parquet(path: str) -> ParquetFile:
+  import pyarrow.parquet as pa
+  return pa.read_table(path)
   """Load a parquet file, with fallback to local cache if HDFS read fails."""
   rank = get_data_parallel_rank()
   worker, _ = get_worker_info()
