@@ -30,6 +30,7 @@ DTYPE="bfloat16"        # float32 for CPU runs; bfloat16/float16 for GPU runs
 NUM_SAMPLING_STEPS=20
 FLOW_SHIFT=3.0
 CFG_SCALE=1.0
+COND_POS_SCALE=1
 MAX_CONDITION_LENGTH=324
 IMAGE_SIZE=1024
 SEED=42
@@ -46,6 +47,10 @@ DCP_TAG="global_step21000"             # Tag for DCP checkpoint (e.g., global_st
 
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp12_ar_dit_multiscale_324tokens_attn_rope_lowlr"
 DCP_TAG="global_step37000"
+
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5/"
+DCP_TAG="global_step209000"
+
 
 TEACHER_FORCING=0
 N_INFER_ITEMS="999999"
@@ -74,7 +79,7 @@ MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
 DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
 DCP_TAG=${DCP_TAG:-$DCP_TAG}
 N_INFER_ITEMS=${N_INFER_ITEMS:-$N_INFER_ITEMS}
-
+COND_POS_SCALE=${COND_POS_SCALE:-$COND_POS_SCALE}
 # Prepare model config overrides flag
 MODEL_CONFIG_OVERRIDES_FLAG=""
 if [ -n "$MODEL_CONFIG_OVERRIDES" ]; then
@@ -181,6 +186,7 @@ nohup mpirun --allow-run-as-root \
       --num-images ${NUM_IMAGES} \
       --device ${DEVICE} \
       --dtype ${DTYPE} \
+      --cond-pos-scale ${COND_POS_SCALE} \
       --num-sampling-steps ${NUM_SAMPLING_STEPS} \
       --flow-shift ${FLOW_SHIFT} \
       --cfg-scale ${CFG_SCALE} \
