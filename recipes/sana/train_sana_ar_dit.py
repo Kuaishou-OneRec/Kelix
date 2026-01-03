@@ -144,6 +144,9 @@ def get_argument_parser():
 
     parser.add_argument("--max-condition-length", type=int, default=324,
                         help="Maximum condition sequence length")
+    
+    parser.add_argument("--cond-pos-scale", type=float, default=1.0,
+                        help="Scale factor for condition position embeddings")
 
     ############ Dataset args ############
     parser.add_argument("--dataset-config", type=str, required=True,
@@ -806,12 +809,10 @@ def _init_profiler(output_dir, with_stack=False) -> None:
 
 def resize_hw(hw, max_tokens):
     import keye_vl_utils
-    print("resize_hwresize_hw", hw, max_tokens)
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 
-def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device):
-    print(f"compute_pos_args: {latent_hw}, {image_grid_thw}, {max_seq_len}, {device}")
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1):
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
     # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
@@ -822,7 +823,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device):
     # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
-    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len)).tolist()
+    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * cond_pos_scale).tolist()
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     
@@ -1357,7 +1358,8 @@ def train():
                 latent_hw=(latents.shape[2], latents.shape[3]),
                 image_grid_thw=batch["image_grid_thw"],
                 max_seq_len=max_seq_len,
-                device=latents.device
+                device=latents.device,
+                cond_pos_scale=args.cond_pos_scale,
             )
 
             # 5. Forward + Loss Computation
