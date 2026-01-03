@@ -94,6 +94,8 @@ def parse_args():
     parser.add_argument("--num-sampling-steps", type=int, default=20)
     parser.add_argument("--flow-shift", type=float, default=3.0)
     parser.add_argument("--max-condition-length", type=int, default=2560)
+    parser.add_argument("--cond-pos-scale", type=float, default=1.0,
+                        help="Scale factor for condition position embeddings")
     parser.add_argument("--image-size", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--results-dir", type=str, default="./results",
@@ -503,9 +505,17 @@ def main():
             cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
+            pos_args = train_rec.compute_pos_args(
+                latent_hw=(latent_size, latent_size), 
+                image_grid_thw=[(1, args.max_condition_length**0.5, args.max_condition_length**0.5)], 
+                max_seq_len=args.max_condition_length, 
+                device=device, 
+                cond_pos_scale=args.cond_pos_scale)
+            
+            print(f"pos_args={pos_args}")
+
             model_kwargs={
-                # "x_input_pos": x_input_pos,
-                # "cond_input_pos": cond_input_pos
+                **pos_args
             }
             
             for t in scheduler.timesteps:

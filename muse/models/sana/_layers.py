@@ -440,12 +440,8 @@ class MultiHeadCrossAttention(nn.Module):
         
         # Apply 2D RoPE using Roraty2DPositionalEmbeddings
         if self.pos_embeddings is not None and x_input_pos is not None:
-            print(f"Apply 2D RoPE, x_input_pos={x_input_pos}, q={q.shape}")
             q = self.pos_embeddings(q, input_pos=x_input_pos)
         if self.pos_embeddings is not None and cond_input_pos is not None:
-            for _k, _v in cond_input_pos.items():
-                print(f"cond_input_pos[{_k}]={_v.cpu().tolist()}")
-            print(f"Apply 2D RoPE, cond_input_pos={cond_input_pos}, k={k.shape}")
             k = self.pos_embeddings(k, input_pos=cond_input_pos)
         
         if self._xformers_available:
