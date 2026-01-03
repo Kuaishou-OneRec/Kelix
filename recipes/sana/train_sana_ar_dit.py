@@ -25,7 +25,6 @@ the condition is from KeyeImageTokenizer.
 
 from typing import Dict, Any, Union, Optional, List, Tuple
 import os
-import traceback
 import torch
 import datetime
 import contextlib
@@ -46,6 +45,9 @@ from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 from torch.profiler import record_function
 from transformers import AutoProcessor
 from keye_vl_utils import process_vision_info
+from recipes.sana.utils import (
+    compute_input_pos, load_vae, vae_encode
+)
 
 torch.autograd.set_detect_anomaly(True)
 gc.disable()
@@ -72,7 +74,8 @@ from muse.training.common import (
     set_default_dtype,
     get_torch_dtype,
     clip_grad_by_value, 
-    compute_fsdp_zero2_grad_norm
+    compute_fsdp_zero2_grad_norm,
+    freeze_params_by_pattern
 )
 from muse.utils.common import Timer
 from muse.training.lr_schedulers import get_scheduler
@@ -135,9 +138,6 @@ def get_argument_parser():
                         help="Pretrained VAE model path")
 
     ############ Image Tokenizer args ############
-    # parser.add_argument("--image-tokenizer-dir", type=str,
-    #                     default=None,
-    #                     help="Image tokenizer model name")
     parser.add_argument("--keye-ar-dir", type=str,
                         default=None,
                         help="keye ar model name")
@@ -376,32 +376,6 @@ class VisReconstructionLoader:
         )
         return cls.loaded
 
-def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
-    """Load VAE model from diffusers.
-    
-    Reference: Sana/diffusion/model/builder.py
-    """
-    from diffusers import AutoencoderDC
-    
-    print_rank_0(f"Loading VAE from {vae_dir}")
-    vae = AutoencoderDC.from_pretrained(vae_dir, torch_dtype=dtype)
-    vae = vae.to(device).eval()
-    vae.requires_grad_(False)
-    
-    return vae
-
-def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
-    """Encode images to latent space.
-    
-    Reference: Sana/diffusion/model/builder.py vae_encode for AutoencoderDC
-    """
-    with torch.no_grad():
-        # VAE runs in float32 for precision, images should already be float32
-        # Use indexing [0] which works for both tuple and EncoderOutput
-        z = vae.encode(images)[0]
-        z = z * vae.config.scaling_factor
-    return z
-
 def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype, output_last_hidden_states_only=True):
 
     from muse.models.keye_ar import KeyeARModel
@@ -534,52 +508,17 @@ def tokenize_images(tokenizer,
             padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
                                      device=attention_mask.device, dtype=attention_mask.dtype)
             attention_mask = torch.cat([attention_mask, padding_mask], dim=1)
+            max_seq_len = current_seq_len
         elif current_seq_len > max_condition_length:
             # Truncate to max_condition_length
             processed_embeddings = processed_embeddings[:, :max_condition_length, :]
             attention_mask = attention_mask[:, :max_condition_length]
+            max_seq_len = max_condition_length
 
         # Reshape attention_mask to [B, 1, 1, max_condition_length]
         attention_mask = attention_mask[:, None, None, :]
 
-    return processed_embeddings, attention_mask
-
-
-def freeze_params_by_pattern(model, patterns: List[str]) -> int:
-    """Freeze parameters based on pattern matching (contains).
-    
-    Supports two modes:
-    1. Normal mode: freeze params containing any pattern
-       E.g., ['y_embedder', 'cross_attn'] freezes params containing these substrings
-    2. Inverse mode (^ prefix): freeze all EXCEPT params matching patterns
-       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params matching patterns
-    
-    Args:
-        model: The model to freeze parameters in
-        patterns: List of patterns to match in parameter names (use ^ for inverse selection)
-        
-    Returns:
-        Number of parameters frozen
-    """
-    # Check if inverse mode (all patterns start with ^)
-    inverse_mode = all(p.startswith('^') for p in patterns)
-    if inverse_mode:
-        # Remove ^ prefix for matching
-        patterns = [p[1:] for p in patterns]
-    
-    frozen_count = 0
-    for name, param in model.named_parameters():
-        matches_pattern = any(pattern in name for pattern in patterns)
-
-        # In inverse mode: freeze if NOT matching; normal mode: freeze if matching
-        should_freeze = not matches_pattern if inverse_mode else matches_pattern
-        
-        if should_freeze:
-            param.requires_grad = False
-            frozen_count += 1
-    
-    return frozen_count
-
+    return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
     parquet_path: str,  # 改为接收parquet_path参数
@@ -1369,7 +1308,7 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                token_embeds, attention_mask = tokenize_images(
+                token_embeds, attention_mask, max_seq_len = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
@@ -1378,6 +1317,28 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens")
                 )
+            
+            # Compute 2D position ids for RoPE
+            # x_input_pos: for diffusion model's latent patches
+            # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
+            h_latent, w_latent = latents.shape[2:]
+            x_input_pos = compute_input_pos(h_latent, w_latent, device=latents.device)
+            
+            # cond_input_pos: for condition tokens from image tokenizer
+            # image_grid_thw: [B, 3] where each row is (t, h, w)
+            # Use the first sample's grid (assuming same grid for all samples in batch)
+            ## divide by 2 because the token embeddings is merged by 2x2 patches
+            _, h_cond, w_cond = (batch["image_grid_thw"][0] // 2).tolist()
+            cond_input_pos = compute_input_pos(h_cond, w_cond, device=latents.device)
+            
+            # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
+            cond_seq_len = h_cond * w_cond
+            pad_len = max_seq_len - cond_seq_len
+            if pad_len > 0:
+                cond_input_pos = {
+                    "height": F.pad(cond_input_pos["height"], (0, pad_len), value=0),
+                    "width": F.pad(cond_input_pos["width"], (0, pad_len), value=0),
+                }
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1386,6 +1347,10 @@ def train():
                     x_start=latents,
                     y=token_embeds.unsqueeze(1),
                     mask=attention_mask,  # Use attention_mask instead of None
+                    model_kwargs={
+                        "x_input_pos": x_input_pos,
+                        "cond_input_pos": cond_input_pos
+                    },
                 )
                 loss = loss_dict["loss"]
 
@@ -1491,6 +1456,7 @@ def train():
 
             if torch_profiler:
                 torch_profiler.step()
+
 
     # Save final checkpoint
     print_rank_0("Training completed. Saving final checkpoint...")
