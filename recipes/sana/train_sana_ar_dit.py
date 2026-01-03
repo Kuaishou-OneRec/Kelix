@@ -508,16 +508,15 @@ def tokenize_images(tokenizer,
             padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
                                      device=attention_mask.device, dtype=attention_mask.dtype)
             attention_mask = torch.cat([attention_mask, padding_mask], dim=1)
-            max_seq_len = current_seq_len
         elif current_seq_len > max_condition_length:
             # Truncate to max_condition_length
             processed_embeddings = processed_embeddings[:, :max_condition_length, :]
             attention_mask = attention_mask[:, :max_condition_length]
-            max_seq_len = max_condition_length
 
         # Reshape attention_mask to [B, 1, 1, max_condition_length]
         attention_mask = attention_mask[:, None, None, :]
 
+    max_seq_len = max_condition_length
     return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
