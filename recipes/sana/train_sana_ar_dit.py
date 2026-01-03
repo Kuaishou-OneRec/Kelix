@@ -805,6 +805,9 @@ def _init_profiler(output_dir, with_stack=False) -> None:
     )
     return torch_profiler
 
+def resize_hw(hw, max_tokens):
+    import keye_vl_utils
+    return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 def train():
     arg_parser = get_argument_parser()
@@ -1325,12 +1328,12 @@ def train():
             x_input_pos = compute_input_pos(h_latent, w_latent, device=latents.device)
             
             # cond_input_pos: for condition tokens from image tokenizer
-            # image_grid_thw: [B, 3] where each row is (t, h, w)
+            # image_grid_thw: [B, 3] where each row is (t, h, w), 14x14 patch size
             # Use the first sample's grid (assuming same grid for all samples in batch)
             ## divide by 2 because the token embeddings is merged by 2x2 patches
-            _, h_cond, w_cond = (batch["image_grid_thw"][0] // 2).tolist()
+            _, h_cond, w_cond = (resize_hw(batch["image_grid_thw"][0] // 2, max_seq_len)).tolist()
             cond_input_pos = compute_input_pos(h_cond, w_cond, device=latents.device)
-            
+            print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
             # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
             cond_seq_len = h_cond * w_cond
             pad_len = max_seq_len - cond_seq_len
