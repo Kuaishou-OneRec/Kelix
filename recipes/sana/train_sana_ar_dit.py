@@ -812,6 +812,34 @@ def resize_hw(hw, max_tokens):
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 
+def compute_input_pos_with_group_step(image_grid_thw, cond_pos_scale, max_seq_len, device):
+    '''
+    Compute position ids with group step sampling.
+    Algorithm:
+    1. Scale height and width by cond_pos_scale to get expanded position ids
+    2. Sample every cond_pos_scale-th position id
+    
+    Args:
+        image_grid_thw: [B, 3] tensor where each row is (t, h, w)
+        cond_pos_scale: int, scale factor for position ids
+        max_seq_len: int, maximum sequence length
+        device: torch device
+        
+    Returns:
+        dict: {'height': tensor, 'width': tensor} with sampled position ids
+    '''
+    # Get scaled height and width
+    h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * int(cond_pos_scale)).tolist()
+    
+    # Compute full position grid
+    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
+    
+    # Sample every cond_pos_scale-th position id along height and width
+    cond_input_pos['height'] = cond_input_pos['height'][::cond_pos_scale]
+    cond_input_pos['width'] = cond_input_pos['width'][::cond_pos_scale]
+    return cond_input_pos
+
+
 def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1):
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
@@ -825,6 +853,8 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     ## divide by 2 because the token embeddings is merged by 2x2 patches
     h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) * int(cond_pos_scale)).tolist()
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
+    cond_input_pos['width'] = cond_input_pos['width'][::cond_pos_scale]
+    cond_input_pos['height'] = cond_input_pos['height'].reshape()
     print(f"h_cond: {h_cond}, w_cond: {w_cond}, max_seq_len: {max_seq_len}, h_latent: {h_latent}, w_latent: {w_latent}")
     print(f"cond_input_pos={cond_input_pos}", cond_input_pos['height'].shape, cond_input_pos['height'].cpu().tolist())
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
