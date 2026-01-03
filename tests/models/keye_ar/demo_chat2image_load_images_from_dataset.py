@@ -197,7 +197,7 @@ def test_load_visualization_images_with_real_env():
             
             # 2. 加载实际的数据集配置
             # 从examples/sana/ar-ae-mix.json加载配置
-            dataset_config_path = Path("examples/sana/ar-ae-mix.json")
+            dataset_config_path = Path("examples/sana/ar_dit/ar-ae-mix_v2.json")
             with open(dataset_config_path, "r") as f:
                 dataset_config_dict = json.load(f)
             
