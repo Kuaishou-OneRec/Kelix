@@ -13,21 +13,30 @@ from pathlib import Path
 import argparse
 from typing import List, Dict, Set
 
-# Configuration
-DCP_CKPT_DIR = "/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5"
-MONITOR_INTERVAL = 30
-MODEL_TAG = "BLIP3OTransformersSFT"
-TB_LOG_NAME = "auto_eval"
-
-# Ensure directory exists
-Path(DCP_CKPT_DIR).mkdir(parents=True, exist_ok=True)
-LOG_FILE = Path(DCP_CKPT_DIR) / "auto_monitor.log"
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Auto monitoring script for DCP checkpoint inference and evaluation')
+    parser.add_argument('--dcp-ckpt-dir', required=True,
+                       help='Path to DCP checkpoint directory')
+    parser.add_argument('--monitor-interval', type=int, default=30,
+                       help='Monitoring interval in seconds (default: 30)')
+    parser.add_argument('--model-tag', default="BLIP3OTransformersSFT",
+                       help='Model tag (default: BLIP3OTransformersSFT)')
+    parser.add_argument('--tb-log-name', default="auto_eval",
+                       help='TensorBoard log name (default: auto_eval)')
+    parser.add_argument('--dataset-config',
+                       default="examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json",
+                       help='Dataset config path')
+    parser.add_argument('--keye-ar-dir',
+                       default="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted",
+                       help='Keye AR directory path')
+    parser.add_argument('--inference-script',
+                       default="examples/sana/ar_dit/inference/mpi_infer_custom.sh",
+                       help='Path to inference script (default: examples/sana/ar_dit/inference/mpi_infer_custom.sh)')
+    return parser.parse_args()
 
 # Set environment variables for subprocesses
-ENV_SETTINGS = {
-    "DATASET_CONFIG": "examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json",
-    "KEYE_AR_DIR": "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
-}
+ENV_SETTINGS = {}
 
 
 def log(message: str):
@@ -84,8 +93,9 @@ def run_inference(step_name: str) -> bool:
     output_dir = Path(env_vars["OUTPUT_DIR"])
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Run inference script
-    cmd = ["bash", "examples/sana/ar_dit/inference/mpi_infer_custom.sh"]
+    # Run inference script using the provided path
+    log(f"Using inference script: {INFERENCE_SCRIPT}")
+    cmd = ["bash", INFERENCE_SCRIPT]
     return run_command(cmd, env_vars)
 
 
@@ -182,6 +192,25 @@ def monitor():
 
 def main():
     """Main function"""
+    args = parse_args()
+    
+    # Set global variables from arguments
+    global DCP_CKPT_DIR, MONITOR_INTERVAL, MODEL_TAG, TB_LOG_NAME, ENV_SETTINGS, INFERENCE_SCRIPT
+    DCP_CKPT_DIR = args.dcp_ckpt_dir
+    MONITOR_INTERVAL = args.monitor_interval
+    MODEL_TAG = args.model_tag
+    TB_LOG_NAME = args.tb_log_name
+    INFERENCE_SCRIPT = args.inference_script
+    ENV_SETTINGS = {
+        "DATASET_CONFIG": args.dataset_config,
+        "KEYE_AR_DIR": args.keye_ar_dir
+    }
+    
+    # Ensure directory exists
+    Path(DCP_CKPT_DIR).mkdir(parents=True, exist_ok=True)
+    global LOG_FILE
+    LOG_FILE = Path(DCP_CKPT_DIR) / "auto_monitor.log"
+    
     print(f"Starting auto monitoring...")
     print(f"DCP checkpoint directory: {DCP_CKPT_DIR}")
     print(f"Log file: {LOG_FILE}")
