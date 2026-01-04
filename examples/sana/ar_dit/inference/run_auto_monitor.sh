@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Wrapper script to run the Python auto monitoring tool
+# run mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pkill -9 python3; pkill -9 python"
 
 set -euo pipefail
 
