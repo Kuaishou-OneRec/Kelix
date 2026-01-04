@@ -693,6 +693,7 @@ def run_vlm_reconstruction(
             "width": F.pad(cond_input_pos["width"], (0, pad_len), value=0),
         }
     
+    print(uncond_embeds.shape, cond_embeds.shape, "ZDJ")
     # Prepare CFG inputs
     cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
     mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)

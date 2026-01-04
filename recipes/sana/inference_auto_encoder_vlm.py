@@ -113,7 +113,7 @@ def get_argument_parser():
     return parser
 
 
-def main(args):
+def main(args, files):
     
     # Setup device and dtype
     device = torch.device(args.device)
@@ -149,25 +149,33 @@ def main(args):
     print("Loading processor...")
     processor = AutoProcessor.from_pretrained(args.image_tokenizer_dir, trust_remote_code=True)
     
-    # Run inference
-    run_vlm_reconstruction(
-        model=model,
-        vae=vae,
-        image_tokenizer=image_tokenizer,
-        processor=processor,
-        image_dir=args.input_dir,
-        output_dir=args.output_dir,
-        cfg_scale=args.cfg_scale,
-        num_sampling_steps=args.num_sampling_steps,
-        flow_shift=args.flow_shift,
-        max_condition_length=args.max_condition_length,
-        image_size=args.image_size,
-        device=device,
-        dtype=dtype,
-        seed=args.seed,
-        num_images=args.num_images,
-        num_generation_images=args.num_generation_images,
-    )
+    init_seed = args.seed
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    for index, file in enumerate(files, 0):
+        seed = init_seed + index * world_size + rank
+        print(f"Rank {rank} start to processing {file}...")
+
+        # Run inference
+        run_vlm_reconstruction(
+            model=model,
+            vae=vae,
+            image_tokenizer=image_tokenizer,
+            processor=processor,
+            image_dir=file,
+            output_dir=args.output_dir,
+            cfg_scale=args.cfg_scale,
+            num_sampling_steps=args.num_sampling_steps,
+            flow_shift=args.flow_shift,
+            max_condition_length=args.max_condition_length,
+            image_size=args.image_size,
+            device=device,
+            dtype=dtype,
+            seed=seed,
+            num_images=args.num_images,
+            num_generation_images=args.num_generation_images,
+        )
     
     print("=" * 60)
     print("Inference completed!")
@@ -181,16 +189,11 @@ if __name__ == "__main__":
 
     parser = get_argument_parser()
     ags = parser.parse_args()
-    init_seed = ags.seed
     ags.device = f"cuda:{rank}"
 
     files = glob.glob(osp.join(ags.input_dir, "*pt"))
     files.sort()
     files = files[rank::world_size]
 
-    for index, file in enumerate(files, 0):
-        ags.input_dir = file
-        ags.seed = init_seed + index * world_size + rank
-        print(f"Rank {rank} start to processing {file}...")
-        main(ags)
+    main(ags, files)
     dist.destroy_process_group()
