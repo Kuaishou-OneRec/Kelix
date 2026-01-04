@@ -248,7 +248,7 @@ class MultiHeadAttention(nn.Module):
         # number of queries per key/value
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
-        
+
         # Apply positional embeddings
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)

@@ -814,7 +814,7 @@ class Token2ImageDataset(DistributedDataset):
 
         # Handle multi-scale: check if target dimensions are provided (from MultiScaleDatasetWrapper)
         # If not provided, use default dimensions
-        if self.multi_scale and "target_height" in sample and "target_width" in sample:
+        if self.multi_scale:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
             # Apply same Resize + CenterCrop but keep as PIL image for processor
@@ -1270,7 +1270,7 @@ class Chat2ImageDataset(Token2ImageDataset):
                     x["max_pixels"] = self.max_condition_length * \
                         (self.processor.image_processor.patch_size * self.processor.image_processor.merge_size) ** 2
 
-            # 这里是把所有'image'字段替换成路径
+            # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
             recursive_traverse(messages, call_back)
             
             pair["message"] = messages

@@ -587,7 +587,7 @@ class TransformerDecoder(nn.Module):
                 # )
                 import warnings
                 warnings.warn(
-                    "KV-caches for self-attention layers are setup for inference mode, causal masks must be provided!"
+                    "KV-caches for self-attention layers are setup for inference mode, causal masks must be provided if eager attention is used!"
                     " Use the `mask` arg to provide a causal mask."
                 )
 
