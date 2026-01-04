@@ -118,8 +118,13 @@ while true; do
             fi
         fi
     done < <(find \"\$DCP_CKPT_DIR\" -maxdepth 1 -type d -name \"global_step*\" -print0 2>/dev/null | \
-        awk -F/ '{match(\$NF, /global_step([0-9]+)/, a); print a[1] \"\\t\" \$0}' | \
-        sort -nr | cut -f2- | tr '\\n' '\\0')
+        while IFS= read -r -d '' dir; do
+            if [[ \"\$dir\" =~ global_step([0-9]+) ]]; then
+                printf \"%d\\t%s\\0\" \"\${BASH_REMATCH[1]}\" \"\$dir\"
+            fi
+        done | \
+        sort -znr -k1 | \
+        cut -zf2- | tr '\\0' '\\n')
     
     sleep \"\$MONITOR_INTERVAL\"
 done
