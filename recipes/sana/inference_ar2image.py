@@ -670,11 +670,18 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
         print(f"Warning: DCP checkpoint directory {dcp_ckpt_dir} does not exist, skipping score collection")
         return
     
-    # Create tf_eval_log directory for TensorBoard
+    # Create tf_eval_log directory for TensorBoard (clean up if exists)
     tf_eval_dir = os.path.join(dcp_ckpt_dir, "tf_eval_log")
+    
+    # Remove existing TensorBoard logs to avoid duplicate entries
+    if os.path.exists(tf_eval_dir):
+        print(f"Removing existing TensorBoard logs: {tf_eval_dir}")
+        import shutil
+        shutil.rmtree(tf_eval_dir)
+    
     os.makedirs(tf_eval_dir, exist_ok=True)
     
-    # CSV file to store all scores
+    # CSV file to store all scores (overwrite existing)
     csv_file = os.path.join(dcp_ckpt_dir, "gen_eval_scores.csv")
     
     # TensorBoard writer
