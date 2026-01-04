@@ -35,7 +35,7 @@ import os
 import json
 import torch
 import easydict
-import pickle  # Add pickle import
+import pickle
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -56,12 +56,15 @@ from muse.training.parallel import (
 )
 import pandas as pd
 import glob
-import pickle
+import csv
+from torch.utils.tensorboard import SummaryWriter
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-dir", type=str, required=True,
-                        help="Directory containing pretrained model or checkpoint")
+    parser.add_argument("--model-dir", type=str, default=None,
+                        help="Directory containing pretrained model or checkpoint (required for inference mode)")
+    parser.add_argument("--mode", type=str, default='inference',
+                        choices=["inference", "visualize"], help="Mode to run in")
     parser.add_argument("--dcp-ckpt-dir", type=str, default=None,
                         help="CKPT directory for DCP checkpoint conversion (required if --dcp-tag is used)")
     parser.add_argument("--dcp-tag", type=str, default=None,
@@ -71,10 +74,10 @@ def parse_args():
     parser.add_argument("--model-config-overrides", type=str, nargs="*", default=[],
                         help="Override model config fields. Format: key=value. "
                              "Example: --model-config-overrides caption_channels=1024 model_max_length=324")
-    parser.add_argument("--vae-dir", type=str, required=True,
-                        help="VAE directory")
-    parser.add_argument("--keye-ar-dir", type=str, required=True,
-                        help="Keye AR processor/model directory")
+    parser.add_argument("--vae-dir", type=str, default=None,
+                        help="VAE directory (required for inference mode)")
+    parser.add_argument("--keye-ar-dir", type=str, default=None,
+                        help="Keye AR processor/model directory (required for inference mode)")
     parser.add_argument("--dataset-config", type=str,
                         default="examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json",
                         help="Dataset config JSON used to build Chat2ImageDataset")
@@ -103,7 +106,10 @@ def parse_args():
 
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
-
+    
+    parser.add_argument("--tb-log-name", type=str, default="tg_log",
+                        help="Log name for result aggregation and tensor board")
+    
     parser.add_argument("--n_infer_items", type=int, default=999999,
                         help="Number of items to infer")
     parser.add_argument("--model-tag", type=str, default="BLIP3OTransformersSFT",
@@ -649,5 +655,142 @@ def main():
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 
+def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_name="tg_log"):
+    """
+    Collect 'all' evaluation scores from BLIP3OTransformersSFT_GenEval_score.csv files
+    and write to TensorBoard and CSV.
+    
+    Args:
+        dcp_ckpt_dir: Root directory containing checkpoint directories
+        model_tag: Model tag for score file pattern (default: "BLIP3OTransformersSFT")
+        tb_log_name: TensorBoard log name (default: "tg_log")
+    
+    Returns:
+        None
+    """
+    if not dcp_ckpt_dir or not os.path.exists(dcp_ckpt_dir):
+        print(f"Warning: DCP checkpoint directory {dcp_ckpt_dir} does not exist, skipping score collection")
+        return
+    
+    # Create tf_eval_log directory for TensorBoard (clean up if exists)
+    tf_eval_dir = os.path.join(dcp_ckpt_dir, "tf_eval_log")
+    tb_writer = None
+    
+    try:
+        # Remove existing TensorBoard logs to avoid duplicate entries
+        if os.path.exists(tf_eval_dir):
+            print(f"Removing existing TensorBoard logs: {tf_eval_dir}")
+            import shutil
+            shutil.rmtree(tf_eval_dir)
+        
+        os.makedirs(tf_eval_dir, exist_ok=True)
+        
+        # CSV file to store all scores (overwrite existing)
+        csv_file = os.path.join(dcp_ckpt_dir, "gen_eval_scores.csv")
+        
+        # TensorBoard writer
+        tb_writer = SummaryWriter(log_dir=tf_eval_dir)
+        
+        # Find all score files
+        score_pattern = os.path.join(dcp_ckpt_dir, "**", f"{model_tag}_GenEval_score.csv")
+        score_files = glob.glob(score_pattern, recursive=True)
+        
+        if not score_files:
+            print(f"No score files found matching pattern: {score_pattern}")
+            return
+        
+        scores_data = []
+        
+        for score_file in sorted(score_files):
+            try:
+                # Extract step number from file path
+                # Path format: .../global_stepXXXXX/inference/GenEval/outputs/.../BLIP3OTransformersSFT_GenEval_score.csv
+                path_parts = score_file.split('/')
+                step_part = None
+                for part in path_parts:
+                    if part.startswith('global_step'):
+                        step_part = part
+                        break
+                
+                if not step_part:
+                    print(f"Could not extract step from path: {score_file}")
+                    continue
+                    
+                step = int(step_part.replace('global_step', ''))
+                
+                # Read the CSV file
+                with open(score_file, 'r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    rows = list(reader)
+                    
+                    # Parse the all score - format: "0.65575"
+                    all_score = None
+                    for row in rows:
+                        if len(row) >= 2 and row[0] == 'all':
+                            try:
+                                all_score = float(row[1].strip())
+                                break
+                            except ValueError:
+                                continue
+                    
+                    if all_score is not None:
+                        scores_data.append((step, all_score))
+                        tb_writer.add_scalar('GenEval/Overall_Score', all_score, step)
+                        print(f"Step {step}: Overall Score = {all_score}")
+                    else:
+                        print(f"Could not parse overall score from {score_file}")
+                        
+            except Exception as e:
+                print(f"Error processing {score_file}: {e}")
+        
+        # Sort by step and write to CSV
+        if scores_data:
+            scores_data.sort(key=lambda x: x[0])
+            
+            # Write to CSV with format: 
+            # First row: Benchmark names
+            # Subsequent rows: Step and corresponding scores for each benchmark
+            with open(csv_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # First row: benchmark names
+                writer.writerow(['Step', 'GenEval'])
+                
+                # Subsequent rows: step and scores
+                for step, score in scores_data:
+                    writer.writerow([step, score])
+            
+            print(f"Saved {len(scores_data)} scores to {csv_file}")
+            print(f"TensorBoard logs saved to {tf_eval_dir}")
+        else:
+            print("No valid scores found")
+    
+    except Exception as e:
+        print(f"Error in collect_eval_scores: {e}")
+    finally:
+        if tb_writer is not None:
+            tb_writer.close()
+
+
+# After inference completes, collect evaluation scores if dcp_ckpt_dir is provided
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    
+    # Validate arguments based on mode
+    if args.mode == 'inference':
+        # For inference mode, check required parameters
+        if not args.model_dir:
+            print("Error: --model-dir is required for inference mode")
+            exit(1)
+        if not args.vae_dir:
+            print("Error: --vae-dir is required for inference mode")
+            exit(1)
+        if not args.keye_ar_dir:
+            print("Error: --keye-ar-dir is required for inference mode")
+            exit(1)
+        main()
+    else:
+        # For visualize mode, only need dcp_ckpt_dir
+        if not args.dcp_ckpt_dir:
+            print("Error: --dcp-ckpt-dir is required for visualize mode")
+            exit(1)
+        collect_eval_scores(args.dcp_ckpt_dir, args.model_tag, args.tb_log_name)
