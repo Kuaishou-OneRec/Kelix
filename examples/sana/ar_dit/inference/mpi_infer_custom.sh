@@ -96,7 +96,7 @@ MASTER_PORT=8499
 echo "Going to output dir: "$OUTPUT_DIR
 
 PYTHONPATH=. \
-nohup mpirun --allow-run-as-root \
+mpirun --allow-run-as-root \
         -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
         -mca plm_rsh_num_concurrent 600 \
@@ -174,4 +174,4 @@ nohup mpirun --allow-run-as-root \
       --teacher-forcing ${TEACHER_FORCING} \
       --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
-      ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+      ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log

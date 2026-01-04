@@ -8,15 +8,13 @@
 set -euo pipefail
 
 # Script configuration
-MONITOR_INTERVAL=30  # Check every 5 minutes
+MONITOR_INTERVAL=30  # Check every 30 seconds
 MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
-LOG_DIR="/tmp/auto_infer_eval_logs"
-mkdir -p "$LOG_DIR"
 
 # Function to log messages with timestamp
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_DIR/auto_infer_eval.log"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
 # Function to run inference
@@ -24,35 +22,27 @@ run_inference() {
     local step_name="$1"
     log "Starting inference for $step_name"
     
-    # Set environment variables including commonly used parameters
+    # Set environment variables
     export DCP_CKPT_DIR="$DCP_CKPT_DIR"
     export DCP_TAG="$step_name"
     export OUTPUT_DIR="$DCP_CKPT_DIR/$step_name/inference/GenEval/outputs"
     export KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
     export DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json}"
     
-    # Create output and log directories
+    # Create output directories
     mkdir -p "$OUTPUT_DIR"
-    local auto_log_dir="$DCP_CKPT_DIR/auto_infer_logs"
-    mkdir -p "$auto_log_dir"
     
-    # Run inference script with proper log redirection
-    local inference_log="$auto_log_dir/inference_${step_name}_$(date +%Y%m%d_%H%M%S).log"
+    # Run inference script
+    local inference_log="$DCP_CKPT_DIR/auto_infer_logs/inference_${step_name}_$(date +%Y%m%d_%H%M%S).log"
     log "Running inference - logs: $inference_log"
-    log "Using DCP_CKPT_DIR: $DCP_CKPT_DIR"
-    log "Using DCP_TAG: $step_name"
     
-    # Capture both stdout and stderr to the log file
-    bash examples/sana/ar_dit/inference/mpi_run_infer_visualize_reconstruction_notf_324.sh > "$inference_log" 2>&1
+    bash examples/sana/ar_dit/inference/mpi_infer_custom.sh > "$inference_log" 2>&1
     
-    local inference_status=$?
-    
-    if [ $inference_status -eq 0 ]; then
+    if [ $? -eq 0 ]; then
         log "Inference completed successfully for $step_name"
         return 0
     else
         log "Error: Inference failed for $step_name - check $inference_log"
-        # Also log the last few lines of the error for quick debugging
         tail -20 "$inference_log" | while read -r line; do
             log "INFERENCE_ERROR: $line"
         done
@@ -65,33 +55,27 @@ run_evaluation() {
     local step_name="$1"
     log "Starting evaluation for $step_name"
     
-    # Check if ULMEvalKit directory exists
     if [ ! -d "/llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit" ]; then
-        log "Error: ULMEvalKit directory not found at /llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit"
+        log "Error: ULMEvalKit directory not found"
         return 1
     fi
     
     cd "/llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit"
-    
-    # Setup environment
     source "/mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate" >/dev/null 2>&1
     conda activate ulmevalkit2 >/dev/null 2>&1
     
     local cf="blip3o_sft_step800"
-    local config="config/${cf}.json"
     local work_dir="$DCP_CKPT_DIR/$step_name/inference/GenEval/outputs/ulmeval/aggresults/"
-    
     mkdir -p "$work_dir"
     local eval_log="$work_dir/eval_${cf}_$(date +%Y%m%d_%H%M%S).out"
     
-    log "Running evaluation - config: $config, logs: $eval_log"
+    log "Running evaluation - logs: $eval_log"
     
-    # Run evaluation
     max_infer_items=300000 \
     PYTHONPATH=. \
     torchrun \
         --nproc_per_node=8 \
-        run_eval_only.py --config "$config" \
+        run_eval_only.py --config "config/${cf}.json" \
         --eval-id default \
         --work-dir "$work_dir" \
         > "$eval_log" 2>&1
@@ -132,38 +116,42 @@ collect_scores() {
     fi
 }
 
-# Main function
-main() {
-    # Check if DCP_CKPT_DIR is provided
-    if [ $# -eq 0 ]; then
-        echo "Usage: $0 DCP_CKPT_DIR"
-        echo "Example: $0 /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5/"
-        exit 1
-    fi
-
-    DCP_CKPT_DIR="$1"
-    log "Starting auto monitoring for DCP checkpoint directory: $DCP_CKPT_DIR"
-
+# Background monitoring function
+run_background_monitoring() {
+    local dcp_dir="$1"
+    
+    # Create log directory within DCP directory
+    local log_dir="$dcp_dir/auto_monitor_logs"
+    mkdir -p "$log_dir"
+    LOG_FILE="$log_dir/auto_monitor_$(date +%Y%m%d_%H%M%S).log"
+    
+    # Redirect all output to log file
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    
+    log "Auto monitoring started for: $dcp_dir"
+    log "Monitoring interval: $MONITOR_INTERVAL seconds"
+    log "Log file: $LOG_FILE"
+    
     # Ensure the directory exists
-    if [ ! -d "$DCP_CKPT_DIR" ]; then
-        log "Error: DCP checkpoint directory $DCP_CKPT_DIR does not exist!"
+    if [ ! -d "$dcp_dir" ]; then
+        log "Error: DCP checkpoint directory $dcp_dir does not exist!"
         exit 1
     fi
-
+    
     # Get list of existing global_step directories to exclude from initial monitoring
     declare -A existing_steps
-    if [ -d "$DCP_CKPT_DIR" ]; then
+    if [ -d "$dcp_dir" ]; then
         while IFS= read -r -d '' step_dir; do
             if [[ "$step_dir" =~ global_step[0-9]+ ]]; then
                 step_name=$(basename "$step_dir")
                 existing_steps["$step_name"]=1
             fi
-        done < <(find "$DCP_CKPT_DIR" -maxdepth 1 -type d -name "global_step*" -print0 2>/dev/null)
+        done < <(find "$dcp_dir" -maxdepth 1 -type d -name "global_step*" -print0 2>/dev/null)
     fi
-
+    
     log "Existing steps (excluded from monitoring): ${!existing_steps[*]}"
     log "Starting monitoring for new global_step directories..."
-
+    
     # Main monitoring loop
     while true; do
         # Find all global_step directories
@@ -183,8 +171,8 @@ main() {
                     fi
                 fi
             fi
-        done < <(find "$DCP_CKPT_DIR" -maxdepth 1 -type d -name "global_step*" -print0 2>/dev/null)
-
+        done < <(find "$dcp_dir" -maxdepth 1 -type d -name "global_step*" -print0 2>/dev/null)
+        
         # Process new steps
         for step_name in "${new_steps_found[@]}"; do
             log "=== Processing step: $step_name ==="
@@ -208,6 +196,57 @@ main() {
             sleep $MONITOR_INTERVAL
         fi
     done
+}
+
+# Main function
+main() {
+    # Check if DCP_CKPT_DIR is provided
+    if [ $# -eq 0 ]; then
+        echo "Usage: $0 DCP_CKPT_DIR"
+        echo "Example: $0 /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5/"
+        echo
+        echo "The script will run in background mode and output log file path."
+        exit 1
+    fi
+    
+    DCP_CKPT_DIR="$1"
+    
+    # Create log directory for main process output
+    mkdir -p "$DCP_CKPT_DIR/auto_infer_logs"
+    
+    echo "Starting auto monitoring in background mode..."
+    echo "DCP checkpoint directory: $DCP_CKPT_DIR"
+    
+    # Start background process
+    nohup bash -c "
+        export DCP_CKPT_DIR='$DCP_CKPT_DIR'
+        export MONITOR_INTERVAL='$MONITOR_INTERVAL'
+        export MODEL_TAG='$MODEL_TAG'
+        export TB_LOG_NAME='$TB_LOG_NAME'
+        
+        # Set PATH and PYTHONPATH for background process
+        export PYTHONPATH=\${PYTHONPATH:-.}
+        export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH
+        
+        # Call the background monitoring function
+        $(declare -f run_background_monitoring)
+        $(declare -f run_inference)
+        $(declare -f run_evaluation)
+        $(declare -f collect_scores)
+        $(declare -f log)
+        
+        run_background_monitoring \"$DCP_CKPT_DIR\"
+    " > /dev/null 2>&1 &
+    
+    local pid=$!
+    local log_file="$DCP_CKPT_DIR/auto_monitor_logs/auto_monitor_$(date +%Y%m%d_%H%M%S).log"
+    
+    echo "Background process started with PID: $pid"
+    echo "Log file will be: $log_file"
+    echo "You can stop the process with: kill $pid"
+    echo
+    echo "Monitoring is now running in the background."
+    echo "To monitor the progress, run: tail -f '$log_file'"
 }
 
 # Run main function with all arguments
