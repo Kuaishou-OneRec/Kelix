@@ -49,7 +49,7 @@ DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp12_ar_dit_
 DCP_TAG="global_step37000"
 
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5/"
-DCP_TAG="global_step209000"
+DCP_TAG="global_step220000"
 
 
 TEACHER_FORCING=0
