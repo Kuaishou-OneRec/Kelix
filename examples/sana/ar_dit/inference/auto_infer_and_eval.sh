@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Auto monitoring script for DCP checkpoint inference and evaluation
-# Usage: bash examples/sana/ar_dit/inference/auto_infer_and_eval.sh DCP_CKPT_DIR
 
 set -euo pipefail
 
@@ -8,6 +7,8 @@ set -euo pipefail
 MONITOR_INTERVAL=30
 MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
+# Write DCP_CKPT_DIR directly in the script
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5"
 
 # Helper functions
 log() {
@@ -84,28 +85,16 @@ monitor() {
     done
 }
 
-# Main function
-main() {
-    if [ $# -eq 0 ]; then
-        echo "Usage: $0 DCP_CKPT_DIR"
-        echo "Example: $0 /path/to/dcp/checkpoint"
-        exit 1
-    fi
-    
-    DCP_CKPT_DIR="$1"
-    LOG_FILE="$DCP_CKPT_DIR/auto_monitor.log"
-    
-    echo "Starting auto monitoring..."
-    echo "DCP checkpoint directory: $DCP_CKPT_DIR"
-    echo "Log file: $LOG_FILE"
-    echo
-    
-    mkdir -p "$DCP_CKPT_DIR"
-    monitor > "$LOG_FILE" 2>&1 &
-    
-    echo "Background process started with PID: $!"
-    echo "You can stop it with: kill $!"
-    echo "To check logs: tail -f '$LOG_FILE'"
-}
+LOG_FILE="$DCP_CKPT_DIR/auto_monitor.log"
 
-main "$@"
+echo "Starting auto monitoring..."
+echo "DCP checkpoint directory: $DCP_CKPT_DIR"
+echo "Log file: $LOG_FILE"
+echo
+
+mkdir -p "$DCP_CKPT_DIR"
+monitor > "$LOG_FILE" 2>&1 &
+
+echo "Background process started with PID: $!"
+echo "You can stop it with: kill $!"
+echo "To check logs: tail -f '$LOG_FILE'"
