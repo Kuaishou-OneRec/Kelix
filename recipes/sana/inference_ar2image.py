@@ -627,28 +627,28 @@ def main():
             
             # Combine data into DataFrame rows
             for sample_idx, sample in samples_data.items():
-                metadata = sample['metadata']
+                metadata = sample.get('metadata', {})
                 sample_key = int(sample_idx)
                 
                 # Get prediction images directly from images_data without conversion
                 prediction_images = images_data.get(sample_key, None)
                 
                 row = {
-                    "index": int(metadata['index']),
-                    "tag": metadata['tag'],
-                    "include_class": metadata['include_class'],
-                    "include_count": metadata['include_count'],
-                    "include_color": metadata['include_color'],
-                    "include_position": metadata['include_position'],
-                    "exclude_class": metadata['exclude_class'],
-                    "exclude_count": metadata['exclude_count'],
-                    "question": metadata['question'],
+                    "index": int(metadata.get('index', 0)),
+                    "tag": metadata.get('tag', ''),
+                    "include_class": metadata.get('include_class', ''),
+                    "include_count": metadata.get('include_count', 0),
+                    "include_color": metadata.get('include_color', ''),
+                    "include_position": metadata.get('include_position', ''),
+                    "exclude_class": metadata.get('exclude_class', ''),
+                    "exclude_count": metadata.get('exclude_count', 0),
+                    "question": metadata.get('question', ''),
                     "prediction": prediction_images  # Keep as original PIL Image list
                 }
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         
         # Sort by index and save to pickle
-        df = df.sort_values('index').reset_index(drop=True)
+        if 'index' in df: df = df.sort_values('index').reset_index(drop=True)
         output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_GenEval.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
