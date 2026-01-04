@@ -5,11 +5,12 @@ work_dir=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs/ulmeval/aggresults
 source /mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate 
 conda activate ulmevalkit2
 cd /llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit
+cf=blip3o_sft_step800
 max_infer_items=300000 PYTHONPATH=. \
 torchrun \
 --nproc_per_node=8 \
 run_eval_only.py \
---config config/blip3o_sft_step800.json \
+--config config/${cf}.json \
 --eval-id default \
 --work-dir $work_dir \
 > ${work_dir}/eval_${cf}.out 2>&1
