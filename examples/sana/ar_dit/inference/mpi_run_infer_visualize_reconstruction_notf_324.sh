@@ -14,51 +14,61 @@ set -euo pipefail
 export PYTHONPATH="${PYTHONPATH:-.}"
 
 # ---- Defaults (edit or override via env) ----
-# Use environment variables with sensible defaults for auto-usage scenarios
-MODEL_DIR="${MODEL_DIR:-/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/}"
-VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/}"
-KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/"
+VAE_DIR="/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted"
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
 
-DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json}"
-PARQUET_PATH="${PARQUET_PATH:-/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet}"
+DATASET_CONFIG="examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json"
+PARQUET_PATH="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet"
+# OUTPUT_DIR="./vis_output"
 
-RESULTS_DIR="${RESULTS_DIR:-./results}"
-NUM_IMAGES="${NUM_IMAGES:-1}"
-DEVICE="${DEVICE:-cuda}"           # set to "cuda" if running on GPU
-DTYPE="${DTYPE:-bfloat16}"        # float32 for CPU runs; bfloat16/float16 for GPU runs
-NUM_SAMPLING_STEPS="${NUM_SAMPLING_STEPS:-20}"
-FLOW_SHIFT="${FLOW_SHIFT:-3.0}"
-CFG_SCALE="${CFG_SCALE:-1.0}"
-COND_POS_SCALE="${COND_POS_SCALE:-1}"
-MAX_CONDITION_LENGTH="${MAX_CONDITION_LENGTH:-324}"
-IMAGE_SIZE="${IMAGE_SIZE:-1024}"
-SEED="${SEED:-42}"
-INITIALIZE_DIST="${INITIALIZE_DIST:-true}"  # initialize a local single-process dist group
-MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-caption_channels=4096 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True}"
+RESULTS_DIR="./results"
+NUM_IMAGES=1
+DEVICE="cuda"           # set to "cuda" if running on GPU
+DTYPE="bfloat16"        # float32 for CPU runs; bfloat16/float16 for GPU runs
+NUM_SAMPLING_STEPS=20
+FLOW_SHIFT=3.0
+CFG_SCALE=1.0
+COND_POS_SCALE=1
+MAX_CONDITION_LENGTH=324
+IMAGE_SIZE=1024
+SEED=42
+INITIALIZE_DIST=true  # initialize a local single-process dist group (set to true only if needed)
+MODEL_CONFIG_OVERRIDES="caption_channels=4096 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
 
-DCP_CKPT_DIR="${DCP_CKPT_DIR:-}"
-DCP_TAG="${DCP_TAG:-}"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp18_ar_dit_multiscale_324tokens_2e-5/"
+DCP_TAG="global_step220000"
 
-TEACHER_FORCING="${TEACHER_FORCING:-0}"
-N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
 
-# Determine OUTPUT_DIR based on DCP parameters
-if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
-    OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/GenEval/outputs}"
-else
-    OUTPUT_DIR="${OUTPUT_DIR:-./vis_output}"
-fi
+TEACHER_FORCING=0
+N_INFER_ITEMS="999999"
+OUTPUT_DIR=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs
 
-# Log configuration for debugging
-echo "Configuration:"
-echo "  MODEL_DIR: $MODEL_DIR"
-echo "  VAE_DIR: $VAE_DIR"
-echo "  KEYE_AR_DIR: $KEYE_AR_DIR"
-echo "  DCP_CKPT_DIR: $DCP_CKPT_DIR"
-echo "  DCP_TAG: $DCP_TAG"
-echo "  OUTPUT_DIR: $OUTPUT_DIR"
-echo "  MODEL_CONFIG_OVERRIDES: $MODEL_CONFIG_OVERRIDES"
 
+# Allow overrides from environment
+MODEL_DIR=${MODEL_DIR:-$MODEL_DIR}
+VAE_DIR=${VAE_DIR:-$VAE_DIR}
+KEYE_AR_DIR=${KEYE_AR_DIR:-$KEYE_AR_DIR}
+DATASET_CONFIG=${DATASET_CONFIG:-$DATASET_CONFIG}
+PARQUET_PATH=${PARQUET_PATH:-$PARQUET_PATH}
+OUTPUT_DIR=${OUTPUT_DIR:-$OUTPUT_DIR}
+RESULTS_DIR=${RESULTS_DIR:-$RESULTS_DIR}
+NUM_IMAGES=${NUM_IMAGES:-$NUM_IMAGES}
+DEVICE=${DEVICE:-$DEVICE}
+DTYPE=${DTYPE:-$DTYPE}
+NUM_SAMPLING_STEPS=${NUM_SAMPLING_STEPS:-$NUM_SAMPLING_STEPS}
+FLOW_SHIFT=${FLOW_SHIFT:-$FLOW_SHIFT}
+CFG_SCALE=${CFG_SCALE:-$CFG_SCALE}
+MAX_CONDITION_LENGTH=${MAX_CONDITION_LENGTH:-$MAX_CONDITION_LENGTH}
+IMAGE_SIZE=${IMAGE_SIZE:-$IMAGE_SIZE}
+SEED=${SEED:-$SEED}
+INITIALIZE_DIST=${INITIALIZE_DIST:-$INITIALIZE_DIST}
+MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES:-$MODEL_CONFIG_OVERRIDES}
+DCP_CKPT_DIR=${DCP_CKPT_DIR:-$DCP_CKPT_DIR}
+DCP_TAG=${DCP_TAG:-$DCP_TAG}
+N_INFER_ITEMS=${N_INFER_ITEMS:-$N_INFER_ITEMS}
+COND_POS_SCALE=${COND_POS_SCALE:-$COND_POS_SCALE}
 # Prepare model config overrides flag
 MODEL_CONFIG_OVERRIDES_FLAG=""
 if [ -n "$MODEL_CONFIG_OVERRIDES" ]; then
@@ -73,6 +83,8 @@ if [ -n "$DCP_TAG" ]; then
     DCP_FLAGS="$DCP_FLAGS --dcp-ckpt-dir $DCP_CKPT_DIR"
   fi
 fi
+
+
 
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${RESULTS_DIR}"
