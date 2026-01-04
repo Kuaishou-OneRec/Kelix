@@ -94,7 +94,6 @@ MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
 echo "Going to output dir: "$OUTPUT_DIR
-
 PYTHONPATH=. \
 mpirun --allow-run-as-root \
         -hostfile $hostfile \
