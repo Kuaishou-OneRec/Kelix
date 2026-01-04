@@ -518,8 +518,6 @@ def main():
                 device=device, 
                 cond_pos_scale=args.cond_pos_scale)
             
-            print(f"pos_args={pos_args}")
-
             model_kwargs={
                 **pos_args
             }
