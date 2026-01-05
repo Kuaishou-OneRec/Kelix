@@ -300,7 +300,7 @@ class UnifiedTokenDecoder(Model):
             
         return generated_ids
 
-    def generate(self, input_ids: Optional[torch.Tensor] = None, 
+    def _generate(self, input_ids: Optional[torch.Tensor] = None, 
                  tokens: Optional[torch.Tensor] = None,
                  input_embeddings: Optional[torch.Tensor] = None, 
                  max_new_tokens: int = 50, 
@@ -377,9 +377,6 @@ class UnifiedTokenDecoder(Model):
             if self.eos_token is not None:
                 if next_token[-1, 0] == self.eos_token:
                     break
-
-
-
             
             # 处理返回结果
             if only_last:
