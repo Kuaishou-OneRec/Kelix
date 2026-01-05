@@ -796,7 +796,7 @@ class KeyeARModel(Model):
             generated_ids: 生成的token，shape=(batch, gen_len, 9)
         
         """
-        print(f"input_idsinput_ids={input_ids.shape}")
+        print(f"input_idsinput_ids={input_ids.shape},input_ids={input_ids.cpu().tolist()}")
         self.eval()
 
         self.set_token_decoder_with_teacher_forcing(False)
