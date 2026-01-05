@@ -28,6 +28,15 @@ Usage:
         --image-tokenizer-dir /path/to/tokenizer \
         --input-dir /path/to/images \
         --output-dir /path/to/output
+For DCP checkpoint:
+    python recipes/inference_sana_ae.py \
+        --model-dir /path/to/model \
+        --dcp-ckpt-dir /path/to/dcp/checkpoint \
+        --dcp-tag global_step8000 \
+        --vae-dir mit-han-lab/dc-ae-f32c32-sana-1.1-diffusers \
+        --image-tokenizer-dir /path/to/tokenizer \
+        --input-dir /path/to/images \
+        --output-dir /path/to/output
 """
 
 import os
@@ -40,6 +49,9 @@ from transformers import AutoProcessor
 
 from muse.models.base import Model
 from muse.training.common import get_torch_dtype
+
+# Import DCP to torch converter
+from muse.tools.dcp2torch import convert as dcp_to_torch_convert
 
 # Import helper functions
 from recipes.sana.utils import (
@@ -56,6 +68,12 @@ def get_argument_parser():
     # Model args
     parser.add_argument("--model-dir", type=str, required=True,
                         help="Path to the trained model directory (HuggingFace format)")
+    
+    # DCP checkpoint args
+    parser.add_argument("--dcp-ckpt-dir", type=str, default=None,
+                        help="CKPT directory for DCP checkpoint conversion (required if --dcp-tag is used)")
+    parser.add_argument("--dcp-tag", type=str, default=None,
+                        help="Tag for DCP checkpoint (e.g., global_step8000)")
     
     # VAE args
     parser.add_argument("--vae-dir", type=str,
@@ -115,6 +133,30 @@ def get_argument_parser():
 
 def main(args, files):
     
+    # Convert DCP checkpoint if needed
+    model_dir = args.model_dir
+    
+    if args.dcp_tag:
+        if not args.dcp_ckpt_dir:
+            raise ValueError("--dcp-ckpt-dir is required when --dcp-tag is used")
+        
+        converted_model_dir = os.path.join(args.dcp_ckpt_dir, args.dcp_tag, "converted")
+        if not os.path.exists(converted_model_dir) and torch.distributed.get_rank() == 0:
+            print(f"Converting DCP checkpoint from {args.dcp_ckpt_dir} to {converted_model_dir}, dcp_tag={args.dcp_tag}")
+            # Call DCP to torch conversion
+            dcp_to_torch_convert(
+                checkpoint_dir=args.dcp_ckpt_dir,
+                tag=args.dcp_tag,
+                source_dir=model_dir
+            )
+            print("Conversion complete.")
+
+        torch.distributed.barrier()
+
+        # Update model_dir to the converted directory
+        model_dir = converted_model_dir
+        print(f"Converted DCP checkpoint available at: {model_dir}")
+    
     # Setup device and dtype
     device = torch.device(args.device)
     dtype = get_torch_dtype(args.dtype)
@@ -122,7 +164,7 @@ def main(args, files):
     print("=" * 60)
     print("Sana AE Inference")
     print("=" * 60)
-    print(f"Model: {args.model_dir}")
+    print(f"Model: {model_dir}")
     print(f"VAE: {args.vae_dir}")
     print(f"Image Tokenizer: {args.image_tokenizer_dir}")
     print(f"Device: {device}, Dtype: {dtype}")
@@ -130,7 +172,7 @@ def main(args, files):
     
     # Load DiT model
     print("Loading DiT model...")
-    model = Model.from_pretrained(args.model_dir)
+    model = Model.from_pretrained(model_dir)
     model = model.to(device=device, dtype=dtype).eval()
     print(f"  Model loaded: {type(model).__name__}")
     
