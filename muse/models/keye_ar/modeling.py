@@ -894,11 +894,11 @@ class KeyeARModel(Model):
                 mask[..., 0] = False  # 至少保留第一个token
                 sorted_logits[mask] = float('-inf')
                 logits = torch.gather(sorted_logits, -1, torch.argsort(sorted_indices, dim=-1))
-            
+            print("sampleing", logits.shape, probs.shape)
             # 采样
             probs = torch.softmax(logits, dim=-1)
             next_tokens = torch.multinomial(probs.reshape(-1, probs.size(-1)), num_samples=1)[..., 0]
-
+            print(f"after multinomial next_tokens.shape={next_tokens.shape}, logits.shape={logits.shape}")
             next_tokens = next_tokens.reshape(batch_size, -1, next_tokens.shape[-1])
 
             next_tokens[...,-1] = q_eos_token
@@ -939,7 +939,7 @@ class KeyeARModel(Model):
         next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
         current_ids = torch.cat([current_ids, next_group], dim=1)
-
+        print(f"current_idscurrent_idscurrent_ids", current_ids.shape)
         # Decode阶段：增量生成，仅输入新增group
         for step in range(input_seq_len, input_seq_len + max_new_tokens):
             # 仅取最后一个group作为输入（增量生成）
