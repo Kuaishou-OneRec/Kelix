@@ -266,7 +266,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
 
         if len(self.layers) in output_hidden_states:
             hidden.append(h)
-        print(f"self.token_decoder_with_teacher_forcing={self.token_decoder_with_teacher_forcing}")
+
         if self.token_decoder_with_teacher_forcing:
             token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
             next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
@@ -284,7 +284,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
                 self.tok_embeddings._get_token_embeddings, 
                 self.unembed
             )
-            print("Generating... 134234333")
+
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
@@ -796,7 +796,6 @@ class KeyeARModel(Model):
             generated_ids: 生成的token，shape=(batch, gen_len, 9)
         
         """
-        print(f"input_idsinput_ids={input_ids.shape},input_ids={input_ids.cpu().tolist()}")
         self.eval()
 
         self.set_token_decoder_with_teacher_forcing(False)
@@ -879,13 +878,13 @@ class KeyeARModel(Model):
             # temperature缩放
             if temperature > 0:
                 logits = logits / (temperature + 1e-5)
-            print("logits-1-1-1", logits.shape, temperature, top_k, top_p)
+
             # Top-K过滤
             if top_k > 0:
                 top_k = min(top_k, logits.size(-1))
                 values, indices = torch.topk(logits, top_k, dim=-1)
                 logits = torch.full_like(logits, float('-inf')).scatter_(-1, indices, values)
-            print("logits0000", logits.shape)
+
             # Top-P过滤
             if top_p < 1.0:
                 sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
@@ -893,16 +892,11 @@ class KeyeARModel(Model):
                 mask = cumulative_probs > top_p
                 mask[..., 0] = False  # 至少保留第一个token
                 sorted_logits[mask] = float('-inf')
-                print(f"after top_p filter sorted_logits={sorted_logits.shape}, sorted_indices.shape={sorted_indices.shape}")
-                print(sorted_logits)
-                print(sorted_indices)
                 logits = torch.gather(sorted_logits, -1, torch.argsort(sorted_indices, dim=-1))
-            print("sampleing", logits.shape)
+
             # 采样
             probs = torch.softmax(logits, dim=-1)
-            print("sampleing", logits.shape, probs.shape)
             next_tokens = torch.multinomial(probs.reshape(-1, probs.size(-1)), num_samples=1)[..., 0]
-            print(f"after multinomial next_tokens.shape={next_tokens.shape}, logits.shape={logits.shape}")
             next_tokens = next_tokens.reshape(batch_size, -1, next_tokens.shape[-1])
 
             next_tokens[...,-1] = q_eos_token
@@ -912,7 +906,6 @@ class KeyeARModel(Model):
             eos_indices = eos_mask.int().argmax(dim=-1)  # 每组第一个EOS的位置
             pos_indices = torch.arange(n_tokens, device=next_tokens.device).expand(batch_size, -1)
             keep_pad_mask = pos_indices > eos_indices.unsqueeze(-1)
-            print(f"keep_pad_mask.shape={keep_pad_mask.shape}, next_tokens.shape={next_tokens.shape}, next_tokens={next_tokens}, pad_token_id={pad_token_id}")
             next_tokens = torch.where(keep_pad_mask, pad_token_id, next_tokens)
 
             return next_tokens
@@ -939,11 +932,9 @@ class KeyeARModel(Model):
             
         # 采样最后一个prompt group的下一个group
         last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
-        print(f"logitslogitslogits", logits.shape, temperature, top_k, top_p)
         next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
         current_ids = torch.cat([current_ids, next_group], dim=1)
-        print(f"current_idscurrent_idscurrent_ids", current_ids.shape)
         # Decode阶段：增量生成，仅输入新增group
         for step in range(input_seq_len, input_seq_len + max_new_tokens):
             # 仅取最后一个group作为输入（增量生成）
@@ -963,16 +954,14 @@ class KeyeARModel(Model):
             )
             *hidden_states, logits = outputs
             hidden_states_list.append(hidden_states)
-            print(f"before pad logits.shape={logits.shape}, n_tokens={n_tokens}")
 
             logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[-2]), value=q_eos_token)
-            print(f"after pad logits.shape={logits.shape}, n_tokens={n_tokens}")
+
             # 采样新group
             current_logits = logits[:, :, :]  # (batch, 9, vocab_size)
             next_group = _sample_group(current_logits, temperature, top_k, top_p)
 
             # Append新生成的group
-            print(f"to cat", current_ids.shape, next_group.shape)
             current_ids = torch.cat([current_ids, next_group], dim=1)
 
             # 提前终止：新增group的第一个token是EOS

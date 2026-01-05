@@ -196,19 +196,15 @@ class UnifiedTokenDecoder(Model):
         """
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
-        print(f"inputdddd", input_ids)
         self.eval()
-        print(f"unigeneratinggg")
         if tokens is not None:
-            print(1111111)
             input_ids = tokens
         
         # 检查输入合法性
         if (input_ids is None and input_embeddings is None) or \
            (input_ids is not None and input_embeddings is not None):
-            print(222222)
             raise ValueError("Must provide either input_ids or input_embeddings, not both")
-        print(f"generating_max_new_tokens={max_new_tokens}")
+
         with torch.no_grad():
             # 1. 统一初始输入为embeddings（无论输入是ids还是embeddings）
             if input_ids is not None:
@@ -283,7 +279,6 @@ class UnifiedTokenDecoder(Model):
                     next_token_emb = self.token_embedding(next_token)
                 
                 current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
-                print(f"gen__current_embeddings={current_embeddings.shape}, next_token_emb={next_token_emb.shape}")
                 # 检查EOS停止条件
                 if self.eos_token is not None:
                     if next_token[-1, 0] == self.eos_token:
@@ -300,94 +295,6 @@ class UnifiedTokenDecoder(Model):
             
         return generated_ids
 
-    def _generate(self, input_ids: Optional[torch.Tensor] = None, 
-                 tokens: Optional[torch.Tensor] = None,
-                 input_embeddings: Optional[torch.Tensor] = None, 
-                 max_new_tokens: int = 50, 
-                 temperature: float = 1.0, 
-                 top_k: Optional[int] = None, 
-                 top_p: Optional[float] = None,
-                 do_sample: bool = False, 
-                 return_logits: bool = True,
-                 only_last: bool = False) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """
-        生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
-        """
-        self.eval()
-
-        if tokens is not None:
-            input_ids = tokens
-        
-        # 检查输入合法性
-        if (input_ids is None and input_embeddings is None) or \
-           (input_ids is not None and input_embeddings is not None):
-            raise ValueError("Must provide either input_ids or input_embeddings, not both")
-
-        with torch.no_grad():
-            # 1. 统一初始输入为embeddings（无论输入是ids还是embeddings）
-            if input_ids is not None:
-                batch_size, seq_len = input_ids.shape
-                device = input_ids.device
-                generated_ids = input_ids.clone()
-                
-                # 从input_ids生成初始embeddings
-                if self.infer_id_embs_fn is not None:
-                    current_embeddings = self.infer_id_embs_fn(input_ids, group_size=1)
-                else:
-                    current_embeddings = self.token_embedding(input_ids)
-                
-            else:  # input_embeddings is not None
-                batch_size, seq_len, emb_dim = input_embeddings.shape
-                device = input_embeddings.device
-                current_embeddings = input_embeddings.clone()
-                generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
-            
-            # 初始化logits存储
-            logits_list = []
-            
-        # 2. 自回归生成循环（始终用embeddings输入）
-        for _ in range(max_new_tokens):
-            # 序列长度限制检查
-            if current_embeddings.shape[1] >= self.max_length:
-                break
-            
-            # 前向传播
-            logits = self.forward(current_embeddings)
-            
-            next_token_logits = logits[:, -1, :]
-
-            # 保存logits
-            if return_logits:
-                logits_list.append(next_token_logits)
-            
-            next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
-            
-            # 更新生成序列
-            generated_ids = torch.cat([generated_ids, next_token], dim=1)
-            
-            # 生成新token的embedding并更新输入embeddings
-            if self.infer_id_embs_fn is not None:
-                next_token_emb = self.infer_id_embs_fn(next_token, group_size=1)[:,:,0]
-            else:
-                next_token_emb = self.token_embedding(next_token)
-            
-            current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
-            
-            # 检查EOS停止条件
-            if self.eos_token is not None:
-                if next_token[-1, 0] == self.eos_token:
-                    break
-            
-            # 处理返回结果
-            if only_last:
-                generated_ids = generated_ids[..., -1:]
-                logits_list = logits_list[-1:]
-    
-        if return_logits and logits_list:
-            logits_tensor = torch.stack(logits_list, dim=1)
-            return generated_ids, logits_tensor
-            
-        return generated_ids
     @staticmethod
     def convert_hf_state_dict(state_dict: dict, reduce_mode: bool = False) -> dict:
         """
