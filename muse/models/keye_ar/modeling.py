@@ -894,9 +894,10 @@ class KeyeARModel(Model):
                 mask[..., 0] = False  # 至少保留第一个token
                 sorted_logits[mask] = float('-inf')
                 logits = torch.gather(sorted_logits, -1, torch.argsort(sorted_indices, dim=-1))
-            print("sampleing", logits.shape, probs.shape)
+            print("sampleing", logits.shape)
             # 采样
             probs = torch.softmax(logits, dim=-1)
+            print("sampleing", logits.shape, probs.shape)
             next_tokens = torch.multinomial(probs.reshape(-1, probs.size(-1)), num_samples=1)[..., 0]
             print(f"after multinomial next_tokens.shape={next_tokens.shape}, logits.shape={logits.shape}")
             next_tokens = next_tokens.reshape(batch_size, -1, next_tokens.shape[-1])
