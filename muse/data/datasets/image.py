@@ -812,8 +812,6 @@ class Token2ImageDataset(DistributedDataset):
 
         target_h, target_w = self.image_size
 
-        # Handle multi-scale: check if target dimensions are provided (from MultiScaleDatasetWrapper)
-        # If not provided, use default dimensions
         if self.multi_scale:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
