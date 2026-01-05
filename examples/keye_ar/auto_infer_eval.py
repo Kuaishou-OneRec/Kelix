@@ -177,6 +177,7 @@ def monitor():
         new_steps = [step for step in available_steps if step not in processed_steps]
         
         for step_name in new_steps:
+            if '5000' not in step_name and '10000' not in step_name: continue 
             log(f"Found new step: {step_name}")
             processed_steps.add(step_name)
             
