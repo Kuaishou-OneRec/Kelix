@@ -289,9 +289,10 @@ def test_keyear_forward():
     with set_default_dtype(model_dtype):
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     
-    general_chatting(muse_model, processor)
-    generate_and_understanding(muse_model, processor)
-    edit_and_understanding(muse_model, processor)
+    custom_generate_and_understanding(muse_model, processor)
+    # general_chatting(muse_model, processor)
+    # generate_and_understanding(muse_model, processor)
+    # edit_and_understanding(muse_model, processor)
 
 
 
