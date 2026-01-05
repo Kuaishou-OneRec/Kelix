@@ -399,7 +399,7 @@ def tokenize_images(tokenizer,
                     max_condition_length: int,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
-                    cond_embeds_opt: callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
+                    cond_embeds_opt = None,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
