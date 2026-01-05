@@ -112,8 +112,6 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
-        # self.k_cacheself.k_cache torch.Size([1, 8, 479, 128]) torch.Size([1, 29, 8, 128])
-        print("self.k_cacheself.k_cache", self.k_cache.shape, k.shape)
         # Update cache
         self.k_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = k
         self.v_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = v
