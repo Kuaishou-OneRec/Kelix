@@ -906,8 +906,9 @@ def train():
     metrics.set_tb_writer(tb_writer)
     
     # Store config for metrics computation
-    n_q_tokens = model_config.tokenizer_config.n_q_tokens
-    codebook_size = model_config.tokenizer_config.codebook_size
+    # HuggingFace KeyeConfig stores these in vision_config, not tokenizer_config
+    n_q_tokens = model_config.vision_config.n_q_tokens
+    codebook_size = model_config.vision_config.codebook_size
     
     # Initialize step scheduler for training loop management
     scheduler = StepScheduler(args)
