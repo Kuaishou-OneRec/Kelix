@@ -196,14 +196,17 @@ class UnifiedTokenDecoder(Model):
         """
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
+        print(f"inputdddd", input_ids)
         self.eval()
         print(f"unigeneratinggg")
         if tokens is not None:
+            print(1111111)
             input_ids = tokens
         
         # 检查输入合法性
         if (input_ids is None and input_embeddings is None) or \
            (input_ids is not None and input_embeddings is not None):
+            print(222222)
             raise ValueError("Must provide either input_ids or input_embeddings, not both")
         print(f"generating_max_new_tokens={max_new_tokens}")
         with torch.no_grad():
