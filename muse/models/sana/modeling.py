@@ -167,10 +167,10 @@ class SanaModel(Model):
         # caption_channels is hidden size from LLM model
         # hidden_size is sana hidden size (pretrained in sana)
         self.diffusion_connector = nn.Sequential(
-            nn.Linear(config.connector_channels, self.caption_channels),
+            nn.Linear(config.connector_channels, config.caption_channels),
             nn.GELU(approximate="tanh"),
-            nn.Linear(self.caption_channels, self.caption_channels),
-            RMSNorm(self.caption_channels, eps=1e-5),
+            nn.Linear(config.caption_channels, config.caption_channels),
+            RMSNorm(config.caption_channels, eps=1e-5),
         ) if self.use_connector else nn.Identity()
 
         # Caption embedding
