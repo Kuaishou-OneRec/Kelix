@@ -312,11 +312,17 @@ def run_dit_reconstruction(
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
     h_latent, w_latent = latent_size, latent_size
+    # TODO: @zhouyang, hard code patch size here, need to refactor!!!
+    H_x = h_latent * 32 # 32=patch_size
+    W_x = w_latent * 32
     x_input_pos = compute_input_pos(h_latent, w_latent, device=device)
     
     # cond_input_pos: for condition tokens from image tokenizer
     # image_grid_thw: [B, 3] where each row is (t, h, w)
     _, h_cond, w_cond = (image_grid_thw[0] // 2).tolist()
+    # TODO: @zhouyang, hard code patch size here, need to refactor!!!
+    H_y = h_cond * 28 # 28=patch size for navit
+    W_y = w_cond * 28
     cond_input_pos = compute_input_pos(int(h_cond), int(w_cond), device=device)
 
     # Pad cond_input_pos to max_seq_len (matching dynamic padding)
@@ -343,6 +349,10 @@ def run_dit_reconstruction(
             latent_input, timestep, cond_embeds_cfg, mask=mask_cfg,
             x_input_pos=x_input_pos,
             cond_input_pos=cond_input_pos,
+            H_x=H_x,
+            W_x=W_x,
+            H_y=H_y,
+            W_y=W_y,
         )
         
         # CFG combination

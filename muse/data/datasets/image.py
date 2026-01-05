@@ -518,6 +518,7 @@ class Text2ImageDataset(DistributedDataset):
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
+
 class Token2ImageDataset(DistributedDataset):
     """Dataset for visual token-to-image pairs.
     
@@ -811,21 +812,28 @@ class Token2ImageDataset(DistributedDataset):
             image = image.convert("RGB")
 
         target_h, target_w = self.image_size
-
         if self.multi_scale:
             target_h, target_w = sample["target_height"], sample["target_width"]
-            target_image = self._build_multiscale_transform((target_h, target_w))(image)
-            # Apply same Resize + CenterCrop but keep as PIL image for processor
-        else:
-            target_image = self.transform(image)
-        
-        condition_image = T.Compose([
-            T.Resize((target_h, target_w), interpolation=T.InterpolationMode.LANCZOS),
-            T.CenterCrop((target_h, target_w)),
-        ])(image)
 
-        assert condition_image.size == (target_w, target_h)
-        assert target_image.shape[-2:] == (target_h, target_w)
+        if not self.multi_scale and self.center_crop:
+            assert target_h == target_w, "center_crop should only paired with square image."
+            image = T.Compose(
+                [
+                    T.Resize(target_h, interpolation=T.InterpolationMode.LANCZOS),  # first resize to target_size
+                    T.CenterCrop(target_h),  # 裁剪成正方形
+                ]
+            )(image)
+        else:
+            image = T.Resize((target_h, target_w), interpolation=T.InterpolationMode.LANCZOS)(image)
+        
+        image_tensor = T.Compose(
+            [
+                T.ToTensor(),
+                T.Normalize([0.5], [0.5]),
+            ]
+        )(image)
+
+        assert image.size == (target_w, target_h)
 
         fake_message = [
             {
@@ -833,7 +841,7 @@ class Token2ImageDataset(DistributedDataset):
                 "content": [
                     {
                         "type": "image",
-                        "image": condition_image,
+                        "image": image,
                         "min_pixels": 4 * 28 * 28,
                         "max_pixels": self.max_condition_length * 28 * 28
                     }
@@ -856,7 +864,7 @@ class Token2ImageDataset(DistributedDataset):
             return_tensors="pt",
         )
 
-        result["image"] = target_image
+        result["image"] = image_tensor
         result["pixel_values"] = inputs["pixel_values"]
         result["image_grid_thw"] = inputs["image_grid_thw"]
         

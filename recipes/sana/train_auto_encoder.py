@@ -863,6 +863,10 @@ def train():
             # x_input_pos: for diffusion model's latent patches
             # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
             h_latent, w_latent = latents.shape[2:]
+            # TODO: @zhouyang, hard code patch size here, need to refactor!!!
+            H_x = h_latent * 32 # 32=patch_size
+            W_x = w_latent * 32
+
             x_input_pos = compute_input_pos(h_latent, w_latent, device=latents.device)
             
             # cond_input_pos: for condition tokens from image tokenizer
@@ -870,6 +874,10 @@ def train():
             # Use the first sample's grid (assuming same grid for all samples in batch)
             ## divide by 2 because the token embeddings is merged by 2x2 patches
             _, h_cond, w_cond = (batch["image_grid_thw"][0] // 2).tolist()
+            # TODO: @zhouyang, hard code patch size here, need to refactor!!!
+            H_y = h_cond * 28 # 28=patch size for navit
+            W_y = w_cond * 28
+
             cond_input_pos = compute_input_pos(h_cond, w_cond, device=latents.device)
             
             # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
@@ -889,7 +897,11 @@ def train():
                     mask=attention_mask,
                     model_kwargs={
                         "x_input_pos": x_input_pos,
-                        "cond_input_pos": cond_input_pos
+                        "cond_input_pos": cond_input_pos,
+                        "H_x": H_x,
+                        "W_x": W_x,
+                        "H_y": H_y,
+                        "W_y": W_y,
                     },
                 )
                 loss = loss_dict["loss"]
