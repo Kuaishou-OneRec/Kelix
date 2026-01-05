@@ -1262,7 +1262,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         if not pair: return None
 
         if self.filter_by_score and self.is_valid_scores(pair["image"], sample["source"]) is False:
-            print(f"{sample} has invalid scores, skip")
+            # print(f"{sample} has invalid scores, skip")
             return None
 
         images = json.loads(sample.get("images", '{}'))
@@ -1283,7 +1283,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             if valid_hw_range is not None:
                 h, w = height, width
                 if h < valid_hw_range[0] or w < valid_hw_range[0] or h > valid_hw_range[1] or w > valid_hw_range[1]:
-                    print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={valid_hw_range}")
+                    # print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={valid_hw_range}")
                     return None
             
 
