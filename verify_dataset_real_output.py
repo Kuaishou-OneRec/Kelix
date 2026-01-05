@@ -117,7 +117,25 @@ def run_msy_master_2():
     # 添加路径
     sys.path.insert(0, os.getcwd())
     
+    # 设置 nosp 环境变量，绕过分布式检查
+    os.environ['nosp'] = '1'
+    
     import torch
+    import torch.distributed as dist
+    
+    # mock dist 相关函数，绕过分布式初始化
+    dist.get_rank = lambda *args, **kwargs: 0
+    dist.get_world_size = lambda *args, **kwargs: 1
+    dist.is_initialized = lambda: False  # msy_master_2 中检查这个来决定是否调用分布式函数
+    
+    # mock broadcast_object_list - 单机模式下直接返回，不做任何操作
+    def mock_broadcast_object_list(object_list, src=0, group=None, device=None):
+        pass
+    dist.broadcast_object_list = mock_broadcast_object_list
+    
+    # mock barrier - 单机模式下无需同步
+    dist.barrier = lambda *args, **kwargs: None
+    
     from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast_video
     from torch.utils.data import DataLoader
     
