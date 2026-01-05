@@ -136,6 +136,7 @@ class SanaModel(Model):
         self.patch_size = config.patch_size
         self.num_heads = config.num_heads
         self.depth = config.depth
+        self.use_connector = config.use_connector
         self.use_pe = config.use_pe
         self.pe_interpolation = config.pe_interpolation
         self.y_norm = config.y_norm
@@ -160,14 +161,26 @@ class SanaModel(Model):
             nn.Linear(config.hidden_size, 6 * config.hidden_size, bias=True),
         )
         
+        print(f"self.use_connector={self.use_connector}")
+
+        # caption_channels is hidden size from LLM model
+        # hidden_size is sana hidden size (pretrained in sana)
+        self.diffusion_connector = nn.Sequential(
+            nn.Linear(config.caption_channels, self.hidden_size),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(self.hidden_size, self.hidden_size),
+            RMSNorm(self.hidden_size, eps=1e-5, elementwise_affine=True),
+        ) if self.use_connector else nn.Identity()
+
         # Caption embedding
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.y_embedder = CaptionEmbedder(
-            in_channels=config.caption_channels,
+            in_channels=config.hidden_size if config.use_connector else config.caption_channels,
             hidden_size=config.hidden_size,
             uncond_prob=config.class_dropout_prob,
             act_layer=approx_gelu,
             token_num=config.model_max_length,
+            y_embedding_init_method=config.y_embedding_init_method
         )
         
         # Y normalization
@@ -241,6 +254,9 @@ class SanaModel(Model):
         # Initialize caption embedding MLP
         nn.init.normal_(self.y_embedder.y_proj.fc1.weight, std=0.02)
         nn.init.normal_(self.y_embedder.y_proj.fc2.weight, std=0.02)
+
+        nn.init.normal_(self.diffusion_connector[0].weight, std=0.02)
+        nn.init.normal_(self.diffusion_connector[2].weight, std=0.02)
         
         # Initialize position embeddings if using sincos
         if self.use_pe:
@@ -309,6 +325,8 @@ class SanaModel(Model):
         t = self.t_embedder(timestep)  # [N, D]
         t0 = self.t_block(t)  # [N, 6*D]
         
+        y = self.diffusion_connector(y)
+
         # Caption embedding
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
         if self.y_norm:

@@ -529,6 +529,16 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
+    y_embedding_init_method: str = Field(
+        default="randn",
+        description="Method for initializing y_embeddings"
+    )
+
+    use_connector: bool = Field(
+        default=False,
+        description="Whether to use diffusion connector. If False, there will be only y_embedder with the two linear layers randomly initialized."
+    )
+
 
 
 class UnifiedQwen3Config(Qwen3Config):

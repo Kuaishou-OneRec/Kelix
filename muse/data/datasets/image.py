@@ -1150,9 +1150,17 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, **kwargs):
         super().__init__(*args, **kwargs)
-    
+        self.filter_by_score = filter_by_score
+        self.valid_hw_range = valid_hw_range
+        self.force_assistant_image_size = force_assistant_image_size
+        if valid_hw_range is not None:
+            assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
+        self.max_pixels = self.max_condition_length * \
+                    (self.processor.image_processor.patch_size * self.processor.image_processor.merge_size) ** 2
+        assert force_assistant_image_size <= self.max_pixels, f"force_assistant_image_size must be <= {self.max_pixels}, but got {force_assistant_image_size}"
+
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair using chat-style message processing.
         
@@ -1250,40 +1258,52 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         pair = self.extract_image_text(sample)
         
-        if pair:
-            if self.is_valid_scores(pair["image"], sample["source"]) is False:
+        if not pair: return None
+
+        if self.filter_by_score and self.is_valid_scores(pair["image"], sample["source"]) is False:
+            print(f"{sample} has invalid scores, skip")
+            return None
+        
+        if self.valid_hw_range is not None:
+            h, w = pair['image'].shape[-2:]
+            if h < self.valid_hw_range[0] or w < self.valid_hw_range[0] or h > self.valid_hw_range[1] or w > self.valid_hw_range[1]:
+                print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={self.valid_hw_range}")
                 return None
-    
-            images = json.loads(sample.get("images", '{}'))
-            image = pair["image"]
-            if image in images:
-                pair["image"] = images[image]
-            
-            metadata = json.loads(sample.get("metadata", '{}'))
-            images_info = metadata.get("images_info", {})
-            image_info = images_info.get(image, {})
-            height = image_info.get("height", None)
-            width = image_info.get("width", None)
-            if height is not None and width is not None:
-                pair["height"] = height
-                pair["width"] = width
 
-            messages = json.loads(sample["messages"])
-            image_dict = json.loads(sample["images"])
+        images = json.loads(sample.get("images", '{}'))
+        image = pair["image"]
+        if image in images:
+            pair["image"] = images[image]
+        
+        metadata = json.loads(sample.get("metadata", '{}'))
+        images_info = metadata.get("images_info", {})
+        image_info = images_info.get(image, {})
+        height = image_info.get("height", None)
+        width = image_info.get("width", None)
+        if height is not None and width is not None:
+            pair["height"] = height
+            pair["width"] = width
 
-            def call_back(x):
-                if not isinstance(x, dict): return
-                if x.get("type") in ("image_gen", "image"):
-                    x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
-                    x["max_pixels"] = self.max_condition_length * \
-                        (self.processor.image_processor.patch_size * self.processor.image_processor.merge_size) ** 2
+        messages = json.loads(sample["messages"])
+        image_dict = json.loads(sample["images"])
 
-            # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
-            recursive_traverse(messages, call_back)
-            
-            pair["message"] = messages
-            return pair
-        return None
+        def call_back(x):
+            if not isinstance(x, dict): return
+            if x.get("type") in ("image_gen", "image"):
+                x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
+
+                if self.force_assistant_image_size is not None:
+                    if isinstance(x["image"], str):
+                        x["image"] = Image.open(x["image"])
+                    x["image"] = x["image"].resize((self.force_assistant_image_size, self.force_assistant_image_size))
+
+                x["max_pixels"] = self.max_pixels
+
+        # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
+        recursive_traverse(messages, call_back)
+        
+        pair["message"] = messages
+        return pair
 
     def collate_fn(
         self,

@@ -683,6 +683,7 @@ class CaptionEmbedder(nn.Module):
         uncond_prob: float,
         act_layer: nn.Module = nn.GELU,
         token_num: int = 120,
+        y_embedding_init_method: str = "randn",
     ):
         super().__init__()
         self.y_proj = Mlp(
@@ -692,10 +693,15 @@ class CaptionEmbedder(nn.Module):
             act_layer=act_layer,
             drop=0,
         )
+        self.y_embedding_init_method = y_embedding_init_method
+        assert y_embedding_init_method in ["randn", "zeros"]
+        y_embedding = nn.Parameter(torch.randn(token_num, in_channels) / in_channels ** 0.5) if y_embedding_init_method == "randn" else nn.Parameter(torch.zeros(token_num, in_channels))
+        
+        print(f"y_embedding_init_method={y_embedding_init_method}")
+        
         self.register_buffer(
             "y_embedding",
-            # nn.Parameter(torch.randn(token_num, in_channels) / in_channels ** 0.5)
-            torch.zeros(token_num, in_channels)
+            y_embedding
         )
         self.uncond_prob = uncond_prob
     

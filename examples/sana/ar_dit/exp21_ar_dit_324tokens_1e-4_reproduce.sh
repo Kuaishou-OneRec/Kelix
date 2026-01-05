@@ -143,9 +143,8 @@ nohup mpirun --allow-run-as-root \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
                 --dataset-config examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json \
-                --resolution-budgets "512:4" \
+                --resolution-budgets "1024:2" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
@@ -157,7 +156,7 @@ nohup mpirun --allow-run-as-root \
                 --num-warmup-steps 10000 \
                 --num-training-steps 300000 \
                 --model-config-overrides caption_channels=4096 model_max_length=324 \
-                --save-checkpoint-per-step 2000 \
+                --save-checkpoint-per-step 4000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
                 --fp32-weight \
