@@ -205,7 +205,7 @@ class UnifiedTokenDecoder(Model):
         if (input_ids is None and input_embeddings is None) or \
            (input_ids is not None and input_embeddings is not None):
             raise ValueError("Must provide either input_ids or input_embeddings, not both")
-
+        print(f"generating_max_new_tokens={max_new_tokens}")
         with torch.no_grad():
             # 1. 统一初始输入为embeddings（无论输入是ids还是embeddings）
             if input_ids is not None:
