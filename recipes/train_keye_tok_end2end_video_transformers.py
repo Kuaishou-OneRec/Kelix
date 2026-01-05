@@ -698,9 +698,25 @@ def train():
         
         # For transformers-style models, use the module classes directly
         # Note: Must use set {} instead of tuple () for auto_wrap_policy
+        # Use non-reentrant checkpointing (use_reentrant=False) as recommended by PyTorch
+        # to avoid issues with tensor metadata mismatch during recomputation
+        from functools import partial
+        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+            checkpoint_wrapper,
+            CheckpointImpl,
+        )
+        
+        # Use non-reentrant checkpoint wrapper
+        non_reentrant_wrapper = partial(
+            checkpoint_wrapper,
+            checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+        )
+        
         checkpointable_classes = {KeyeDecoderLayer, SiglipEncoderLayer}
         set_activation_checkpointing(
-            model, auto_wrap_policy=checkpointable_classes
+            model, 
+            auto_wrap_policy=checkpointable_classes,
+            checkpoint_wrapper_fn=non_reentrant_wrapper,
         )
 
     # upcast fp32 to maintain master weight.
