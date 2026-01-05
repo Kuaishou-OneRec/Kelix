@@ -570,7 +570,7 @@ def load_visualization_images(
         sample = row.to_dict()
         # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
         # Use dataset's process method
-        processed_sample = dataset.process(sample)
+        processed_sample = dataset.process(sample, valid_hw_range=(0,10000))
         processed_samples.append(processed_sample)
         text = processed_sample["text"]
         texts.append(text)

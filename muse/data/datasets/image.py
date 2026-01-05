@@ -1224,7 +1224,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         return result
 
 
-    def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
+    def process(self, sample: Dict[str, Any], valid_hw_range: Optional[List[int]] = None) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single sample with message-based chat processing.
         
         Extracts image-text pair from sample and processes it using chat-style messages.
@@ -1264,8 +1264,6 @@ class Chat2ImageDataset(Token2ImageDataset):
         if self.filter_by_score and self.is_valid_scores(pair["image"], sample["source"]) is False:
             print(f"{sample} has invalid scores, skip")
             return None
-        
-
 
         images = json.loads(sample.get("images", '{}'))
         image = pair["image"]
@@ -1281,10 +1279,11 @@ class Chat2ImageDataset(Token2ImageDataset):
             pair["height"] = height
             pair["width"] = width
 
-            if self.valid_hw_range is not None:
+            valid_hw_range = valid_hw_range or self.valid_hw_range
+            if valid_hw_range is not None:
                 h, w = height, width
-                if h < self.valid_hw_range[0] or w < self.valid_hw_range[0] or h > self.valid_hw_range[1] or w > self.valid_hw_range[1]:
-                    print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={self.valid_hw_range}")
+                if h < valid_hw_range[0] or w < valid_hw_range[0] or h > valid_hw_range[1] or w > valid_hw_range[1]:
+                    print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={valid_hw_range}")
                     return None
             
 
