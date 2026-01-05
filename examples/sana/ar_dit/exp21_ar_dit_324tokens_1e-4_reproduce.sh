@@ -155,9 +155,9 @@ nohup mpirun --allow-run-as-root \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 10000 \
                 --num-training-steps 300000 \
-                --model-config-overrides caption_channels=4096 model_max_length=2240 \
+                --model-config-overrides caption_channels=4096 model_max_length=300 \
                 --save-checkpoint-per-step 4000 \
-                --logging-per-step 5 \
+                --logging-per-step 20 \
                 --clip-range 0.1 \
                 --fp32-weight \
                 --fp32-reduce \
