@@ -280,7 +280,7 @@ class UnifiedTokenDecoder(Model):
                     next_token_emb = self.token_embedding(next_token)
                 
                 current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
-                
+                print(f"current_embeddings={current_embeddings.shape}, next_token_emb={next_token_emb.shape}")
                 # 检查EOS停止条件
                 if self.eos_token is not None:
                     if next_token[-1, 0] == self.eos_token:

@@ -120,7 +120,7 @@ def custom_generate_and_understanding(model, processor):
     output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
     content = processor.decode(output_ids[:,0].long().tolist())
-    print(f"输入:\n{messages}")
+    # print(f"输入:\n{messages}")
     print(f"生成内容: {content}\n")
     print(f"output_ids=\n{output_ids}")
     print()
