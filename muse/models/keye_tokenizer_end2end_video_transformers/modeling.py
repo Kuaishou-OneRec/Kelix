@@ -3679,7 +3679,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
-            train_dict["loss"] = train_dict
+            train_dict["loss"] = loss
 
         if not return_dict:
             output = (logits,) + outputs[1:]

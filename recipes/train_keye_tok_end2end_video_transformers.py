@@ -1012,6 +1012,8 @@ def train():
                 metrics.append("samples", input_ids.shape[0] / get_context_parallel_world_size())
 
             # ================================================ Forward pass ================================================
+            # Note: Do NOT pass labels to model - loss is computed externally (same as end2end)
+            # This avoids duplicate loss computation inside the model
             with record_function("Forward"):
                 output = model(
                     input_ids=input_ids,
@@ -1021,7 +1023,6 @@ def train():
                     image_grid_thw=image_grid_thw,
                     pixel_values_videos=pixel_values_videos,
                     video_grid_thw=video_grid_thw,
-                    labels=labels,
                 )
             
             # Get logits from model output
