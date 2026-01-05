@@ -1249,8 +1249,11 @@ class Chat2ImageDataset(Token2ImageDataset):
                     recursive_traverse(value, call_back_function)
 
         pair = self.extract_image_text(sample)
-
+        
         if pair:
+            if self.is_valid_scores(pair["image"], sample["source"]) is False:
+                return None
+    
             images = json.loads(sample.get("images", '{}'))
             image = pair["image"]
             if image in images:
