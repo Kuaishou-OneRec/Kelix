@@ -935,7 +935,7 @@ class KeyeARModel(Model):
             
         # 采样最后一个prompt group的下一个group
         last_group_logits = logits[:, -1]  # (batch, 9, vocab_size)
-
+        print(f"logitslogitslogits", logits.shape, temperature, top_k, top_p)
         next_group = _sample_group(last_group_logits, temperature, top_k, top_p)
 
         current_ids = torch.cat([current_ids, next_group], dim=1)
@@ -967,6 +967,7 @@ class KeyeARModel(Model):
             next_group = _sample_group(current_logits, temperature, top_k, top_p)
 
             # Append新生成的group
+            print(f"to cat", current_ids.shape, next_group.shape)
             current_ids = torch.cat([current_ids, next_group], dim=1)
 
             # 提前终止：新增group的第一个token是EOS
