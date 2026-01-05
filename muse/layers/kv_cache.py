@@ -74,7 +74,15 @@ class KVCache:
         self.num_kv_heads = num_kv_heads
         self.head_dim = head_dim
         self.dtype = dtype
-        
+
+        # Initialize cache tensors
+        self.k_cache = torch.zeros(
+            batch_size, max_seq_len, num_kv_heads, head_dim, dtype=dtype
+        )
+        self.v_cache = torch.zeros(
+            batch_size, max_seq_len, num_kv_heads, head_dim, dtype=dtype
+        )
+
         # Initialize cache tensors
         self.k_cache = torch.zeros(
             batch_size, num_kv_heads, max_seq_len, head_dim, dtype=dtype
@@ -104,13 +112,10 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
-        # 转置k和v从 [b, s, n_kv, h_d] 到 [b, n_kv, s, h_d] 以匹配内部缓存格式
-        k_for_cache = k.transpose(1, 2)  # [b, s, n_kv, h_d] -> [b, n_kv, s, h_d]
-        v_for_cache = v.transpose(1, 2)  # [b, s, n_kv, h_d] -> [b, n_kv, s, h_d]
         
         # Update cache
-        self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = k_for_cache
-        self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = v_for_cache
+        self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = k
+        self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = v
         self.cache_pos += seq_len
         
         # Return the full cache up to current position
