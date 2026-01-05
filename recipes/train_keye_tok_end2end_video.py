@@ -108,8 +108,8 @@ from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
 
 from muse.config import load_config
 
-from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
-from muse.training.common import initialize_metrics, StepScheduler
+from muse.training.common import StepScheduler
+from muse.training.simple_metrics import SimpleMetrics
 from muse.losses import CrossEntropyLoss
 
 logger = logging.getLogger(__name__)
@@ -877,169 +877,16 @@ def train():
         output_dir=args.output_dir) \
         if args.enable_profile else None
 
-    # Setup logging
-    if dist.get_rank() == 0:
-        stdout_logger = Logger("stdout", [StdoutBackend()])
-        csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
-        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
-        loggers = [stdout_logger, csv_logger, tb_logger]
-    else:
-        loggers = []
-
-    # Initialize metrics and step scheduler
-    metrics = initialize_metrics(
-        acc_steps=args.gradient_accumulation_steps,
-        logging_per_step=args.logging_per_step,
-        loggers=loggers
+    # Initialize simple metrics (lightweight alternative to complex Metrics class)
+    # Note: tb_writer is already initialized earlier in the code
+    metrics = SimpleMetrics(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        logging_per_step=args.logging_per_step
     )
+    metrics.set_tb_writer(tb_writer)
     
-    # Add extra metrics for KeyeTokenizerEnd2EndImage training
-    metrics.new("lm_loss", dtype="float", reduce="mean")
-    metrics.new("codebook_loss", dtype="float", reduce="mean")
-    metrics.new("commitment_loss", dtype="float", reduce="mean")
-    metrics.new("vision_learning_rate", dtype="float", reduce="mean")
-    
-    # Add metrics for codebook perplexity and usage (average across all codebooks)
-    metrics.new("avg_perplexity", dtype="float", reduce="mean")
-    metrics.new("avg_codebook_usage", dtype="float", reduce="mean")
-    
-    # Add per-codebook metrics (for n_q_tokens codebooks)
+    # Store config for metrics computation
     n_q_tokens = model_config.tokenizer_config.n_q_tokens
-    for i in range(n_q_tokens):
-        metrics.new(f"perplexity_{i}", dtype="float", reduce="mean")
-        metrics.new(f"codebook_usage_{i}", dtype="float", reduce="mean")
-    
-    # Add per-codebook loss metrics
-    for i in range(n_q_tokens):
-        metrics.new(f"codebook_loss_{i}", dtype="float", reduce="mean")
-        metrics.new(f"commitment_loss_{i}", dtype="float", reduce="mean")
-    
-    # Add metrics for video codebook perplexity and usage
-    metrics.new("video_avg_perplexity", dtype="float", reduce="mean")
-    metrics.new("video_avg_codebook_usage", dtype="float", reduce="mean")
-    
-    # Add per-codebook metrics for video (for n_q_tokens codebooks)
-    for i in range(n_q_tokens):
-        metrics.new(f"video_perplexity_{i}", dtype="float", reduce="mean")
-        metrics.new(f"video_codebook_usage_{i}", dtype="float", reduce="mean")
-    
-    # Add metrics for combined (image+video) codebook perplexity and usage
-    metrics.new("combined_avg_perplexity", dtype="float", reduce="mean")
-    metrics.new("combined_avg_codebook_usage", dtype="float", reduce="mean")
-    
-    # Add per-codebook metrics for combined (for n_q_tokens codebooks)
-    for i in range(n_q_tokens):
-        metrics.new(f"combined_perplexity_{i}", dtype="float", reduce="mean")
-        metrics.new(f"combined_codebook_usage_{i}", dtype="float", reduce="mean")
-    
-    # Track extra metrics for logging
-    acc_steps = args.gradient_accumulation_steps
-    logging_per_step = args.logging_per_step
-    
-    avg_lm_loss = metrics.lm_loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_codebook_loss = metrics.codebook_loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_commitment_loss = metrics.commitment_loss.avg(window=acc_steps)[::acc_steps][1:]
-    
-    # Use metrics.logger to track to all registered loggers
-    metrics.logger.track(
-        avg_lm_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="lm_loss", group="training")
-    metrics.logger.track(
-        avg_codebook_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="codebook_loss", group="training")
-    metrics.logger.track(
-        avg_commitment_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="commitment_loss", group="training")
-    
-    # Track vision learning rate
-    avg_vision_lr = metrics.vision_learning_rate.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        avg_vision_lr.avg(window=logging_per_step)[::logging_per_step],
-        name="vision_learning_rate", group="training")
-    
-    # Track perplexity and codebook usage metrics
-    avg_perplexity = metrics.avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
-    avg_usage = metrics.avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
-        name="avg_perplexity", group="metrics")
-    metrics.logger.track(
-        avg_usage.avg(window=logging_per_step)[::logging_per_step],
-        name="avg_codebook_usage", group="metrics")
-    
-    # Track per-codebook metrics
-    for i in range(n_q_tokens):
-        ppl_series = getattr(metrics, f"perplexity_{i}")
-        usage_series = getattr(metrics, f"codebook_usage_{i}")
-        avg_ppl = ppl_series.avg(window=acc_steps)[::acc_steps][1:]
-        avg_usg = usage_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            avg_ppl.avg(window=logging_per_step)[::logging_per_step],
-            name=f"perplexity_{i}", group="metrics")
-        metrics.logger.track(
-            avg_usg.avg(window=logging_per_step)[::logging_per_step],
-            name=f"codebook_usage_{i}", group="metrics")
-    
-    # Track per-codebook loss metrics
-    for i in range(n_q_tokens):
-        cb_loss_series = getattr(metrics, f"codebook_loss_{i}")
-        cm_loss_series = getattr(metrics, f"commitment_loss_{i}")
-        avg_cb_loss = cb_loss_series.avg(window=acc_steps)[::acc_steps][1:]
-        avg_cm_loss = cm_loss_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            avg_cb_loss.avg(window=logging_per_step)[::logging_per_step],
-            name=f"codebook_loss_{i}", group="training")
-        metrics.logger.track(
-            avg_cm_loss.avg(window=logging_per_step)[::logging_per_step],
-            name=f"commitment_loss_{i}", group="training")
-    
-    # Track video perplexity and codebook usage metrics
-    video_avg_perplexity = metrics.video_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
-    video_avg_usage = metrics.video_avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        video_avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
-        name="video_avg_perplexity", group="metrics")
-    metrics.logger.track(
-        video_avg_usage.avg(window=logging_per_step)[::logging_per_step],
-        name="video_avg_codebook_usage", group="metrics")
-    
-    # Track per-codebook metrics for video
-    for i in range(n_q_tokens):
-        video_ppl_series = getattr(metrics, f"video_perplexity_{i}")
-        video_usage_series = getattr(metrics, f"video_codebook_usage_{i}")
-        video_avg_ppl = video_ppl_series.avg(window=acc_steps)[::acc_steps][1:]
-        video_avg_usg = video_usage_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            video_avg_ppl.avg(window=logging_per_step)[::logging_per_step],
-            name=f"video_perplexity_{i}", group="metrics")
-        metrics.logger.track(
-            video_avg_usg.avg(window=logging_per_step)[::logging_per_step],
-            name=f"video_codebook_usage_{i}", group="metrics")
-    
-    # Track combined (image+video) perplexity and codebook usage metrics
-    combined_avg_perplexity = metrics.combined_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
-    combined_avg_usage = metrics.combined_avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        combined_avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
-        name="combined_avg_perplexity", group="metrics")
-    metrics.logger.track(
-        combined_avg_usage.avg(window=logging_per_step)[::logging_per_step],
-        name="combined_avg_codebook_usage", group="metrics")
-    
-    # Track per-codebook metrics for combined
-    for i in range(n_q_tokens):
-        combined_ppl_series = getattr(metrics, f"combined_perplexity_{i}")
-        combined_usage_series = getattr(metrics, f"combined_codebook_usage_{i}")
-        combined_avg_ppl = combined_ppl_series.avg(window=acc_steps)[::acc_steps][1:]
-        combined_avg_usg = combined_usage_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            combined_avg_ppl.avg(window=logging_per_step)[::logging_per_step],
-            name=f"combined_perplexity_{i}", group="metrics")
-        metrics.logger.track(
-            combined_avg_usg.avg(window=logging_per_step)[::logging_per_step],
-            name=f"combined_codebook_usage_{i}", group="metrics")
-    
-    # Store codebook config for metrics computation
     codebook_size = model_config.tokenizer_config.codebook_size
     
     # Initialize step scheduler for training loop management
@@ -1135,13 +982,13 @@ def train():
                 labels = input_ids.clone()
 
             num_tokens = input_ids.numel()
-            metrics.tokens.append(num_tokens)
+            metrics.append("tokens", num_tokens)
             if sample_idx is not None:
                 # 考虑 CP 和 Packing 的逻辑样本数
                 logical_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
-                metrics.samples.append(logical_samples)
+                metrics.append("samples", logical_samples)
             else:
-                metrics.samples.append(input_ids.shape[0] / get_context_parallel_world_size())
+                metrics.append("samples", input_ids.shape[0] / get_context_parallel_world_size())
 
             # ================================================ Forward pass ================================================
             with record_function("Forward"):
@@ -1190,17 +1037,17 @@ def train():
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             
             # Record metrics (使用 .item() 转为标量，防止tensor引用泄漏)
-            metrics.loss.append(total_loss.detach().item())
-            metrics.lm_loss.append(lm_loss.detach().item())
-            metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
-            metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
+            metrics.append("loss", total_loss.detach().item())
+            metrics.append("lm_loss", lm_loss.detach().item())
+            metrics.append("codebook_loss", codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
+            metrics.append("commitment_loss", commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
             
             # Record per-codebook loss metrics
             for i, (cb_loss, cm_loss) in enumerate(zip(codebook_loss_list, commitment_loss_list)):
                 cb_val = cb_loss.detach().item() if isinstance(cb_loss, torch.Tensor) else cb_loss
                 cm_val = cm_loss.detach().item() if isinstance(cm_loss, torch.Tensor) else cm_loss
-                getattr(metrics, f"codebook_loss_{i}").append(cb_val)
-                getattr(metrics, f"commitment_loss_{i}").append(cm_val)
+                metrics.append(f"codebook_loss_{i}", cb_val)
+                metrics.append(f"commitment_loss_{i}", cm_val)
             
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
@@ -1214,13 +1061,13 @@ def train():
                 
                 # Record average perplexity and usage
                 if global_perplexities:
-                    metrics.avg_perplexity.append(sum(global_perplexities) / len(global_perplexities))
-                    metrics.avg_codebook_usage.append(sum(codebook_usages) / len(codebook_usages))
+                    metrics.append("avg_perplexity", sum(global_perplexities) / len(global_perplexities))
+                    metrics.append("avg_codebook_usage", sum(codebook_usages) / len(codebook_usages))
                     
                     # Record per-codebook metrics
                     for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
-                        getattr(metrics, f"perplexity_{i}").append(ppl)
-                        getattr(metrics, f"codebook_usage_{i}").append(usage)
+                        metrics.append(f"perplexity_{i}", ppl)
+                        metrics.append(f"codebook_usage_{i}", usage)
             
             # ============ Compute codebook perplexity and usage (video) ============
             video_vq_indices = output.get("video_indices", None)
@@ -1233,13 +1080,13 @@ def train():
 
                 # Record average perplexity and usage for video
                 if video_global_perplexities:
-                    metrics.video_avg_perplexity.append(sum(video_global_perplexities) / len(video_global_perplexities))
-                    metrics.video_avg_codebook_usage.append(sum(video_codebook_usages) / len(video_codebook_usages))
+                    metrics.append("video_avg_perplexity", sum(video_global_perplexities) / len(video_global_perplexities))
+                    metrics.append("video_avg_codebook_usage", sum(video_codebook_usages) / len(video_codebook_usages))
 
                     # Record per-codebook metrics for video
                     for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
-                        getattr(metrics, f"video_perplexity_{i}").append(ppl)
-                        getattr(metrics, f"video_codebook_usage_{i}").append(usage)
+                        metrics.append(f"video_perplexity_{i}", ppl)
+                        metrics.append(f"video_codebook_usage_{i}", usage)
             
             # ============ Compute combined (image+video) codebook perplexity and usage ============
             if vq_indices is not None or video_vq_indices is not None:
@@ -1252,13 +1099,13 @@ def train():
                 
                 # Record average perplexity and usage for combined
                 if combined_perplexities:
-                    metrics.combined_avg_perplexity.append(sum(combined_perplexities) / len(combined_perplexities))
-                    metrics.combined_avg_codebook_usage.append(sum(combined_usages) / len(combined_usages))
+                    metrics.append("combined_avg_perplexity", sum(combined_perplexities) / len(combined_perplexities))
+                    metrics.append("combined_avg_codebook_usage", sum(combined_usages) / len(combined_usages))
                     
                     # Record per-codebook metrics for combined
                     for i, (ppl, usage) in enumerate(zip(combined_perplexities, combined_usages)):
-                        getattr(metrics, f"combined_perplexity_{i}").append(ppl)
-                        getattr(metrics, f"combined_codebook_usage_{i}").append(usage)
+                        metrics.append(f"combined_perplexity_{i}", ppl)
+                        metrics.append(f"combined_codebook_usage_{i}", usage)
                         
             # ============ Compute data source loss and sample count ============
             if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
@@ -1298,9 +1145,9 @@ def train():
             if scheduler.is_gradient_accumulation_boundary():
                 with record_function("GradNorm"):
                     grad_norm = compute_fsdp_zero2_grad_norm(model)
-                metrics.grad_norm.append(grad_norm)
+                metrics.append("grad_norm", grad_norm)
                 learning_rate = lr_scheduler.get_last_lr()[0]
-                metrics.learning_rate.append(learning_rate)
+                metrics.append("learning_rate", learning_rate)
                 
                 # Get vision learning rate from optimizer param groups
                 # Vision params are typically in later param groups
@@ -1311,7 +1158,7 @@ def train():
                     vision_learning_rate = model_lrs[1]
                 else:
                     vision_learning_rate = learning_rate
-                metrics.vision_learning_rate.append(vision_learning_rate)
+                metrics.append("vision_learning_rate", vision_learning_rate)
                 
                 with record_function("OptimizerStep"):
                     optimizer.step()
@@ -1319,7 +1166,6 @@ def train():
                     optimizer.zero_grad()
             # ================================================ End of Backward pass ================================================
 
-            metrics.step_time.tick()
             metrics.step()
 
             # Logging at specified intervals
