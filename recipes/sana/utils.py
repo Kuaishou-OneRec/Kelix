@@ -193,6 +193,7 @@ def load_fake_images_and_tokens(
     codebook_size: int = 65536,
     nq_tokens: int = 8,
     end_flags: list[int] = [151653, 151645],
+    filter_sep: bool = True
 ) -> tuple:
     """Load and preprocess images from a directory for visualization.
     
@@ -221,6 +222,25 @@ def load_fake_images_and_tokens(
 
     index2tokens_dict = torch.load(image_dir, weights_only=False)
     
+    if filter_sep:
+        for index, tokens in index2tokens_dict.items():
+            generate_ids = tokens['generate_ids'] # [1, length, 9]
+            length = generate_ids.shape[1]
+            filtered_generate_mask = torch.tensor([1] * length).bool()
+
+            # 151682 - 151683
+            start_sep = None
+            end_sep = None
+            for i in range(generate_ids.shape[1]):
+                if generate_ids[0,i,0] == 151682:
+                    start_sep = i
+                elif generate_ids[0,i,0] == 151683:
+                    end_sep = i
+                    filtered_generate_mask[start_sep:end_sep+1] = False
+            
+            generate_ids = generate_ids[:,filtered_generate_mask]
+            tokens['generate_ids'] = generate_ids
+
     tuple_tokens = [(key, index2tokens_dict[key]) for key in index2tokens_dict]
     tuple_tokens.sort(key=lambda x: x[0])
     
