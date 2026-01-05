@@ -926,9 +926,9 @@ class KeyeARModel(Model):
 
             *hidden_states, logits = outputs
             hidden_states_list.append(hidden_states)
-            print(n_tokens, logits.shape, 343333)
+
             # (batch, 9, vocab_size)
-            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=0)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[-2]), value=0)
 
             logits = logits.reshape(batch_size, -1, logits.shape[-2], logits.shape[-1])
             
