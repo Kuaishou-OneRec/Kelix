@@ -83,13 +83,13 @@ class KVCache:
             batch_size, max_seq_len, num_kv_heads, head_dim, dtype=dtype
         )
 
-        # Initialize cache tensors
-        self.k_cache = torch.zeros(
-            batch_size, num_kv_heads, max_seq_len, head_dim, dtype=dtype
-        )
-        self.v_cache = torch.zeros(
-            batch_size, num_kv_heads, max_seq_len, head_dim, dtype=dtype
-        )
+        # # Initialize cache tensors
+        # self.k_cache = torch.zeros(
+        #     batch_size, num_kv_heads, max_seq_len, head_dim, dtype=dtype
+        # )
+        # self.v_cache = torch.zeros(
+        #     batch_size, num_kv_heads, max_seq_len, head_dim, dtype=dtype
+        # )
         self.cache_pos = 0
     
     def update(
@@ -112,16 +112,17 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
+        # self.k_cacheself.k_cache torch.Size([1, 8, 479, 128]) torch.Size([1, 29, 8, 128])
         print("self.k_cacheself.k_cache", self.k_cache.shape, k.shape)
         # Update cache
-        self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = k
-        self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = v
+        self.k_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = k
+        self.v_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = v
         self.cache_pos += seq_len
         
         # Return the full cache up to current position
         return (
-            self.k_cache[:, :, :self.cache_pos, :],
-            self.v_cache[:, :, :self.cache_pos, :]
+            self.k_cache[:, :self.cache_pos, :],
+            self.v_cache[:, :self.cache_pos, :]
         )
     
     def reset(self):
