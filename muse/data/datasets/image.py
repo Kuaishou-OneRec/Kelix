@@ -987,7 +987,6 @@ class Token2ImageDataset(DistributedDataset):
 
         return result
 
-
 class MultiScaleDatasetWrapper(IterableDataset):
     """Multi-scale dataset wrapper with global buckets.
     
