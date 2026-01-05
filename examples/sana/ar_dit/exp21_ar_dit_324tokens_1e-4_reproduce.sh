@@ -143,7 +143,7 @@ nohup mpirun --allow-run-as-root \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --allow-random-init-params "diffusion_connector" \
+                --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json \
                 --resolution-budgets "1024:4" \
