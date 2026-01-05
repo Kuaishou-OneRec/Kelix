@@ -694,7 +694,8 @@ class CaptionEmbedder(nn.Module):
         )
         self.register_buffer(
             "y_embedding",
-            nn.Parameter(torch.randn(token_num, in_channels) / in_channels ** 0.5)
+            # nn.Parameter(torch.randn(token_num, in_channels) / in_channels ** 0.5)
+            nn.Parameter(torch.zeros(token_num, in_channels))
         )
         self.uncond_prob = uncond_prob
     
