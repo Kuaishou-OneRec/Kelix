@@ -908,7 +908,7 @@ class KeyeARModel(Model):
             eos_indices = eos_mask.int().argmax(dim=-1)  # 每组第一个EOS的位置
             pos_indices = torch.arange(n_tokens, device=next_tokens.device).expand(batch_size, -1)
             keep_pad_mask = pos_indices > eos_indices.unsqueeze(-1)
-            print(f"keep_pad_mask.shape={keep_pad_mask.shape}, next_tokens.shape={next_tokens.shape}, pad_token_id={pad_token_id}")
+            print(f"keep_pad_mask.shape={keep_pad_mask.shape}, next_tokens.shape={next_tokens.shape}, next_tokens={next_tokens}, pad_token_id={pad_token_id}")
             next_tokens = torch.where(keep_pad_mask, pad_token_id, next_tokens)
 
             return next_tokens
