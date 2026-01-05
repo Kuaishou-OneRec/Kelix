@@ -212,6 +212,7 @@ class FlashAttention2:
         dropout_p = attn_dropout if training else 0.0
         head_dim = q.size(-1)
         softmax_scale = kwargs.get("softmax_scale", head_dim ** -0.5)
+        
         # Flash attention expects [batch, seq_len, num_heads, head_dim]
         if cu_seqlens_q is None or cu_seqlens_k is None:
             attn_output = flash_attn_func(
