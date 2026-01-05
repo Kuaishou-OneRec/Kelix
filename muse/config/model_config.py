@@ -442,6 +442,10 @@ class SanaConfig(ModelConfig):
         default=False,
         description="Whether to apply 2D RoPE to query in cross-attention"
     )
+    use_position_scale: bool = Field(
+        default=False,
+        description="Whether to use position scale in cross-attention"
+    )
     cross_attn_x_norm: bool = Field(
         default=False,
         description="Whether to apply normalization to x before cross-attention"

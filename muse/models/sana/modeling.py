@@ -345,7 +345,21 @@ class SanaModel(Model):
         
         # Transformer blocks
         x_input_pos = kwargs.get("x_input_pos", None)
-        cond_input_pos = kwargs.get("cond_input_pos", None)
+        raw_cond_input_pos = kwargs.get("cond_input_pos", None)
+        cond_input_pos = None
+        if self.config.use_position_scale and x_input_pos and raw_cond_input_pos:
+            cond_input_pos = {}
+            H_x, W_x = kwargs.get("H_x", 1), kwargs.get("W_x", 1)
+            H_y, W_y = kwargs.get("H_y", 1), kwargs.get("W_y", 1)
+
+            y_pos_h = raw_cond_input_pos["height"]
+            y_pos_w = raw_cond_input_pos["width"]
+
+            cond_input_pos["height"] = (y_pos_h * max(1, H_x / H_y)).to(y_pos_h.dtype)
+            cond_input_pos["width"] = (y_pos_w * max(1, W_x / W_y)).to(y_pos_w.dtype)
+
+        if not cond_input_pos:
+            cond_input_pos = raw_cond_input_pos
 
         for block in self.blocks:
             x = block(x, y, t0, y_lens, (self.h, self.w),
