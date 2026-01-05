@@ -14,6 +14,7 @@ KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom.sh"
 
 # Run the Python script with all parameters
+PYTHONPATH=. \
 python3 -u examples/keye_ar/auto_infer_eval.py \
     --dcp-ckpt-dir "$DCP_CKPT_DIR" \
     --monitor-interval "$MONITOR_INTERVAL" \
