@@ -169,7 +169,7 @@ class SanaModel(Model):
             nn.Linear(config.caption_channels, self.hidden_size),
             nn.GELU(approximate="tanh"),
             nn.Linear(self.hidden_size, self.hidden_size),
-            RMSNorm(self.hidden_size, eps=1e-5, elementwise_affine=True),
+            RMSNorm(self.hidden_size, eps=1e-5),
         ) if self.use_connector else nn.Identity()
 
         # Caption embedding
