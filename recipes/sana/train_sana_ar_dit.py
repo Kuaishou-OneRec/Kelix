@@ -1358,7 +1358,7 @@ def train():
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
-                    cond_embeds_op=model.diffusion_connector,
+                    # cond_embeds_op=model.diffusion_connector,
                 )
             
             pos_args = compute_pos_args(
