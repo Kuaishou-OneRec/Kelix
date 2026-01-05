@@ -689,7 +689,8 @@ def train():
     if args.enable_gradient_checkpointing:
         print_rank_0("Enable gradient checkpointing")
         # For transformers-style models, use the module classes directly
-        checkpointable_classes = (KeyeDecoderLayer, SiglipEncoderLayer)
+        # Note: Must use set {} instead of tuple () for auto_wrap_policy
+        checkpointable_classes = {KeyeDecoderLayer, SiglipEncoderLayer}
         set_activation_checkpointing(
             model, auto_wrap_policy=checkpointable_classes
         )
