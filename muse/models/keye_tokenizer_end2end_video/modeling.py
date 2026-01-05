@@ -191,7 +191,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
         def get_vision_layer_idx(name: str) -> int:
             """Extract layer index from vision encoder parameter name."""
             # visual_tokenizer.visual.encoder.layers.{idx}.*
-            if "visual_tokenizer.visual.encoder.layers." in name:
+            if name.startswith("visual_tokenizer"):
                 parts = name.split(".")
                 for i, part in enumerate(parts):
                     if part == "layers" and i + 1 < len(parts):
