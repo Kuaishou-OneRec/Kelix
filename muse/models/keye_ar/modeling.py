@@ -879,7 +879,7 @@ class KeyeARModel(Model):
             # temperature缩放
             if temperature > 0:
                 logits = logits / (temperature + 1e-5)
-            
+            print("logits-1-1-1", logits.shape, temperature, top_k, top_p)
             # Top-K过滤
             if top_k > 0:
                 top_k = min(top_k, logits.size(-1))
