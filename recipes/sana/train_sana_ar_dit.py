@@ -523,7 +523,7 @@ def tokenize_images(tokenizer,
 
     max_seq_len = max_condition_length
     if cond_embeds_op is not None:
-        processed_embeddings = cond_embeds_op(processed_embeddings, attention_mask)
+        processed_embeddings = cond_embeds_op(processed_embeddings)
     return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
