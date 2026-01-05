@@ -327,7 +327,8 @@ class SanaModel(Model):
         t = self.t_embedder(timestep)  # [N, D]
         t0 = self.t_block(t)  # [N, 6*D]
         
-        y = self.diffusion_connector(y)
+        if kwargs.get("is_y_connected", False) == False:
+            y = self.diffusion_connector(y)
 
         # Caption embedding
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]

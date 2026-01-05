@@ -666,7 +666,7 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        cond_embeds_op=model.diffusion_connector
+        # cond_embeds_op=model.diffusion_connector
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -716,7 +716,7 @@ def visualize_reconstruction(
         
         # Model prediction
         noise_pred = model.forward_with_dpmsolver(
-            latent_input, timestep, cond_embeds_cfg, mask=mask_cfg
+            latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True
         )
         
         # CFG combination
