@@ -144,7 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json \
-                --resolution-budgets "1024:2" \
+                --resolution-budgets "1024:4" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \

@@ -1235,6 +1235,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
+        
         def recursive_traverse(obj, call_back_function):
             """
             递归遍历dict/list对象，对每个对象（包括子对象）先执行回调函数
