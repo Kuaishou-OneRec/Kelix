@@ -3159,6 +3159,193 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    # ==================== Methods required by muse training framework ====================
+    def get_layers_to_shard(self):
+        """Return a list of layers that should be sharded by FSDP.
+        
+        This combines layers from both the LLM (self.model.layers) and 
+        the visual tokenizer (self.visual_tokenizer.visual.vision_model.encoder.layers).
+        
+        Note: The path matches end2end's shard_model logic:
+        layers = list(model.visual_tokenizer.visual.vision_model.encoder.layers) + list(model.model.layers)
+        """
+        model_layers = list(self.model.layers)
+        visual_layers = list(self.visual_tokenizer.visual.vision_model.encoder.layers)
+        return visual_layers + model_layers
+    
+    def get_checkpointable_module_classes(self):
+        """Return module classes for gradient checkpointing."""
+        return {KeyeDecoderLayer, SiglipEncoderLayer}
+    
+    def get_initializer(self, name: str):
+        """Return initializer function for a given parameter name.
+        
+        Args:
+            name: The parameter name (e.g., 'model.layers.0.self_attn.q_proj.weight')
+        
+        Returns:
+            A callable that initializes the parameter tensor.
+        """
+        # Use lecun_normal_ as default, similar to other muse models
+        return lecun_normal_
+    
+    def get_optimizer_grouped_parameters(
+            self,
+            learning_rate: float,
+            weight_decay: float,
+            vision_learning_rate: float = -1.0,
+            vision_lr_layer_decay: float = 1.0,
+            no_decay_name_list=None):
+        """Get the optimizer grouped parameters with separate vision learning rate.
+        
+        Args:
+            learning_rate: The learning rate for LLM and projector.
+            weight_decay: The weight decay for AdamW optimizer.
+            vision_learning_rate: The learning rate for vision encoder. 
+                If < 0, uses learning_rate.
+            vision_lr_layer_decay: Layer-wise learning rate decay for vision encoder.
+            no_decay_name_list: List of parameter name patterns that should not have weight decay.
+        
+        Returns:
+            A list of optimizer grouped parameters for AdamW optimizer.
+        """
+        if vision_learning_rate < 0:
+            vision_learning_rate = learning_rate
+        
+        if no_decay_name_list is None:
+            no_decay_name_list = ["bias", "layer_norm", "layernorm", "norm"]
+        
+        def is_no_decay(name: str) -> bool:
+            return any(nd in name.lower() for nd in no_decay_name_list)
+        
+        def get_vision_layer_idx(name: str) -> int:
+            """Extract layer index from vision encoder parameter name."""
+            # visual_tokenizer.visual.encoder.layers.{idx}.*
+            if name.startswith("visual_tokenizer"):
+                parts = name.split(".")
+                for i, part in enumerate(parts):
+                    if part == "layers" and i + 1 < len(parts):
+                        try:
+                            return int(parts[i + 1])
+                        except ValueError:
+                            pass
+            return -1
+        
+        # Get the number of vision encoder layers for layer decay
+        num_vision_layers = 0
+        if hasattr(self, 'visual_tokenizer') and hasattr(self.visual_tokenizer, 'visual'):
+            if hasattr(self.visual_tokenizer.visual, 'vision_model'):
+                num_vision_layers = len(self.visual_tokenizer.visual.vision_model.encoder.layers)
+        
+        # Group parameters
+        vision_decay_params = []
+        vision_no_decay_params = []
+        llm_decay_params = []
+        llm_no_decay_params = []
+        
+        vision_decay_lrs = []
+        vision_no_decay_lrs = []
+        
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            
+            # Check if it's a vision encoder parameter
+            # Only visual_tokenizer.* uses vision_learning_rate
+            # quant_projector.* uses normal learning_rate (belongs to LLM group)
+            is_vision = name.startswith("visual_tokenizer.")
+            
+            if is_vision:
+                # Apply layer-wise learning rate decay
+                layer_idx = get_vision_layer_idx(name)
+                if layer_idx >= 0 and num_vision_layers > 0 and vision_lr_layer_decay < 1.0:
+                    # Layer decay: deeper layers get higher learning rate
+                    decay_factor = vision_lr_layer_decay ** (num_vision_layers - 1 - layer_idx)
+                    layer_lr = vision_learning_rate * decay_factor
+                else:
+                    layer_lr = vision_learning_rate
+                
+                if is_no_decay(name):
+                    vision_no_decay_params.append(param)
+                    vision_no_decay_lrs.append(layer_lr)
+                else:
+                    vision_decay_params.append(param)
+                    vision_decay_lrs.append(layer_lr)
+            else:
+                # LLM and projector parameters
+                if is_no_decay(name):
+                    llm_no_decay_params.append(param)
+                else:
+                    llm_decay_params.append(param)
+        
+        optimizer_grouped_parameters = []
+        
+        # LLM parameters with weight decay
+        if llm_decay_params:
+            optimizer_grouped_parameters.append({
+                "params": llm_decay_params,
+                "weight_decay": weight_decay,
+                "lr": learning_rate,
+            })
+        
+        # LLM parameters without weight decay
+        if llm_no_decay_params:
+            optimizer_grouped_parameters.append({
+                "params": llm_no_decay_params,
+                "weight_decay": 0.0,
+                "lr": learning_rate,
+            })
+        
+        # Vision parameters - group by learning rate for layer decay
+        if vision_lr_layer_decay < 1.0 and num_vision_layers > 0:
+            # Group by learning rate for layer-wise decay
+            lr_to_decay_params = {}
+            lr_to_no_decay_params = {}
+            
+            for param, lr in zip(vision_decay_params, vision_decay_lrs):
+                lr_key = round(lr, 10)
+                if lr_key not in lr_to_decay_params:
+                    lr_to_decay_params[lr_key] = []
+                lr_to_decay_params[lr_key].append(param)
+            
+            for param, lr in zip(vision_no_decay_params, vision_no_decay_lrs):
+                lr_key = round(lr, 10)
+                if lr_key not in lr_to_no_decay_params:
+                    lr_to_no_decay_params[lr_key] = []
+                lr_to_no_decay_params[lr_key].append(param)
+            
+            for lr, params in lr_to_decay_params.items():
+                optimizer_grouped_parameters.append({
+                    "params": params,
+                    "weight_decay": weight_decay,
+                    "lr": lr,
+                })
+            
+            for lr, params in lr_to_no_decay_params.items():
+                optimizer_grouped_parameters.append({
+                    "params": params,
+                    "weight_decay": 0.0,
+                    "lr": lr,
+                })
+        else:
+            # No layer decay - single group for vision
+            if vision_decay_params:
+                optimizer_grouped_parameters.append({
+                    "params": vision_decay_params,
+                    "weight_decay": weight_decay,
+                    "lr": vision_learning_rate,
+                })
+            
+            if vision_no_decay_params:
+                optimizer_grouped_parameters.append({
+                    "params": vision_no_decay_params,
+                    "weight_decay": 0.0,
+                    "lr": vision_learning_rate,
+                })
+        
+        return optimizer_grouped_parameters
+    # ==================== End of muse training framework methods ====================
+
     def get_rope_index_slowfast(
         self,
         input_ids: Optional[torch.LongTensor] = None,
