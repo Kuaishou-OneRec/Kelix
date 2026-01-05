@@ -398,7 +398,9 @@ def tokenize_images(tokenizer,
                     batch_size: int,
                     max_condition_length: int,
                     input_ids: Optional[torch.Tensor] = None,
-                    cu_seqlens: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+                    cu_seqlens: Optional[torch.Tensor] = None,
+                    cond_embeds_opt: callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
+                    ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
     Args:
@@ -520,6 +522,8 @@ def tokenize_images(tokenizer,
         attention_mask = attention_mask[:, None, None, :]
 
     max_seq_len = max_condition_length
+    if cond_embeds_opt is not None:
+        processed_embeddings = cond_embeds_opt(processed_embeddings, attention_mask)
     return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
@@ -661,7 +665,8 @@ def visualize_reconstruction(
         image_grid_thw=loaded.image_grid_thw.to(device=device),
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
-        input_ids=loaded.input_ids.to(device=device)
+        input_ids=loaded.input_ids.to(device=device),
+        cond_embeds_op=model.diffusion_connector
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1352,7 +1357,8 @@ def train():
                     batch["image"].shape[0],
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
-                    cu_seqlens=batch.get("cu_seqlens")
+                    cu_seqlens=batch.get("cu_seqlens"),
+                    cond_embeds_opt=model.diffusion_connector,
                 )
             
             pos_args = compute_pos_args(
