@@ -581,15 +581,12 @@ class TransformerDecoder(nn.Module):
 
         if self.caches_are_enabled():
             if mask is None:
+                # flash 可以进入这个分支，eager不能
                 # raise ValueError(
                 #     "KV-caches for self-attention layers are setup for inference mode, causal masks must be provided!"
                 #     " Use the `mask` arg to provide a causal mask."
                 # )
-                import warnings
-                warnings.warn(
-                    "KV-caches for self-attention layers are setup for inference mode, causal masks must be provided if eager attention is used!"
-                    " Use the `mask` arg to provide a causal mask."
-                )
+                pass
 
             if encoder_input is not None and encoder_mask is None:
                 raise ValueError(
