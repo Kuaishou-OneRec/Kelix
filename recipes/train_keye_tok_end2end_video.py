@@ -1181,12 +1181,14 @@ def train():
                 with record_function("GradNorm"):
                     grad_norm = compute_fsdp_zero2_grad_norm(model)
                 metrics.append("grad_norm", grad_norm)
+                
+                # 在 lr_scheduler.step() 之前获取 learning rate，与 end2end 对齐
+                # 使用 get_lr() 而不是 get_last_lr()，与 end2end/train_vq_mt_end2end.py 第1439-1440行一致
                 learning_rate = lr_scheduler.get_last_lr()[0]
                 metrics.append("learning_rate", learning_rate)
                 
-                # Get vision learning rate from optimizer param groups
-                # Vision params are typically in later param groups
-                model_lrs = lr_scheduler.get_last_lr()
+                # Get vision learning rate - 使用 get_lr() 与 end2end 对齐
+                model_lrs = lr_scheduler.get_lr()
                 if len(model_lrs) > 2:
                     vision_learning_rate = model_lrs[2]
                 elif len(model_lrs) > 1:
