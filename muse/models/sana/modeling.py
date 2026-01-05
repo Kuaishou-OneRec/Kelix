@@ -256,8 +256,9 @@ class SanaModel(Model):
         nn.init.normal_(self.y_embedder.y_proj.fc1.weight, std=0.02)
         nn.init.normal_(self.y_embedder.y_proj.fc2.weight, std=0.02)
 
-        nn.init.normal_(self.diffusion_connector[0].weight, std=0.02)
-        nn.init.normal_(self.diffusion_connector[2].weight, std=0.02)
+        if isinstance(self.diffusion_connector, nn.Sequential):
+            nn.init.normal_(self.diffusion_connector[0].weight, std=0.02)
+            nn.init.normal_(self.diffusion_connector[2].weight, std=0.02)
         
         # Initialize position embeddings if using sincos
         if self.use_pe:
