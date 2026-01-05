@@ -167,16 +167,16 @@ class SanaModel(Model):
         # caption_channels is hidden size from LLM model
         # hidden_size is sana hidden size (pretrained in sana)
         self.diffusion_connector = nn.Sequential(
-            nn.Linear(config.connector_channels, self.hidden_size),
+            nn.Linear(config.connector_channels, self.caption_channels),
             nn.GELU(approximate="tanh"),
-            nn.Linear(self.hidden_size, self.hidden_size),
-            RMSNorm(self.hidden_size, eps=1e-5),
+            nn.Linear(self.caption_channels, self.caption_channels),
+            RMSNorm(self.caption_channels, eps=1e-5),
         ) if self.use_connector else nn.Identity()
 
         # Caption embedding
         approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.y_embedder = CaptionEmbedder(
-            in_channels=config.hidden_size if config.use_connector else config.caption_channels,
+            in_channels=config.caption_channels,
             hidden_size=config.hidden_size,
             uncond_prob=config.class_dropout_prob,
             act_layer=approx_gelu,
