@@ -115,7 +115,7 @@ def custom_generate_and_understanding(model, processor):
     print("Testing generate and understanding...")
     device = next(model.parameters()).device
     input_ids = torch.tensor([[151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 31115, 458, 2168, 3118, 389, 279, 2661, 1467, 25, 264, 6548, 315, 264, 22435, 13, 151645, 198, 151644, 77091, 198, 151652]]).to(device)
-    input_ids = torch.tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,          151645,    198, 151644,    872,    198,  31115,    458,   2168,   3118,             389,    279,   2661,   1467,     25,    264,   6548,    315,    264,           13425,     13, 151645,    198, 151644,  77091,    198, 151652]],)
+    input_ids = torch.tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,          151645,    198, 151644,    872,    198,  31115,    458,   2168,   3118,             389,    279,   2661,   1467,     25,    264,   6548,    315,    264,           13425,     13, 151645,    198, 151644,  77091,    198, 151652]],).to(device)
     inputs = {"input_ids": input_ids}
     output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
     output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
