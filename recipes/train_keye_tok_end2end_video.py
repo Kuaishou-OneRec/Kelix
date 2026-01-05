@@ -1022,6 +1022,29 @@ def train():
             # Compute LM loss and per-token loss
             lm_loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
             
+            # ============ Compute global average lm_loss (与 end2end 对齐) ============
+            # 对 per_token_loss 和 valid_tokens 做 all_reduce，然后重新计算全局平均
+            # 这与 end2end/train_vq_mt_end2end.py 第1483-1488行的逻辑一致
+            local_loss_mask = get_local_sequence(loss_mask, seq_idx=1) if loss_mask is not None else None
+            if local_loss_mask is not None:
+                # per_token_loss 已经包含 shifted labels，需要对齐
+                # per_token_loss shape: (batch * (seq_len - 1),) 因为 shift_labels=False 在 loss_fn 中
+                per_token_loss_for_reduce = per_token_loss[:-1] if per_token_loss.numel() > local_loss_mask[:, 1:].numel() else per_token_loss
+                local_mask_shifted = local_loss_mask[:, 1:].reshape(-1)
+                
+                # 计算本地有效 loss 和有效 token 数
+                total_loss_sum = (per_token_loss_for_reduce * (local_mask_shifted > 0).float()).sum()
+                total_valid_tokens = (local_mask_shifted > 0).sum().float()
+                
+                # All-reduce across all GPUs
+                dist.all_reduce(total_loss_sum, op=dist.ReduceOp.SUM)
+                dist.all_reduce(total_valid_tokens, op=dist.ReduceOp.SUM)
+                
+                # 计算全局平均 lm_loss
+                global_avg_lm_loss = total_loss_sum / total_valid_tokens if total_valid_tokens > 0 else lm_loss
+            else:
+                global_avg_lm_loss = lm_loss
+            
             # Extract auxiliary losses from model output
             codebook_loss_raw = output.get("codebook_loss", torch.tensor(0.0))
             commitment_loss_raw = output.get("commitment_loss", torch.tensor(0.0))
@@ -1030,24 +1053,36 @@ def train():
             codebook_loss_list = codebook_loss_raw if isinstance(codebook_loss_raw, (list, tuple)) else [codebook_loss_raw]
             commitment_loss_list = commitment_loss_raw if isinstance(commitment_loss_raw, (list, tuple)) else [commitment_loss_raw]
             
-            # Compute average for total loss
+            # Compute average for total loss (用于 backward)
             codebook_loss = sum(codebook_loss_list) / len(codebook_loss_list)
             commitment_loss = sum(commitment_loss_list) / len(commitment_loss_list)
             
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             
-            # Record metrics (使用 .item() 转为标量，防止tensor引用泄漏)
-            metrics.append("loss", total_loss.detach().item())
-            metrics.append("lm_loss", lm_loss.detach().item())
-            metrics.append("codebook_loss", codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
-            metrics.append("commitment_loss", commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
+            # ============ All-reduce codebook/commitment loss for TensorBoard (与 end2end 对齐) ============
+            # 这与 end2end/train_vq_mt_end2end.py 第1480-1494行的逻辑一致
+            avg_codebook_loss = torch.stack([x.detach() for x in codebook_loss_list])
+            avg_commitment_loss = torch.stack([x.detach() for x in commitment_loss_list])
             
-            # Record per-codebook loss metrics
-            for i, (cb_loss, cm_loss) in enumerate(zip(codebook_loss_list, commitment_loss_list)):
-                cb_val = cb_loss.detach().item() if isinstance(cb_loss, torch.Tensor) else cb_loss
-                cm_val = cm_loss.detach().item() if isinstance(cm_loss, torch.Tensor) else cm_loss
-                metrics.append(f"codebook_loss_{i}", cb_val)
-                metrics.append(f"commitment_loss_{i}", cm_val)
+            dist.all_reduce(avg_codebook_loss, op=dist.ReduceOp.SUM)
+            avg_codebook_loss = avg_codebook_loss / dist.get_world_size()
+            
+            dist.all_reduce(avg_commitment_loss, op=dist.ReduceOp.SUM)
+            avg_commitment_loss = avg_commitment_loss / dist.get_world_size()
+            
+            # 计算全局平均的 total_loss 用于 TensorBoard 记录
+            global_avg_total_loss = global_avg_lm_loss + args.codebook_loss_weight * avg_codebook_loss.mean() + args.commitment_loss_weight * avg_commitment_loss.mean()
+            
+            # Record metrics (使用全局平均值记录到 TensorBoard，与 end2end 对齐)
+            metrics.append("loss", global_avg_total_loss.detach().item() if isinstance(global_avg_total_loss, torch.Tensor) else global_avg_total_loss)
+            metrics.append("lm_loss", global_avg_lm_loss.detach().item() if isinstance(global_avg_lm_loss, torch.Tensor) else global_avg_lm_loss)
+            metrics.append("codebook_loss", avg_codebook_loss.mean().item())
+            metrics.append("commitment_loss", avg_commitment_loss.mean().item())
+            
+            # Record per-codebook loss metrics (使用 all_reduce 后的值)
+            for i in range(len(avg_codebook_loss)):
+                metrics.append(f"codebook_loss_{i}", avg_codebook_loss[i].item())
+                metrics.append(f"commitment_loss_{i}", avg_commitment_loss[i].item())
             
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
