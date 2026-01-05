@@ -885,7 +885,7 @@ class KeyeARModel(Model):
                 top_k = min(top_k, logits.size(-1))
                 values, indices = torch.topk(logits, top_k, dim=-1)
                 logits = torch.full_like(logits, float('-inf')).scatter_(-1, indices, values)
-            
+            print("logits0000", logits.shape)
             # Top-P过滤
             if top_p < 1.0:
                 sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
@@ -893,6 +893,9 @@ class KeyeARModel(Model):
                 mask = cumulative_probs > top_p
                 mask[..., 0] = False  # 至少保留第一个token
                 sorted_logits[mask] = float('-inf')
+                print(f"after top_p filter sorted_logits={sorted_logits.shape}, sorted_indices.shape={sorted_indices.shape}")
+                print(sorted_logits)
+                print(sorted_indices)
                 logits = torch.gather(sorted_logits, -1, torch.argsort(sorted_indices, dim=-1))
             print("sampleing", logits.shape)
             # 采样
