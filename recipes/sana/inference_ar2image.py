@@ -162,10 +162,13 @@ def get_model_embedding_and_tokens(
             del kwargs["cu_seqlens"]
 
         model.set_output_hidden_states([len(model.model.model.layers)])
-        tokens, embeddings = model.generate(
-            input_ids=input_ids,
-            **kwargs
-        )
+        try:
+            tokens, embeddings = model.generate(
+                input_ids=input_ids,
+                **kwargs
+            )
+        except Exception as e:
+            raise Exception(f"Error in generate: {e}, input_ids: {input_ids}, kwargs: {kwargs}")
         embeddings = embeddings[0]
         return tokens, embeddings
         
