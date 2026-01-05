@@ -284,7 +284,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
                 self.tok_embeddings._get_token_embeddings, 
                 self.unembed
             )
-
+            print("Generating... 134234333")
             _, output = self.token_head.generate(
                 input_embeddings=h.flatten(0,1)[:,None],
                 return_logits=True,
@@ -974,8 +974,6 @@ class KeyeARModel(Model):
             if (next_group[..., 0] == self.config.qwen_config.eos_token_id).all():
                 break
         
-        self.model.model.reset_caches()
-
         # ==============================================
         # 3. 返回结果
         # ==============================================

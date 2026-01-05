@@ -197,7 +197,7 @@ class UnifiedTokenDecoder(Model):
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
         self.eval()
-
+        print(f"unigeneratinggg")
         if tokens is not None:
             input_ids = tokens
         
