@@ -111,6 +111,40 @@ def generate_and_understanding(model, processor):
     print(f"output_ids=\n{output_ids}")
 
 
+def custom_generate_and_understanding(model, processor):
+    print("Testing generate and understanding...")
+    device = next(model.parameters()).device
+    input_ids = torch.tensor([[151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 31115, 458, 2168, 3118, 389, 279, 2661, 1467, 25, 264, 6548, 315, 264, 22435, 13, 151645, 198, 151644, 77091, 198, 151652]]).to(device)
+    inputs = {"input_ids": input_ids}
+    output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
+    output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+    content = processor.decode(output_ids[:,0].long().tolist())
+    print(f"输入:\n{messages}")
+    print(f"生成内容: {content}\n")
+    print(f"output_ids=\n{output_ids}")
+    print()
+    input_image_ids = model.extract_image_tokens(output_ids)
+    print(f"input_image_ids({[x.shape for x in input_image_ids]})=\n{input_image_ids}")
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "<|vision_start|><|vision_end|>what's in the image? I need a detailed description."}
+            ],
+        }
+    ]
+    inputs = process_message(processor, next(model.parameters()).device, messages)
+    inputs["input_ids"] = model.fill_image_tokens(inputs["input_ids"], input_image_ids)
+    inputs["input_image_ids"] = torch.cat(input_image_ids, 0)
+    inputs = inputs.to(next(model.parameters()).device)
+    output_ids = model.generate(**inputs, top_k=1, max_new_tokens=450)
+    output_ids = output_ids[0,inputs["input_ids"].shape[1]:]
+    content = processor.decode(output_ids[:,0].long().tolist())
+    print(f"输入:\n{messages}")
+    print(f"生成内容: {content}\n")
+    print(f"output_ids=\n{output_ids}")
+
+
 def edit_and_understanding(model, processor):
     """测试编辑和理解"""
     print("Testing edit and understanding...")
@@ -255,9 +289,9 @@ def test_keyear_forward():
     with set_default_dtype(model_dtype):
         muse_model = KeyeARModel.from_pretrained(checkpoint_dir).to(device)
     
-    #general_chatting(muse_model, processor)
+    general_chatting(muse_model, processor)
     generate_and_understanding(muse_model, processor)
-    #edit_and_understanding(muse_model, processor)
+    edit_and_understanding(muse_model, processor)
 
 
 
