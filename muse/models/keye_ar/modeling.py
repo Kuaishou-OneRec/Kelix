@@ -959,7 +959,7 @@ class KeyeARModel(Model):
             *hidden_states, logits = outputs
             hidden_states_list.append(hidden_states)
             print(f"n_tokensn_tokens", n_tokens, logits.shape)
-            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[2]), value=q_eos_token)
+            logits = torch.nn.functional.pad(logits, (0,0,0, n_tokens - logits.shape[1]), value=q_eos_token)
 
             # 采样新group
             current_logits = logits[:, :, :]  # (batch, 9, vocab_size)
