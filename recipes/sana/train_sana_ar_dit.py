@@ -666,7 +666,7 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        # cond_embeds_op=model.diffusion_connector
+        cond_embeds_op=model.diffusion_connector
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
