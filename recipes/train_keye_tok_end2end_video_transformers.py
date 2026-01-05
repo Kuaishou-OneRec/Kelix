@@ -688,6 +688,14 @@ def train():
     
     if args.enable_gradient_checkpointing:
         print_rank_0("Enable gradient checkpointing")
+        # IMPORTANT: Disable model's internal gradient_checkpointing to avoid conflict
+        # with external set_activation_checkpointing. The model has its own
+        # gradient_checkpointing logic in Qwen3Model.forward and SiglipEncoder.forward
+        # which would conflict with the FSDP-compatible checkpointing we use here.
+        for module in model.modules():
+            if hasattr(module, 'gradient_checkpointing'):
+                module.gradient_checkpointing = False
+        
         # For transformers-style models, use the module classes directly
         # Note: Must use set {} instead of tuple () for auto_wrap_policy
         checkpointable_classes = {KeyeDecoderLayer, SiglipEncoderLayer}
