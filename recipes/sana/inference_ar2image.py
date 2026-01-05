@@ -165,6 +165,7 @@ def get_model_embedding_and_tokens(
         try:
             tokens, embeddings = model.generate(
                 input_ids=input_ids,
+                top_k=1,
                 **kwargs
             )
         except Exception as e:
