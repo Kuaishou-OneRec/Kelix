@@ -266,7 +266,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
 
         if len(self.layers) in output_hidden_states:
             hidden.append(h)
-
+        print(f"self.token_decoder_with_teacher_forcing={self.token_decoder_with_teacher_forcing}")
         if self.token_decoder_with_teacher_forcing:
             token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
             next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
