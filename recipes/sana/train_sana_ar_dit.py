@@ -399,7 +399,7 @@ def tokenize_images(tokenizer,
                     max_condition_length: int,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
-                    cond_embeds_opt = None,
+                    cond_embeds_op = None,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -522,8 +522,8 @@ def tokenize_images(tokenizer,
         attention_mask = attention_mask[:, None, None, :]
 
     max_seq_len = max_condition_length
-    if cond_embeds_opt is not None:
-        processed_embeddings = cond_embeds_opt(processed_embeddings, attention_mask)
+    if cond_embeds_op is not None:
+        processed_embeddings = cond_embeds_op(processed_embeddings, attention_mask)
     return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
@@ -1358,7 +1358,7 @@ def train():
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
-                    cond_embeds_opt=model.diffusion_connector,
+                    cond_embeds_op=model.diffusion_connector,
                 )
             
             pos_args = compute_pos_args(
