@@ -112,7 +112,7 @@ class KVCache:
             self.k_cache = self.k_cache.to(k.device)
             self.v_cache = self.v_cache.to(v.device)
         
-        
+        print("self.k_cacheself.k_cache", self.k_cache.shape, k.shape)
         # Update cache
         self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = k
         self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len, :] = v
