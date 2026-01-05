@@ -137,6 +137,7 @@ class SanaModel(Model):
         self.num_heads = config.num_heads
         self.depth = config.depth
         self.use_connector = config.use_connector
+        self.connector_channels = config.connector_channels
         self.use_pe = config.use_pe
         self.pe_interpolation = config.pe_interpolation
         self.y_norm = config.y_norm
@@ -166,7 +167,7 @@ class SanaModel(Model):
         # caption_channels is hidden size from LLM model
         # hidden_size is sana hidden size (pretrained in sana)
         self.diffusion_connector = nn.Sequential(
-            nn.Linear(config.caption_channels, self.hidden_size),
+            nn.Linear(config.connector_channels, self.hidden_size),
             nn.GELU(approximate="tanh"),
             nn.Linear(self.hidden_size, self.hidden_size),
             RMSNorm(self.hidden_size, eps=1e-5),

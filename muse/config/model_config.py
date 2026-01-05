@@ -539,6 +539,11 @@ class SanaConfig(ModelConfig):
         description="Whether to use diffusion connector. If False, there will be only y_embedder with the two linear layers randomly initialized."
     )
 
+    connector_channels: int = Field(
+        default=None,
+        description="Number of channels for the connector"
+    )
+
 
 
 class UnifiedQwen3Config(Qwen3Config):
