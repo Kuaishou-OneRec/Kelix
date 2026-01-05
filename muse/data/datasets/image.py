@@ -1235,7 +1235,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
-        
+
         def recursive_traverse(obj, call_back_function):
             """
             递归遍历dict/list对象，对每个对象（包括子对象）先执行回调函数
@@ -1265,11 +1265,7 @@ class Chat2ImageDataset(Token2ImageDataset):
             print(f"{sample} has invalid scores, skip")
             return None
         
-        if self.valid_hw_range is not None:
-            h, w = pair['image'].shape[-2:]
-            if h < self.valid_hw_range[0] or w < self.valid_hw_range[0] or h > self.valid_hw_range[1] or w > self.valid_hw_range[1]:
-                print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={self.valid_hw_range}")
-                return None
+
 
         images = json.loads(sample.get("images", '{}'))
         image = pair["image"]
@@ -1284,6 +1280,13 @@ class Chat2ImageDataset(Token2ImageDataset):
         if height is not None and width is not None:
             pair["height"] = height
             pair["width"] = width
+
+            if self.valid_hw_range is not None:
+                h, w = height, width
+                if h < self.valid_hw_range[0] or w < self.valid_hw_range[0] or h > self.valid_hw_range[1] or w > self.valid_hw_range[1]:
+                    print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={self.valid_hw_range}")
+                    return None
+            
 
         messages = json.loads(sample["messages"])
         image_dict = json.loads(sample["images"])
