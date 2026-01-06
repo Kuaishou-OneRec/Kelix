@@ -476,6 +476,8 @@ def main():
                 dtype=dtype,
             )
 
+            print(f"uncond_embedsuncond_embeds={uncond_embeds.shape}, cond_embeds={cond_embeds.shape}")
+
             cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
