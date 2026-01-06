@@ -132,6 +132,7 @@ def get_model_embedding_and_tokens(
         **kwargs
     ):
     if teacher_forcing:
+        kwargs["tokens"] = input_ids
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         return embeddings, embeddings
@@ -145,11 +146,14 @@ def get_model_embedding_and_tokens(
             del kwargs["cu_seqlens"]
 
         model.set_output_hidden_states([len(model.model.model.layers)])
-        tokens, embeddings = model.generate(
-            input_ids=input_ids,
-            **kwargs
-        )
-        print(f"after generate")
+        try:
+            tokens, embeddings = model.generate(
+                input_ids=input_ids,
+                top_k=1,
+                **kwargs
+            )
+        except Exception as e:
+            raise Exception(f"Error in generate: {e}, input_ids: {input_ids}, kwargs: {kwargs}")
         embeddings = embeddings[0]
         return tokens, embeddings
         
@@ -182,7 +186,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     """
     import IPython
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
-    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
+    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant\n") # [151644, 77091]
     # input_ids: [batch_size, total_seq_len]
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
@@ -228,12 +232,12 @@ def tokenize_images(ar_processor : AutoProcessor,
         input_ids, embeddings = get_model_embedding_and_tokens(
             model=ar_model,
             teacher_forcing=teacher_forcing,
-            tokens=input_ids,
+            input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
+            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
         )
 
         print(f"input_ids={input_ids.detach().cpu().tolist()}")

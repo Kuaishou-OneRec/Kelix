@@ -149,6 +149,7 @@ def get_model_embedding_and_tokens(
         **kwargs
     ):
     if teacher_forcing:
+        kwargs["tokens"] = input_ids
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         return embeddings, embeddings
