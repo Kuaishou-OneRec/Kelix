@@ -36,8 +36,11 @@ SEED="${SEED:-42}"
 INITIALIZE_DIST="${INITIALIZE_DIST:-true}"  # initialize a local single-process dist group
 MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=324}"
 
-DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
-DCP_TAG="${DCP_TAG:-global_step12000}"
+# DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
+# DCP_TAG="${DCP_TAG:-global_step12000}"
+
+DCP_CKPT_DIR="${DCP_CKPT_DIR:-}"
+DCP_TAG="${DCP_TAG:-}"
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
@@ -46,7 +49,7 @@ N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
 if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
     OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/GenEval/outputs}"
 else
-    OUTPUT_DIR="${OUTPUT_DIR:-./vis_output}"
+    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/GenEval/outputs}"      
 fi
 
 # Log configuration for debugging

@@ -46,7 +46,7 @@ N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
 if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
     OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/GenEval/outputs}"
 else
-    OUTPUT_DIR="${OUTPUT_DIR:-./vis_output}"
+    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/GenEval/outputs}"
 fi
 
 # Log configuration for debugging
