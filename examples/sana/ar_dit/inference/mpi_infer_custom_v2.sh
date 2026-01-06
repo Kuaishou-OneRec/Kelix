@@ -174,6 +174,9 @@ mpirun --allow-run-as-root \
       --seed ${SEED} \
       --results-dir "${RESULTS_DIR}" \
       --teacher-forcing ${TEACHER_FORCING} \
+      --cfg-scale 2.0 \
+      --linspace-sigmas \
+--num-sampling-steps 50 \
       --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log

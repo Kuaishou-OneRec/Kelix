@@ -29,6 +29,7 @@ This demo imports and reuses helper functions from
 `recipes/sana/train_sana_ar_dit.py` (e.g., `load_vae`, `load_keye_ar`,
 `visualize_reconstruction`) to ensure parity with the training pipeline.
 """
+import numpy as np
 import tqdm
 import argparse
 import os
