@@ -116,6 +116,8 @@ def parse_args():
                         help="Tag for model checkpoint (e.g., global_step8000)")
     parser.add_argument("--eval-id", type=str, default="default",
                         help="Eval ID for GenEval results")
+    parser.add_argument("--linspace-sigmas", action="store_true",
+                        help="Use linspace sigmas for scheduler")
     return parser.parse_args()
 
 
@@ -518,7 +520,11 @@ def main():
 
             # Create scheduler and sample
             scheduler = FlowMatchEulerDiscreteScheduler(shift=args.flow_shift)
-            scheduler.set_timesteps(args.num_sampling_steps, device=device)
+            if args.linspace_sigmas:
+                sigmas = np.linspace(1.0, 1 / args.num_sampling_steps, args.num_sampling_steps)
+                scheduler.set_timesteps(args.num_sampling_steps, sigmas=sigmas, device=device)
+            else:
+                scheduler.set_timesteps(args.num_sampling_steps, device=device)
 
             generator = torch.Generator(device=device).manual_seed(args.seed)
             dit_latents = torch.randn(

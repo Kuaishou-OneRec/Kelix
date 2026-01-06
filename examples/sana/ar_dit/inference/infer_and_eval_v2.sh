@@ -13,6 +13,8 @@ torchrun \
 run_eval_only.py \
 --config config/${cf}.json \
 --eval-id default \
+--cfg-scale 2.0 \
 --work-dir $work_dir \
+--linspace-sigmas \
 > ${work_dir}/eval_${cf}.out 2>&1
 
