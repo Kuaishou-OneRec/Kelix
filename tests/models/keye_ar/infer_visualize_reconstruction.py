@@ -228,7 +228,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         input_ids, embeddings = get_model_embedding_and_tokens(
             model=ar_model,
             teacher_forcing=teacher_forcing,
-            input_ids=input_ids,
+            input_ids=input_ids.to(ar_model.device),
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
@@ -434,6 +434,8 @@ def main():
                 None,
                 vae,
             )
+
+            print(f"device={device}")
 
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
