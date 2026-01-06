@@ -478,7 +478,7 @@ def main():
             for t in scheduler.timesteps:
                 latent_input = torch.cat([dit_latents] * 2)
                 timestep = t.expand(latent_input.shape[0])
-                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg)
+                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True)
                 noise_uncond, noise_cond = noise_pred.chunk(2)
                 noise_pred = noise_uncond + args.cfg_scale * (noise_cond - noise_uncond)
                 dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
