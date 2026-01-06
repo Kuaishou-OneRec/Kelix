@@ -1067,6 +1067,7 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
             position_ids = batch.get("position_ids", None)
+            cu_seqlens = batch.get("cu_seqlens", None)  # for sample packing with flash_attn_varlen
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1102,6 +1103,7 @@ def train():
                         image_grid_thw=image_grid_thw,
                         pixel_values_videos=pixel_values_videos,
                         video_grid_thw=video_grid_thw,
+                        cu_seqlens=cu_seqlens,  # pass cu_seqlens for sample packing
                     )
                 ticker.tick("model.forward")
             
