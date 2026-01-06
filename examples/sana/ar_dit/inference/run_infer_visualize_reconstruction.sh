@@ -39,6 +39,7 @@ DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_
 DCP_TAG="global_step9000"             # Tag for DCP checkpoint (e.g., global_step8000)
 DCP_CKPT_DIR=""
 DCP_TAG=""
+PORT=29501
 
 
 # Allow overrides from environment
@@ -108,6 +109,7 @@ PYTHONPATH=. python tests/models/keye_ar/infer_visualize_reconstruction.py \
   --image-size ${IMAGE_SIZE} \
   --seed ${SEED} \
   --results-dir "${RESULTS_DIR}" \
+  --port "${PORT}" \
   ${INIT_DIST_FLAG} \
   ${MODEL_CONFIG_OVERRIDES_FLAG} \
-  ${DCP_FLAGS}
+  ${DCP_FLAGS} 

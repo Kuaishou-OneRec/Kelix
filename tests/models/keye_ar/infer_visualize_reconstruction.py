@@ -100,10 +100,12 @@ def parse_args():
                         help="Distributed world_size to set in dataset config (default: 1)")
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
+    parser.add_argument("--port", type=int, default=29500,
+                        help="Port to use for distributed communication")
     return parser.parse_args()
 
 
-def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
+def setup_distributed_environment(rank: int = 0, world_size: int = 1, port:int = 29500) -> bool:
     """
     Initialize distributed environment for single-process inference runs using the
     same approach as our tests: TCP init on localhost (gloo backend).
@@ -114,11 +116,11 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     print(f"going to init: {rank}/{world_size}")
     dist.init_process_group(
         backend='gloo',
-        init_method='tcp://127.0.0.1:29500',
+        init_method=f'tcp://127.0.0.1:{port}',
         rank=rank,
         world_size=world_size,
     )
-    print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
+    print(f"Initialized local TCP-based distributed process group (127.0.0.1:{port})")
     return True
 
 
@@ -322,7 +324,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
-    setup_distributed_environment(args.rank, args.world_size)
+    setup_distributed_environment(args.rank, args.world_size, args.port)
 
     # Convert DCP checkpoint if needed
     model_dir = args.model_dir
