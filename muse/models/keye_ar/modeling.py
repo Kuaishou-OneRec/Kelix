@@ -264,6 +264,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         if self.output_last_hidden_states_only:
             return h
 
+        print(1333343, len(self.layers), output_hidden_states)
         if len(self.layers) in output_hidden_states:
             print(f"lllllll", h.shape)
             hidden.append(h)
