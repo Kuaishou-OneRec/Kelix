@@ -236,6 +236,8 @@ def tokenize_images(ar_processor : AutoProcessor,
             max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
         )
 
+        print(f"input_ids={input_ids.detach().cpu().tolist()}")
+
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = ar_model.config.qwen_config.vision_start_token_id
         vision_end_id = ar_model.config.qwen_config.vision_end_token_id
