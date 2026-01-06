@@ -435,8 +435,6 @@ def main():
                 vae,
             )
 
-            print(f"device={device}")
-
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
@@ -449,14 +447,8 @@ def main():
                 ar_processor=ar_processor,
 
             )
-            print(cond_embeds.shape, cond_mask.shape)
-            torch.save(
-                {
-                    "cond_embeds": cond_embeds,
-                    "cond_mask": cond_mask,
-                },
-                "for_new_compare.pt"
-            ); exit()
+            print(f"loaded.pixel_values={loaded.pixel_values.shape}")
+            print(f"cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}")
             cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
 
             # Prepare unconditional embeddings for CFG
