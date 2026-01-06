@@ -86,6 +86,73 @@ from muse.training.common import (
 from muse.utils.common import Timer
 
 from muse.training.lr_schedulers import get_scheduler
+
+
+class TimeTracker:
+    """时间跟踪器，用于记录各个阶段的时间间隔，计算最近 n 次的平均值。"""
+    
+    def __init__(self, n=1, time_types=None, sync=False):
+        """
+        初始化 TimeTracker 类。
+
+        :param n: 统计最近 n 次调用的时间间隔平均值
+        :param time_types: 时间类型列表，可选值为 "absolute" 或 "cpu"
+        :param sync: 是否在 tick 时同步 CUDA
+        """
+        if time_types is None:
+            time_types = ["absolute"]
+        self.n = n
+        self.time_types = time_types
+        import os
+        self.last_times = {
+            "absolute": time.perf_counter(),
+            "cpu": os.times().user
+        }
+        self.sync = sync
+        self.interval_records = {}
+
+    def tick(self, name):
+        """
+        记录指定名称的所有指定时间类型的时间间隔。
+
+        :param name: 时间间隔记录的名称
+        """
+        import os
+        if self.sync:
+            torch.cuda.synchronize()
+        for time_type in self.time_types:
+            if time_type == "absolute":
+                current_time = time.perf_counter()
+                last_time = self.last_times["absolute"]
+                self.last_times["absolute"] = current_time
+            elif time_type == "cpu":
+                current_time = os.times().user
+                last_time = self.last_times["cpu"]
+                self.last_times["cpu"] = current_time
+            else:
+                raise ValueError("Invalid time_type. Allowed values are 'absolute' or 'cpu'.")
+
+            interval = current_time - last_time
+
+            key = f"{time_type}@{name}"
+            if key not in self.interval_records:
+                self.interval_records[key] = []
+
+            self.interval_records[key].append(interval)
+            if len(self.interval_records[key]) > self.n:
+                self.interval_records[key].pop(0)
+
+    def stat(self):
+        """
+        返回最近 n 次调用的所有时间间隔的平均值。
+
+        :return: 包含每个名称及其平均时间间隔的字典
+        """
+        result = {}
+        for key, intervals in self.interval_records.items():
+            if intervals:
+                result[key] = sum(intervals) / len(intervals)
+        return result
 from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
     get_context_parallel_group,
@@ -392,8 +459,8 @@ def get_argument_parser():
     parser.add_argument("--beta2", type=float, default=0.95,
                         help="beta2 for Adam Optimizer")
     
-    parser.add_argument("--clip-range", type=float, default=1.0,
-                        help="The gradient clip range.")
+    parser.add_argument("--clip-range", type=float, default=None,
+                        help="The gradient clip range. None means no clipping.")
 
     ############ Training Args ############
 
@@ -929,13 +996,21 @@ def train():
     total_data_source_tokens = collections.defaultdict(int)
     batch_data_source_loss = collections.defaultdict(float)
     batch_data_source_tokens = collections.defaultdict(int)
+    
+    # Initialize time trackers (仿照 end2end 版本)
+    ticker = TimeTracker(n=args.logging_per_step)
+    iter_ticker = TimeTracker(n=args.logging_per_step)
+    
     print_rank_0("Starting training...")
     model.train()
     
     while True:
+        ticker.tick("while_True")
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
+
+            ticker.tick("enter_context(torch_profiler)")
 
             # 1. DataLoader
             with record_function("DataLoader"):
@@ -943,6 +1018,7 @@ def train():
                     batch = next(data_iter)
                 except StopIteration:
                     break
+            ticker.tick("next_batch")
 
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
@@ -952,6 +1028,7 @@ def train():
                             device=torch.cuda.current_device(),
                             dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                         )
+            ticker.tick("to_cuda(batch)")
             
             scheduler.step()
 
@@ -969,6 +1046,7 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
             position_ids = batch.get("position_ids", None)
+            cu_seqlens = batch.get("cu_seqlens", None)  # for sample packing with flash_attn_varlen
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -989,19 +1067,25 @@ def train():
                 metrics.append("samples", logical_samples)
             else:
                 metrics.append("samples", input_ids.shape[0] / get_context_parallel_world_size())
+            ticker.tick("token_metrics_init")
 
             # ================================================ Forward pass ================================================
-            with record_function("Forward"):
-                output = model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    pixel_values_videos=pixel_values_videos,
-                    video_grid_thw=video_grid_thw,
-                    labels=labels,
-                )
+            # Note: Do NOT pass labels to model - loss is computed externally (same as end2end)
+            # This avoids duplicate loss computation inside the model
+            with Timer("Fwd"):
+                with record_function("Forward"):
+                    output = model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        pixel_values=pixel_values,
+                        image_grid_thw=image_grid_thw,
+                        pixel_values_videos=pixel_values_videos,
+                        video_grid_thw=video_grid_thw,
+                        labels=labels,
+                        cu_seqlens=cu_seqlens,
+                    )
+                ticker.tick("model.forward")
             
             # Get logits from model output
             logits = output["logits"]
@@ -1021,6 +1105,7 @@ def train():
             
             # Compute LM loss and per-token loss
             lm_loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+            ticker.tick("loss_fn")
             
             # ============ Compute global average lm_loss (与 end2end 对齐) ============
             # 对 per_token_loss 和 valid_tokens 做 all_reduce，然后重新计算全局平均
@@ -1039,6 +1124,7 @@ def train():
                 # All-reduce across all GPUs
                 dist.all_reduce(total_loss_sum, op=dist.ReduceOp.SUM)
                 dist.all_reduce(total_valid_tokens, op=dist.ReduceOp.SUM)
+                ticker.tick("reduce_lm_loss")
                 
                 # 计算全局平均 lm_loss
                 global_avg_lm_loss = total_loss_sum / total_valid_tokens if total_valid_tokens > 0 else lm_loss
@@ -1069,6 +1155,7 @@ def train():
             
             dist.all_reduce(avg_commitment_loss, op=dist.ReduceOp.SUM)
             avg_commitment_loss = avg_commitment_loss / dist.get_world_size()
+            ticker.tick("reduce_codebook_loss")
             
             # 计算全局平均的 total_loss 用于 TensorBoard 记录
             global_avg_total_loss = global_avg_lm_loss + args.codebook_loss_weight * avg_codebook_loss.mean() + args.commitment_loss_weight * avg_commitment_loss.mean()
@@ -1093,6 +1180,7 @@ def train():
                     codebook_size=codebook_size,
                     n_q_tokens=n_q_tokens
                 )
+                ticker.tick("compute_codebook_metrics_image")
                 
                 # Record average perplexity and usage
                 if global_perplexities:
@@ -1112,6 +1200,7 @@ def train():
                     codebook_size=codebook_size,
                     n_q_tokens=n_q_tokens
                 )
+                ticker.tick("compute_codebook_metrics_video")
 
                 # Record average perplexity and usage for video
                 if video_global_perplexities:
@@ -1131,6 +1220,7 @@ def train():
                     codebook_size=codebook_size,
                     n_q_tokens=n_q_tokens
                 )
+                ticker.tick("compute_codebook_metrics_combined")
                 
                 # Record average perplexity and usage for combined
                 if combined_perplexities:
@@ -1163,50 +1253,70 @@ def train():
                     key = data_source[int(s_idx.item())]
                     batch_data_source_loss[key] += sum_loss.item()
                     batch_data_source_tokens[key] += mask.sum().item()
+                
+                ticker.tick("monitor_datasource_loss")
             
             if args.monitor_datasource_cnt and data_source is not None:
                 for data_source_name in data_source:
                     local_acc_data_source_samples[data_source_name] += 1
+                ticker.tick("monitor_datasource_cnt")
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
-            with record_function("Backward"):
-                total_loss.backward()
-            
-            with record_function("GradClip"):
-                clip_grad_by_value(model, args.clip_range)
+            with Timer("bwd"):
+                with record_function("Backward"):
+                    total_loss.backward()
+                ticker.tick("loss.backward")
+                
+                with record_function("GradClip"):
+                    clip_grad_by_value(model, args.clip_range)
 
-            # Update optimizer at gradient accumulation boundaries
-            if scheduler.is_gradient_accumulation_boundary():
-                with record_function("GradNorm"):
-                    grad_norm = compute_fsdp_zero2_grad_norm(model)
-                metrics.append("grad_norm", grad_norm)
-                
-                # 在 lr_scheduler.step() 之前获取 learning rate，与 end2end 对齐
-                # 使用 get_lr() 而不是 get_last_lr()，与 end2end/train_vq_mt_end2end.py 第1439-1440行一致
-                learning_rate = lr_scheduler.get_last_lr()[0]
-                metrics.append("learning_rate", learning_rate)
-                
-                # Get vision learning rate - 使用 get_lr() 与 end2end 对齐
-                model_lrs = lr_scheduler.get_lr()
-                if len(model_lrs) > 2:
-                    vision_learning_rate = model_lrs[2]
-                elif len(model_lrs) > 1:
-                    vision_learning_rate = model_lrs[1]
-                else:
-                    vision_learning_rate = learning_rate
-                metrics.append("vision_learning_rate", vision_learning_rate)
-                
-                with record_function("OptimizerStep"):
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                # Update optimizer at gradient accumulation boundaries
+                if scheduler.is_gradient_accumulation_boundary():
+                    with record_function("GradNorm"):
+                        grad_norm = compute_fsdp_zero2_grad_norm(model)
+                    metrics.append("grad_norm", grad_norm)
+                    
+                    # 在 lr_scheduler.step() 之前获取 learning rate，与 end2end 对齐
+                    # 使用 get_lr() 而不是 get_last_lr()，与 end2end/train_vq_mt_end2end.py 第1439-1440行一致
+                    learning_rate = lr_scheduler.get_last_lr()[0]
+                    metrics.append("learning_rate", learning_rate)
+                    
+                    # Get vision learning rate - 使用 get_lr() 与 end2end 对齐
+                    model_lrs = lr_scheduler.get_lr()
+                    if len(model_lrs) > 2:
+                        vision_learning_rate = model_lrs[2]
+                    elif len(model_lrs) > 1:
+                        vision_learning_rate = model_lrs[1]
+                    else:
+                        vision_learning_rate = learning_rate
+                    metrics.append("vision_learning_rate", vision_learning_rate)
+                    
+                    with record_function("OptimizerStep"):
+                        optimizer.step()
+                        lr_scheduler.step()
+                        optimizer.zero_grad()
+                    
+                    ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
             # ================================================ End of Backward pass ================================================
 
             metrics.step()
 
             # Logging at specified intervals
             if scheduler.should_logging():
+                # 获取 ticker 统计信息
+                ticker_stats = {}
+                for t in [ticker, iter_ticker]:
+                    ticker_stats.update(t.stat())
+                
+                # 将 ticker 统计信息添加到 metrics（可选：写入 TensorBoard）
+                if dist.get_rank() == 0 and tb_writer is not None:
+                    for name, data in ticker_stats.items():
+                        tb_writer.add_scalar(f"ticker/{name}", data, global_step=scheduler.global_step, new_style=True)
+                
+                # 打印 ticker 统计信息
+                print_rank_0(f"Step: {scheduler.global_step}, ticker_stats: {ticker_stats}")
+                
                 metrics.write_logs(scheduler.global_step)
                 
                 # Reduce data source metrics across all ranks (must be called on all ranks)
@@ -1273,9 +1383,13 @@ def train():
                             checkpoint_dir=args.output_dir,
                             global_step=scheduler.global_step
                         )
+                    ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}")
 
             if torch_profiler:
                 torch_profiler.step()
+
+            # 记录整个迭代的时间
+            iter_ticker.tick("iter_ticker")
 
             # 显式清理中间变量，防止显存泄漏
             del output, logits, total_loss, lm_loss, per_token_loss
