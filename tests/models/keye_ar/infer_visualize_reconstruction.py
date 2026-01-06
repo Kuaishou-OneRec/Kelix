@@ -288,6 +288,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         
         for i, emb in enumerate(vision_embeddings_list):
             seq_len = emb.shape[0]
+            print(111, processed_embeddings.shape, emb.shape)
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
