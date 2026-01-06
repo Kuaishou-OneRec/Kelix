@@ -1192,22 +1192,6 @@ def train():
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
             video_vq_indices = None  # 提前初始化，防止后续del报错
-            
-            # ============ DEBUG: Print indices unique count per rank ============
-            current_rank = dist.get_rank()
-            if vq_indices is not None:
-                for cb_idx, indices_tensor in enumerate(vq_indices):
-                    unique_count = torch.unique(indices_tensor).numel()
-                    total_count = indices_tensor.numel()
-                    print(f"[TRANSFORMERS DEBUG] rank={current_rank}, codebook={cb_idx}, image_indices unique={unique_count}/{total_count}, indices_shape={indices_tensor.shape}")
-            video_vq_indices_debug = output.get("video_indices", None)
-            if video_vq_indices_debug is not None:
-                for cb_idx, indices_tensor in enumerate(video_vq_indices_debug):
-                    unique_count = torch.unique(indices_tensor).numel()
-                    total_count = indices_tensor.numel()
-                    print(f"[TRANSFORMERS DEBUG] rank={current_rank}, codebook={cb_idx}, video_indices unique={unique_count}/{total_count}, indices_shape={indices_tensor.shape}")
-            # ============ END DEBUG ============
-            
             if vq_indices is not None:
                 global_perplexities, codebook_usages = compute_codebook_metrics(
                     indices=vq_indices,

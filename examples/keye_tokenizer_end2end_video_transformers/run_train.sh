@@ -19,7 +19,7 @@ script_name=$(basename "$0" .sh)
 # 使用 end2end 仓库的模型，用 msy_master_2 的训练脚本跑
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_video_baseline
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo_single/MuseV2_transformers/video/stage1_debug
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo_single/MuseV2_transformers/video/stage1
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 KAI_FLAG_FILE=msy
@@ -140,6 +140,7 @@ nohup mpirun --allow-run-as-root \
                 --codebook_loss_weight 1.0 \
                 --commitment_loss_weight 0.25 \
                 --seed 19260817 \
+                --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --comment '$comment' \
                 --monitor_datasource_loss \
