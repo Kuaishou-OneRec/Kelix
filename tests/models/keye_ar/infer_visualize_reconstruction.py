@@ -133,9 +133,9 @@ def get_model_embedding_and_tokens(
     ):
     if teacher_forcing:
         kwargs["tokens"] = input_ids
+        model.set_output_hidden_states([len(model.model.model.layers)])
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
-        model.set_output_hidden_states([len(model.model.model.layers)])
         print(f"embeddings.shape: {embeddings.shape}, outputs={outputs.shape}")
         return input_ids, embeddings
     else:
