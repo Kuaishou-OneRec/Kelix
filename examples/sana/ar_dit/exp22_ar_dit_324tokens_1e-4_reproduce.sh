@@ -153,20 +153,19 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.999 \
-                --batch-size 16 \
+                --batch-size 48 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 10000 \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=324 \
                 --save-checkpoint-per-step 4000 \
                 --logging-per-step 20 \
-                --clip-range 0.1 \
+                --clip-range 1 \
                 --fp32-weight \
                 --fp32-reduce \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
-                --multi-scale \
                 --enable-profile \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
