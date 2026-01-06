@@ -265,6 +265,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
             return h
 
         if len(self.layers) in output_hidden_states:
+            print(f"lllllll", h.shape)
             hidden.append(h)
 
         if self.token_decoder_with_teacher_forcing:
