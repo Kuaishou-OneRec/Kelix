@@ -717,6 +717,8 @@ class TransformerDecoder(nn.Module):
             output = self.chunked_output(h)
         else:
             # shape: [b, seq_len, out_dim]
-            output = self.output(h).float()
+            # Note: Removed .float() to keep dtype consistent with input
+            # Loss computation should handle float conversion if needed
+            output = self.output(h)
 
         return output

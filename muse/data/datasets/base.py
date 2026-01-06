@@ -15,6 +15,7 @@ from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import IterableDataset
 from fastparquet import ParquetFile
+import pandas as pd
 from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
 PARQUET_CACHE_DIR = os.environ.get("PARQUET_CACHE_DIR", "/code/dataset_cache")
 
@@ -164,6 +165,101 @@ class ParquetReader(Reader):
             print(f"Error processing row {idx} in {fn}: {str(e)}")
             continue
 
+
+class ShuffledParquetReader(ParquetReader):
+    """
+    带局部窗口打乱的 Parquet 读取器。
+    通过维护一个滑动的文件窗口并重新对窗口内的所有行进行打乱，来增加数据的随机性。
+    """
+    def __init__(self, sources: Union[List[str], str], window_size: int = 5):
+        super().__init__(sources)
+        self.window_size = window_size
+
+    def __iter__(self):
+        rank = get_data_parallel_rank()
+        worker_id, _ = get_worker_info()
+        
+        if not self.sources:
+            return
+
+        file_list = list(self.sources)
+        # 初始加载窗口
+        current_window_dfs = []
+        file_idx = 0
+        
+        # 记录窗口中每个文件贡献的行数，用于触发“滑出”逻辑
+        rows_per_file = []
+
+        def load_next_df():
+            nonlocal file_idx
+            while file_idx < len(file_list):
+                fn = file_list[file_idx]
+                file_idx += 1
+                try:
+                    pf = load_parquet(fn)
+                    df = pf.to_pandas()
+                    if len(df) > 0:
+                        df["__file_origin__"] = fn # 记录来源用于解析
+                        return df
+                except Exception as e:
+                    print(f"Error loading {fn}: {e}")
+            return None
+
+        # 1. 填充初始窗口
+        for _ in range(min(self.window_size, len(file_list))):
+            df = load_next_df()
+            if df is not None:
+                current_window_dfs.append(df)
+                rows_per_file.append(len(df))
+
+        if not current_window_dfs:
+            return
+
+        # 合并并执行第一次打乱
+        combined_df = pd.concat(current_window_dfs, ignore_index=True)
+        combined_df = combined_df.sample(frac=1).reset_index(drop=True)
+
+        rows_processed_since_update = 0
+
+        # 2. 开始迭代
+        while True:
+            for idx, row in combined_df.iterrows():
+                # 解析并产出
+                sample = self._parser(row.to_dict(), row["__file_origin__"], idx, len(combined_df))
+                if sample is not None:
+                    yield sample
+                
+                rows_processed_since_update += 1
+
+                # 3. 检查是否处理完了一个文件的等量数据，需要滑动窗口
+                # 当处理行数达到窗口中“最老”文件的行数时，替换数据
+                if rows_processed_since_update >= rows_per_file[0]:
+                    # 如果还有后续文件，则补充
+                    next_df = load_next_df()
+                    
+                    # 移除旧文件行（简单处理：重新构建 df 防止内存碎片或偏移混乱）
+                    # 这里的逻辑是：去掉前 rows_per_file[0] 行，加上新文件，再打乱
+                    if next_df is not None:
+                        # 窗口滑动：去掉已消耗的部分，加入新数据
+                        remaining_df = combined_df.iloc[idx + 1:]
+                        combined_df = pd.concat([remaining_df, next_df], ignore_index=True)
+                        combined_df = combined_df.sample(frac=1).reset_index(drop=True)
+                        
+                        rows_per_file.pop(0)
+                        rows_per_file.append(len(next_df))
+                        rows_processed_since_update = 0
+                        break # 跳出当前的 iterrows，从新的 combined_df 开始
+                    else:
+                        # 没有新文件了，继续消耗完当前窗口剩下的
+                        rows_per_file.pop(0)
+                        rows_processed_since_update = 0
+                        # 如果所有文件都处理完且 rows_per_file 为空，则退出
+                        if not rows_per_file:
+                            return
+            else:
+                # 正常消耗完整个 combined_df 且没有 break 的情况（即最后几个文件）
+                return
+
 class DistributedDataset(IterableDataset):
   def __init__(self,
                sources: Union[List[str], str],
@@ -176,6 +272,7 @@ class DistributedDataset(IterableDataset):
                reader: str = "parquet",
                shuffle_buffer_size: int = 0,
                enable_checkpointing: bool = False,
+               shuffle_window: int = 5,
                packing: bool = False,
                padding: bool = False,
                balancing: bool = False,
@@ -238,8 +335,19 @@ class DistributedDataset(IterableDataset):
     
     return files
 
+  # def _get_reader_class(self):
+  #   if self.reader == "parquet":
+  #     return ParquetReader
+  #   else:
+  #     raise ValueError(f"Unsupported reader: {self.reader}")
+
+
   def _get_reader_class(self):
+    # 根据配置返回对应的 Reader
     if self.reader == "parquet":
+      if self.shuffle_window > 1:
+        # 返回一个构造函数，支持传入 window_size
+        return lambda sources: ShuffledParquetReader(sources, window_size=self.shuffle_window)
       return ParquetReader
     else:
       raise ValueError(f"Unsupported reader: {self.reader}")
@@ -351,22 +459,102 @@ class DistributedDataset(IterableDataset):
 
   def __iter__(self):
     """Iterate through the dataset, processing samples and handling epochs."""
+    import signal
+    import traceback
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Timeout handler for stuck samples
+    def timeout_handler(signum, frame):
+      raise TimeoutError("Sample processing timeout (120 secs)")
+
+    # Error tracking per data source
+    source_sample_cnt = {}
+    source_error_cnt = {}
+
     buffer = []
+    source_list = []  # Track data sources for each sample in buffer
     current_length = 0
     for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
-        new_inputs = self.process(sample)
+        # Get source name for error tracking
+        source_name = "unknown"
+        sample_key = ""
+        sample_url = ""
+        try:
+          if isinstance(sample, dict):
+            source_name = sample.get("source", sample.get("json", {}).get("source", "unknown"))
+            sample_key = sample.get("__key__", sample.get("uuid", ""))
+            sample_url = sample.get("__url__", sample.get("__file__", ""))
+        except:
+          pass
+
+        source_sample_cnt.setdefault(source_name, 0)
+        source_sample_cnt[source_name] += 1
+
+        try:
+          # Set timeout for processing (Unix-only, gracefully skip on Windows)
+          signal.signal(signal.SIGALRM, timeout_handler)
+          signal.alarm(120)  # 增加到5分钟超时
+          
+          new_inputs = self.process(sample)
+          
+          # Clear timeout
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          
+        except StopIteration:
+          # Clear timeout and re-raise
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          raise
+        except Exception as e:
+          # Clear timeout
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          
+          # Track errors
+          source_error_cnt.setdefault(source_name, 0)
+          source_error_cnt[source_name] += 1
+          error_ratio = source_error_cnt[source_name] * 1.0 / source_sample_cnt[source_name]
+          
+          # Log error occasionally to avoid flooding logs
+          if np.random.rand() < 1:  # 1% chance to log
+            logger.error(
+              f"DistributedDataset process sample error. "
+              f"{source_name=}, {error_ratio=:.4f}, {sample_key=}, {sample_url=}\n"
+              f"errmsg={traceback.format_exc()}"
+              f"sample={sample}"
+            )
+          continue  # Skip bad sample and continue
+        
         if not new_inputs:
           continue
         if self.packing:
           new_sample_length = self.get_sample_length(new_inputs)
           if current_length + new_sample_length > self.max_length:
-            yield self.pack_sample(buffer)
+            packed_inputs = self.pack_sample(buffer)
+            # Add data_source info for monitoring
+            packed_inputs["data_source"] = source_list
+            yield packed_inputs
             buffer = []
+            source_list = []
             current_length = 0
           buffer.append(new_inputs)
+          source_list.append(source_name)
           current_length += new_sample_length
         else:
+          # For non-packing mode, add source info directly
+          new_inputs["data_source"] = [source_name]
           yield new_inputs
     if self.packing and len(buffer) > 0:
-      yield self.pack_sample(buffer)
+      packed_inputs = self.pack_sample(buffer)
+      packed_inputs["data_source"] = source_list
+      yield packed_inputs

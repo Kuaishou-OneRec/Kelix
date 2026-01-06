@@ -98,11 +98,6 @@ class KeyeImageTokenizer(Model):
                 for i in range(config.n_q_tokens)
             ]
         )
-        self.up_projectors = nn.ModuleList(
-            [nn.Linear(config.embedding_dim // config.n_q_tokens \
-                if config.split_dim else config.embedding_dim,
-                config.output_dim, bias=False) for _ in range(self.n_q_tokens)])
-
 
     def get_image_embeds(
         self,
@@ -178,6 +173,7 @@ class KeyeImageTokenizer(Model):
         codebook_loss = [v["codebook_loss"] for v in vq_outputs]
         commitment_loss = [v["commitment_loss"] for v in vq_outputs]
         indices = [v["indices"] for v in vq_outputs]
+
         token_embeds = torch.stack([self.up_projectors[i](x_i) \
             for i, x_i in enumerate(z_q)], dim=1)
 
@@ -186,7 +182,8 @@ class KeyeImageTokenizer(Model):
         elif self.config.fusion_type == "sum":
             token_embeds = torch.sum(token_embeds, dim=1)
         else:
-            raise ValueError(f"Invalid embedding reduction: {embedding_reduction}")
+            raise ValueError(f"Invalid embedding reduction: {self.config.fusion_type}")
+
 
         return {
             "z_q": z_q,
@@ -195,7 +192,6 @@ class KeyeImageTokenizer(Model):
             "commitment_loss": commitment_loss,
             "indices": indices,
             "x": image_embeds,
-            "token_embeds": token_embeds,
         }
     
     def forward_indices(self, indices):
@@ -214,7 +210,7 @@ class KeyeImageTokenizer(Model):
         elif self.config.fusion_type == "sum":
             token_embeds = torch.sum(token_embeds, dim=1)
         else:
-            raise ValueError(f"Invalid embedding reduction: {embedding_reduction}")
+            raise ValueError(f"Invalid embedding reduction: {self.config.fusion_type}")
 
         return token_embeds
 

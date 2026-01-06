@@ -1584,6 +1584,10 @@ _DEBUG_ROPE_OUTPUTS = {
     "sin_before_chunk": None,
     "cos_after_chunk": None,
     "sin_after_chunk": None,
+    "maosiyang:q_before_rope": None,
+    "maosiyang:k_before_rope": None,
+    "maosiyang:q_after_rope": None,
+    "maosiyang:k_after_rope": None,
 }
 
 # Separate storage for VIT RoPE debugging (to avoid being overwritten by LLM RoPE)
@@ -1948,6 +1952,9 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     # Debug: store raw cos/sin before split
     _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+    _DEBUG_ROPE_OUTPUTS['mrope_section'] = torch.tensor(
+            mrope_section, device=q.device
+        )
 
     mrope_section = mrope_section * 2
     cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
@@ -1961,9 +1968,26 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
 
+    # maosiyang: store q/k before RoPE (only Layer 0, i.e., first call)
+    # Use a counter to track calls
+    if not hasattr(apply_multimodal_rotary_pos_emb, '_call_count'):
+        apply_multimodal_rotary_pos_emb._call_count = 0
+    
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
+    
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    # Debug: store outputs
+    
+    # maosiyang: store q/k after RoPE (only Layer 0)
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
+    
+    apply_multimodal_rotary_pos_emb._call_count += 1
+    
+    # Debug: store outputs (legacy)
     _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
     _DEBUG_ROPE_OUTPUTS["k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
@@ -1992,8 +2016,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
 
 
@@ -2269,6 +2298,15 @@ class KeyeFlashAttention2(KeyeAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        # Debug: store attention inputs for Layer 0 only
+        if not hasattr(KeyeFlashAttention2, "_debug_attn_call_count"):
+            KeyeFlashAttention2._debug_attn_call_count = 0
+        is_first_call = KeyeFlashAttention2._debug_attn_call_count == 0
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["q_before_attn"] = query_states.detach()
+            _DEBUG_ROPE_OUTPUTS["k_before_attn"] = key_states.detach()
+            _DEBUG_ROPE_OUTPUTS["v_before_attn"] = value_states.detach()
+
         if (
             sliding_window == -1
             and self.config.use_sliding_window
@@ -2308,6 +2346,12 @@ class KeyeFlashAttention2(KeyeAttention):
                     causal=self.is_causal
                 )
             else:
+                # Debug: print attention parameters
+                if is_first_call:
+                    print(f"[Origin] attn params: is_causal={self.is_causal}, dropout={dropout_rate}, sliding_window={sliding_window}")
+                    print(f"[Origin] q shape: {query_states.shape}, k shape: {key_states.shape}, v shape: {value_states.shape}")
+                    print(f"[Origin] attention_mask: {attention_mask}, use_top_left_mask: {self._flash_attn_uses_top_left_mask}")
+                
                 attn_output = _flash_attention_forward(
                     query_states,
                     key_states,
@@ -2320,9 +2364,23 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
+        # Debug: output after attention function (raw)
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_raw"] = attn_output.detach().clone()
+
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
+        # Debug: output after reshape
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_reshaped"] = attn_output.detach().clone()
+
         attn_output = self.o_proj(attn_output)
+        
+        # Debug: output after o_proj
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_proj"] = attn_output.detach().clone()
+        
+        KeyeFlashAttention2._debug_attn_call_count += 1
 
         if not output_attentions:
             attn_weights = None
