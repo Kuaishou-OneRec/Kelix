@@ -135,7 +135,7 @@ def get_model_embedding_and_tokens(
         kwargs["tokens"] = input_ids
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
-        return embeddings, embeddings
+        return input_ids, embeddings
     else:
         if "input_pos" in kwargs:
             del kwargs["input_pos"]
