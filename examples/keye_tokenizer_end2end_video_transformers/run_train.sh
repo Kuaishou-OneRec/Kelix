@@ -134,6 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --context-parallel-size 1 \
                 --use-flash-attention-2 \
                 --fp32-weight \
+                --clip-range 0 \
                 --freeze_navit \
                 --freeze_llm \
                 --freeze_navit_mlp_ar \
