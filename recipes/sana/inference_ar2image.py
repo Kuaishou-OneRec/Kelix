@@ -523,7 +523,8 @@ def main():
                 cond_pos_scale=args.cond_pos_scale)
             
             model_kwargs={
-                **pos_args
+                **pos_args,
+                "is_y_connected": True,
             }
             
             for t in scheduler.timesteps:
