@@ -447,7 +447,17 @@ def main():
                 input_ids=loaded.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
+
             )
+            print(cond_embeds.shape, cond_mask.shape)
+            torch.save(
+                {
+                    "cond_embeds": cond_embeds,
+                    "cond_mask": cond_mask,
+                },
+                "for_new_compare.pt"
+            ); exit()
+            cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
 
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding

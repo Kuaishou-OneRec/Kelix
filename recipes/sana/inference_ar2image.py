@@ -148,13 +148,26 @@ def get_model_embedding_and_tokens(
         input_ids: Optional[torch.Tensor] = None,
         **kwargs
     ):
+    """获取模型嵌入和token。
+    
+    Args:
+        model: KeyeAR模型实例
+        teacher_forcing: 是否使用teacher forcing模式
+        input_ids: 输入token ID张量
+        **kwargs: 其他模型参数
+    
+    Returns:
+        tuple: (tokens, embeddings) - token序列和对应的嵌入表示
+    """
     if teacher_forcing:
+        # Teacher forcing模式：直接使用输入token
         kwargs["tokens"] = input_ids
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         model.set_output_hidden_states([len(model.model.model.layers)])
         return input_ids, embeddings
     else:
+        # 自回归生成模式：移除不需要的参数
         if "input_pos" in kwargs:
             del kwargs["input_pos"]
         if "pixel_values" in kwargs:
@@ -165,6 +178,7 @@ def get_model_embedding_and_tokens(
 
         model.set_output_hidden_states([len(model.model.model.layers)])
         try:
+            # 生成token和嵌入
             tokens, embeddings = model.generate(
                 input_ids=input_ids,
                 top_k=1,
