@@ -472,8 +472,8 @@ def get_argument_parser():
     parser.add_argument("--beta2", type=float, default=0.95,
                         help="beta2 for Adam Optimizer")
     
-    parser.add_argument("--clip-range", type=float, default=1.0,
-                        help="The gradient clip range.")
+    parser.add_argument("--clip-range", type=float, default=None,
+                        help="The gradient clip range. None means no clipping.")
 
     ############ Training Args ############
 
