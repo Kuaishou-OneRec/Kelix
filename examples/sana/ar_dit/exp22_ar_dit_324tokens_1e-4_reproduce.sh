@@ -160,7 +160,7 @@ nohup mpirun --allow-run-as-root \
                 --model-config-overrides model_max_length=324 \
                 --save-checkpoint-per-step 4000 \
                 --logging-per-step 20 \
-                --clip-range 1 \
+                --clip-range 9999999 \
                 --fp32-weight \
                 --fp32-reduce \
                 --seed 19260817 \
