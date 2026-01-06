@@ -141,7 +141,6 @@ nohup mpirun --allow-run-as-root \
                 --codebook_loss_weight 1.0 \
                 --commitment_loss_weight 0.25 \
                 --seed 19260817 \
-                --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --comment '$comment' \
                 --monitor_datasource_loss \
