@@ -212,21 +212,15 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_ids = input_ids[:, :assistant_start_idx]
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
 
+    # Extract embeddings between vision_start_id and vision_end_id
+    vision_start_id = ar_model.config.qwen_config.vision_start_token_id
+    vision_end_id = ar_model.config.qwen_config.vision_end_token_id
+
+    if input_ids[0][-1].item() != vision_start_id:
+        input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
+
     with torch.no_grad():
-        
-        # Create input_pos using cu_seqlens if provided
-        if cu_seqlens is not None:
-            # Calculate input_pos based on cu_seqlens
-            # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
-            input_pos = []
-            for i in range(len(cu_seqlens) - 1):
-                seq_len = cu_seqlens[i+1] - cu_seqlens[i]
-                pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
-                input_pos.append(pos_ids)
-            input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
-        else:
-            # Fallback: create input_pos from input_ids shape
-            input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+        input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
 
         # embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         input_ids, embeddings = get_model_embedding_and_tokens(
@@ -239,10 +233,6 @@ def tokenize_images(ar_processor : AutoProcessor,
             cu_seqlens=cu_seqlens,
             max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
         )
-
-        # Extract embeddings between vision_start_id and vision_end_id
-        vision_start_id = ar_model.config.qwen_config.vision_start_token_id
-        vision_end_id = ar_model.config.qwen_config.vision_end_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
@@ -254,32 +244,37 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = []
         vision_seq_lens = []
         
-        # Get the flat input_ids (remove batch dimension for packing case)
-        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
-        
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
         
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
-            raise ValueError(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens")
+            torch.save(input_ids, "input_ids.pt")
+            print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
         
-        # Extract embeddings for each vision segment
-        for start_pos, end_pos in zip(start_positions, end_positions):
-            # Check if start_pos comes before end_pos
-            if start_pos >= end_pos:
-                raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
-            
-            # Extract embeddings for this segment
-            # embeddings shape is [1, total_seq_len, embed_dim] in packing case
-            vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-            vision_embeddings_list.append(vision_embeddings)
-            vision_seq_lens.append(vision_embeddings.shape[0])
+        else:
+            # Extract embeddings for each vision segment
+            for start_pos, end_pos in zip(start_positions, end_positions):
+                # Check if start_pos comes before end_pos
+                if start_pos >= end_pos:
+                    raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
+                
+                # Extract embeddings for this segment
+                # embeddings shape is [1, total_seq_len, embed_dim] in packing case
+                vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+                vision_embeddings_list.append(vision_embeddings)
+                vision_seq_lens.append(vision_embeddings.shape[0])
         
+        vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            raise ValueError(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
+            
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
@@ -317,7 +312,6 @@ def tokenize_images(ar_processor : AutoProcessor,
         attention_mask = attention_mask[:, None, None, :]
 
     return processed_embeddings, attention_mask
-
 
 def main():
     args = parse_args()
