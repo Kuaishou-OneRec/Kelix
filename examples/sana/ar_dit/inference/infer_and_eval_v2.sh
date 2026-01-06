@@ -1,6 +1,7 @@
 
 MODEL_DIR=/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/DiTSFT/batch6_324_1024_more_data/global_step80000/muse_converted/
-MODEL_DIR=${MODEL_DIR} bash examples/sana/ar_dit/inference/mpi_infer_custom_v2.sh
+DATASET_CONFIG=examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json
+MODEL_DIR=${MODEL_DIR} DATASET_CONFIG=${DATASET_CONFIG}  bash examples/sana/ar_dit/inference/mpi_infer_custom_v2.sh
 work_dir=${MODEL_DIR}/inference/GenEval/outputs/ulmeval/aggresults/
 source /mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate 
 conda activate ulmevalkit2
