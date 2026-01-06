@@ -16,5 +16,6 @@ run_eval_only.py \
 --cfg-scale 2.0 \
 --work-dir $work_dir \
 --linspace-sigmas \
+--num-sampling-steps 50 \
 > ${work_dir}/eval_${cf}.out 2>&1
 
