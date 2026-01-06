@@ -484,7 +484,7 @@ def main():
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
             )
-
+            cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding
             seq_len = min(null_embed.shape[0], args.max_condition_length)
