@@ -696,9 +696,7 @@ class CaptionEmbedder(nn.Module):
         self.y_embedding_init_method = y_embedding_init_method
         assert y_embedding_init_method in ["randn", "zeros"]
         y_embedding = nn.Parameter(torch.randn(token_num, in_channels) / in_channels ** 0.5) if y_embedding_init_method == "randn" else nn.Parameter(torch.zeros(token_num, in_channels))
-        
-        print(f"y_embedding_init_method={y_embedding_init_method}")
-        
+                
         self.register_buffer(
             "y_embedding",
             y_embedding
