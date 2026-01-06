@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # Model and output directories - modify as needed
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo_single/MuseV2_new/video/stage1_debug
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo_singlev2/MuseV2/video/stage1
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 KAI_FLAG_FILE=msy
@@ -125,7 +125,7 @@ nohup mpirun --allow-run-as-root \
                 --beta2 0.95 \
                 --max-length 15000 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 1 \
+                --num-warmup-steps 1000 \
                 --logging_per_step 20 \
                 --num-training-steps 2500000 \
                 --save-checkpoint-per-step 1000 \
