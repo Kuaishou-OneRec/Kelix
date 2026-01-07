@@ -651,7 +651,9 @@ def main():
         columns = [
             "index", "tag", "include_class", "include_count", 
             "include_color", "include_position", "exclude_class", 
-            "exclude_count", "question", "prediction"
+            "exclude_count", "question", "questions", "text",
+            "item_id", "discipline", "explanation", "prompt"
+            "prediction", 
         ]
         df = pd.DataFrame(columns=columns)
         
@@ -683,6 +685,12 @@ def main():
                     "exclude_class": metadata.get('exclude_class', ''),
                     "exclude_count": metadata.get('exclude_count', 0),
                     "question": metadata.get('question', ''),
+                    "questions": metadata.get('questions', ''),
+                    "text": metadata.get('text', ''),
+                    "item_id": metadata.get('item_id', ''),
+                    "discipline": metadata.get('discipline', ''),
+                    "explanation": metadata.get('explanation', ''),
+                    "prompt": metadata.get('prompt', ''),
                     "prediction": prediction_images  # Keep as original PIL Image list
                 }
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
