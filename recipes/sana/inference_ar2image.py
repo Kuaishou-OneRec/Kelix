@@ -119,7 +119,16 @@ def parse_args():
                         help="Eval ID for GenEval results")
     parser.add_argument("--linspace-sigmas", action="store_true",
                         help="Use linspace sigmas for scheduler")
+    parser.add_argument("--benchname", type=str, default="GenEval",
+                        help="Benchmark name for result aggregation, GenEval|WISE_all|DPGBench")
     return parser.parse_args()
+
+
+BENCHNAME2CSV_MAP = {
+    "GenEval": "/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
+    "WISE_all": "/mmu_mllm_hdd_2/zangdunju/analysis/WISE/WISE_all.tsv",
+    "DPGBench": "/mmu_mllm_hdd_2/zangdunju/analysis/DPGBench/DPG_Bench.tsv",
+}
 
 
 def setup_distributed_environment() -> bool:
@@ -479,6 +488,11 @@ def main():
     dataset_cfg['max_condition_length'] = args.max_condition_length
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
 
+    benchmark_csv_path = BENCHNAME2CSV_MAP.get(args.benchname, None)
+    if benchmark_csv_path is not None:
+        dataset_cfg["gen_eval_csv_path"] = benchmark_csv_path
+        print(f"Using benchmark CSV: {benchmark_csv_path}")
+
     dataset = GenEvalInferenceDataset(
         # processor_path=args.keye_ar_dir, 
         **dataset_cfg
@@ -610,7 +624,7 @@ def main():
                 samples_dict[sample_index] = sample_data
 
     # Save results in the required format after all inference is done
-    print("Saving GenEval results...")
+    print(f"Saving {args.benchname} results...")
     ulmeval_dir = os.path.join(args.output_dir, 'ulmeval', "subresults")
     ulmeval_agg_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults")
     os.makedirs(ulmeval_dir, exist_ok=True)
@@ -620,13 +634,13 @@ def main():
     rank = torch.distributed.get_rank()
 
     # Save images as pickle file
-    images_filename = f"{rank}{world_size}_GenEval.pkl"
+    images_filename = f"{rank}{world_size}_{args.benchname}.pkl"
     images_filepath = os.path.join(ulmeval_dir, images_filename)
     with open(images_filepath, 'wb') as f:
         pickle.dump(images_dict, f)
     
     # Save samples as json file
-    samples_filename = f"{rank}{world_size}_GenEval.json"
+    samples_filename = f"{rank}{world_size}_{args.benchname}.json"
     samples_filepath = os.path.join(ulmeval_dir, samples_filename)
     with open(samples_filepath, 'w', encoding='utf-8') as f:
         json.dump(samples_dict, f, ensure_ascii=False, indent=2)
@@ -644,8 +658,8 @@ def main():
         os.makedirs(agg_output_dir, exist_ok=True)
         
         # Find all JSON and PKL files in subresults
-        json_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.json"))
-        pkl_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.pkl"))
+        json_files = glob.glob(os.path.join(ulmeval_dir, f"*{args.benchname}.json"))
+        pkl_files = glob.glob(os.path.join(ulmeval_dir, f"*{args.benchname}.pkl"))
         
         # Initialize DataFrame with the required columns
         columns = [
@@ -697,7 +711,7 @@ def main():
         
         # Sort by index and save to pickle
         if 'index' in df: df = df.sort_values('index').reset_index(drop=True)
-        output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_GenEval.pkl")
+        output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 
@@ -732,7 +746,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
         os.makedirs(tf_eval_dir, exist_ok=True)
         
         # CSV file to store all scores (overwrite existing)
-        csv_file = os.path.join(dcp_ckpt_dir, "gen_eval_scores.csv")
+        csv_file = os.path.join(dcp_ckpt_dir, f"{args.benchname}_scores.csv")
         
         # TensorBoard writer
         tb_writer = SummaryWriter(log_dir=tf_eval_dir)
@@ -781,7 +795,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
                     
                     if all_score is not None:
                         scores_data.append((step, all_score))
-                        tb_writer.add_scalar('GenEval/Overall_Score', all_score, step)
+                        tb_writer.add_scalar(f'{args.benchname}/Overall_Score', all_score, step)
                         print(f"Step {step}: Overall Score = {all_score}")
                     else:
                         print(f"Could not parse overall score from {score_file}")
@@ -799,7 +813,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 # First row: benchmark names
-                writer.writerow(['Step', 'GenEval'])
+                writer.writerow(['Step', f'{args.benchname}'])
                 
                 # Subsequent rows: step and scores
                 for step, score in scores_data:
