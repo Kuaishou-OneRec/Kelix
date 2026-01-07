@@ -134,6 +134,11 @@ BENCHNAME2PROMPT_KEY_MAP = {
     "WISE_all": "prompt",
     "DPGBench": "text",
 }
+BENCHNAME2INFER_REPEATS_MAP = {
+    "GenEval": 4,
+    "WISE_all": 1,
+    "DPGBench": 4,
+}
 
 
 def setup_distributed_environment() -> bool:
@@ -501,6 +506,7 @@ def main():
     if benchmark_csv_path is not None:
         dataset_cfg["gen_eval_csv_path"] = benchmark_csv_path
         dataset_cfg["prompt_key"] = BENCHNAME2PROMPT_KEY_MAP[args.benchname]
+        dataset_cfg["infer_repeats"] = BENCHNAME2INFER_REPEATS_MAP[args.benchname]
         print(f"Using benchmark CSV: {benchmark_csv_path}")
 
     dataset = GenEvalInferenceDataset(
