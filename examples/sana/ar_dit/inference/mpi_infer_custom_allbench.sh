@@ -56,7 +56,6 @@ echo "  VAE_DIR: $VAE_DIR"
 echo "  KEYE_AR_DIR: $KEYE_AR_DIR"
 echo "  DCP_CKPT_DIR: $DCP_CKPT_DIR"
 echo "  DCP_TAG: $DCP_TAG"
-echo "  OUTPUT_DIR: $OUTPUT_DIR"
 echo "  MODEL_CONFIG_OVERRIDES: $MODEL_CONFIG_OVERRIDES"
 
 # Prepare model config overrides flag
@@ -83,6 +82,7 @@ else
     OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/WISE_all/outputs}"      
 fi
 
+echo "  OUTPUT_DIR: $OUTPUT_DIR"
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${RESULTS_DIR}"
 
@@ -203,6 +203,7 @@ if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
 else
     OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/DPGBench/outputs}"      
 fi
+echo "  OUTPUT_DIR: $OUTPUT_DIR"
 
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${RESULTS_DIR}"
