@@ -1414,7 +1414,10 @@ def train():
 
             # Logging
             if scheduler.should_logging():
-                metrics.write_logs(scheduler.global_step)
+                try:
+                    metrics.write_logs(scheduler.global_step)
+                except Exception as e:
+                    print(f"Logging failed: {e}")
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
