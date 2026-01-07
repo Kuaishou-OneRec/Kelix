@@ -199,9 +199,11 @@ mpirun --allow-run-as-root \
 
 # Determine OUTPUT_DIR based on DCP parameters
 if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
-    OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/DPGBench/outputs}"
+    #OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/DPGBench/outputs}"
+    OUTPUT_DIR=$DCP_CKPT_DIR/$DCP_TAG/inference/DPGBench/outputs
 else
-    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/DPGBench/outputs}"      
+    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/DPGBench/outputs}"    
+    OUTPUT_DIR=${MODEL_DIR}/inference/DPGBench/outputs}
 fi
 echo "  OUTPUT_DIR: $OUTPUT_DIR"
 

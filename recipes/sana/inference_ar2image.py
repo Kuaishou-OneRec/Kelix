@@ -296,7 +296,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
+            max_new_tokens=max_condition_length*2+10, # space,vis_start,vis_tok,vis_end,eos
         )
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
