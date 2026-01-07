@@ -449,7 +449,7 @@ def tokenize_images(tokenizer,
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
         vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
-        image_token_id = image_tokenizer.config.qwen_config.image_token_id
+        image_token_id = tokenizer.config.qwen_config.image_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
