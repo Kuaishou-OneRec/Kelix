@@ -273,7 +273,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     # Extract embeddings between vision_start_id and vision_end_id
     vision_start_id = ar_model.config.qwen_config.vision_start_token_id
     vision_end_id = ar_model.config.qwen_config.vision_end_token_id
-    image_token_id = tokenizer.config.qwen_config.image_token_id
+    image_token_id = ar_model.config.qwen_config.image_token_id
 
     if input_ids[0][-1].item() != vision_start_id:
         input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
