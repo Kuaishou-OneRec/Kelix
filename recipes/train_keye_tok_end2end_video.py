@@ -997,13 +997,6 @@ def train():
     batch_data_source_loss = collections.defaultdict(float)
     batch_data_source_tokens = collections.defaultdict(int)
     
-    # Initialize cumulative counters (与 end2end 对齐)
-    total_num_tokens = 0
-    total_num_samples = 0
-    total_num_valid_tokens = 0
-    total_num_image_tokens = 0
-    total_num_video_tokens = 0
-    
     # Initialize time trackers (仿照 end2end 版本)
     ticker = TimeTracker(n=args.logging_per_step)
     iter_ticker = TimeTracker(n=args.logging_per_step)
@@ -1072,35 +1065,8 @@ def train():
                 # 考虑 CP 和 Packing 的逻辑样本数
                 logical_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
                 metrics.append("samples", logical_samples)
-                num_samples = logical_samples
             else:
-                num_samples = input_ids.shape[0] / get_context_parallel_world_size()
-                metrics.append("samples", num_samples)
-            
-            # 计算 valid tokens（与 end2end 对齐）
-            if loss_mask is not None:
-                num_valid_tokens = (loss_mask > 0).sum().item() / get_context_parallel_world_size()
-            else:
-                num_valid_tokens = num_tokens
-            
-            # 计算 image tokens 和 video tokens
-            if pixel_values is not None and image_grid_thw is not None:
-                num_image_tokens = image_grid_thw.prod(dim=1).sum().item()
-            else:
-                num_image_tokens = 0
-            
-            if pixel_values_videos is not None and video_grid_thw is not None:
-                num_video_tokens = video_grid_thw.prod(dim=1).sum().item()
-            else:
-                num_video_tokens = 0
-            
-            # 累加 token 和 sample 计数（与 end2end 对齐）
-            total_num_tokens += num_tokens
-            total_num_samples += num_samples
-            total_num_valid_tokens += num_valid_tokens
-            total_num_image_tokens += num_image_tokens
-            total_num_video_tokens += num_video_tokens
-            
+                metrics.append("samples", input_ids.shape[0] / get_context_parallel_world_size())
             ticker.tick("token_metrics_init")
 
             # ================================================ Forward pass ================================================
@@ -1347,19 +1313,6 @@ def train():
                 if dist.get_rank() == 0 and tb_writer is not None:
                     for name, data in ticker_stats.items():
                         tb_writer.add_scalar(f"ticker/{name}", data, global_step=scheduler.global_step, new_style=True)
-                    
-                    # 写入累计指标到 TensorBoard（与 end2end 对齐）
-                    tb_writer.add_scalar("perf/total_num_tokens", total_num_tokens, global_step=scheduler.global_step, new_style=True)
-                    tb_writer.add_scalar("perf/total_num_samples", total_num_samples, global_step=scheduler.global_step, new_style=True)
-                    tb_writer.add_scalar("perf/valid_total_num_tokens", total_num_valid_tokens, global_step=scheduler.global_step, new_style=True)
-                    tb_writer.add_scalar("perf/total_num_image_tokens", total_num_image_tokens, global_step=scheduler.global_step, new_style=True)
-                    tb_writer.add_scalar("perf/total_num_video_tokens", total_num_video_tokens, global_step=scheduler.global_step, new_style=True)
-                    tb_writer.add_scalar("perf/num_sample_per_gpu", total_num_samples / dist.get_world_size(), global_step=scheduler.global_step, new_style=True)
-                    if total_num_tokens > 0:
-                        tb_writer.add_scalar("perf/valid_token_ratio", total_num_valid_tokens / total_num_tokens, global_step=scheduler.global_step, new_style=True)
-                    if total_num_samples > 0:
-                        tb_writer.add_scalar("perf/image_token_per_sample", total_num_image_tokens / total_num_samples, global_step=scheduler.global_step, new_style=True)
-                        tb_writer.add_scalar("perf/video_token_per_sample", total_num_video_tokens / total_num_samples, global_step=scheduler.global_step, new_style=True)
                 
                 # 打印 ticker 统计信息
                 print_rank_0(f"Step: {scheduler.global_step}, ticker_stats: {ticker_stats}")
