@@ -22,6 +22,12 @@ DATASET_CONFIG="examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json"
 DATASET_CONFIG="examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json"
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_v2.sh"
 
+
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs/"
+DATASET_CONFIG="examples/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs_inf.jsonn"
+INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_v2.sh"
+
 log_file=${DCP_CKPT_DIR}/auto_monitor.log
 echo "log_file=${log_file}"
 
