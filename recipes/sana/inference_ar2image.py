@@ -315,8 +315,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
             vision_embeddings = embeddings[0, -max_condition_length:, :]
             vision_ids = flat_input_ids[start_pos:end_pos+1]
-            vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
-
+            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
         else:
