@@ -78,21 +78,193 @@ def save_tensor_summary(tensor, name, summary_dict):
         summary_dict[f"{name}_all"] = flat_all[:100000].tolist()
 
 
-def save_gradients(model, summary_dict, prefix="grad"):
-    """保存模型中所有参数的梯度"""
+def convert_msy_to_end2end_name(msy_name: str) -> str:
+    """将 msy_master_2 的参数名转换为 end2end 的格式"""
+    import re
+    
+    # ============ LLM 部分 ============
+    # model.model.tok_embeddings.weight -> model.embed_tokens.weight
+    if msy_name == "model.model.tok_embeddings.weight":
+        return "model.embed_tokens.weight"
+    
+    # model.model.norm.scale -> model.norm.weight
+    if msy_name == "model.model.norm.scale":
+        return "model.norm.weight"
+    
+    # model.model.output.weight -> lm_head.weight
+    if msy_name == "model.model.output.weight":
+        return "lm_head.weight"
+    
+    # model.model.layers.{i}.* -> model.layers.{i}.*
+    match = re.match(r"model\.model\.layers\.(\d+)\.(.*)", msy_name)
+    if match:
+        layer_idx = match.group(1)
+        rest = match.group(2)
+        
+        # attn.output_proj -> self_attn.o_proj
+        rest = rest.replace("attn.output_proj", "self_attn.o_proj")
+        # attn.* -> self_attn.*
+        rest = rest.replace("attn.", "self_attn.")
+        # q_norm.scale -> q_norm.weight
+        rest = rest.replace("q_norm.scale", "q_norm.weight")
+        rest = rest.replace("k_norm.scale", "k_norm.weight")
+        # mlp.w1 -> mlp.gate_proj
+        rest = rest.replace("mlp.w1.", "mlp.gate_proj.")
+        # mlp.w3 -> mlp.up_proj  
+        rest = rest.replace("mlp.w3.", "mlp.up_proj.")
+        # mlp.w2 -> mlp.down_proj
+        rest = rest.replace("mlp.w2.", "mlp.down_proj.")
+        # sa_norm.scale -> input_layernorm.weight
+        rest = rest.replace("sa_norm.scale", "input_layernorm.weight")
+        # mlp_norm.scale -> post_attention_layernorm.weight
+        rest = rest.replace("mlp_norm.scale", "post_attention_layernorm.weight")
+        
+        return f"model.layers.{layer_idx}.{rest}"
+    
+    # ============ Visual Tokenizer 部分 ============
+    # visual_tokenizer.visual.ln_post.* -> visual_tokenizer.visual.vision_model.post_layernorm.*
+    if msy_name.startswith("visual_tokenizer.visual.ln_post."):
+        suffix = msy_name.replace("visual_tokenizer.visual.ln_post.", "")
+        return f"visual_tokenizer.visual.vision_model.post_layernorm.{suffix}"
+    
+    # visual_tokenizer.visual.embeddings.* -> visual_tokenizer.visual.vision_model.embeddings.*
+    if msy_name.startswith("visual_tokenizer.visual.embeddings."):
+        suffix = msy_name.replace("visual_tokenizer.visual.embeddings.", "")
+        return f"visual_tokenizer.visual.vision_model.embeddings.{suffix}"
+    
+    # visual_tokenizer.visual.encoder.layers.{i}.* 
+    match = re.match(r"visual_tokenizer\.visual\.encoder\.layers\.(\d+)\.(.*)", msy_name)
+    if match:
+        layer_idx = match.group(1)
+        rest = match.group(2)
+        
+        # sa_norm.* -> layer_norm1.*
+        rest = rest.replace("sa_norm.", "layer_norm1.")
+        # mlp_norm.* -> layer_norm2.*
+        rest = rest.replace("mlp_norm.", "layer_norm2.")
+        # attn.output_proj -> self_attn.out_proj
+        rest = rest.replace("attn.output_proj", "self_attn.out_proj")
+        # attn.* -> self_attn.*
+        rest = rest.replace("attn.", "self_attn.")
+        # mlp.w1 -> mlp.fc1
+        rest = rest.replace("mlp.w1", "mlp.fc1")
+        # mlp.w2 -> mlp.fc2
+        rest = rest.replace("mlp.w2", "mlp.fc2")
+        
+        return f"visual_tokenizer.visual.vision_model.encoder.layers.{layer_idx}.{rest}"
+    
+    # 其他保持不变 (visual_tokenizer.mlp_AR.*, visual_tokenizer.encoder.*, quant_projector.*, etc.)
+    return msy_name
+
+
+def convert_end2end_to_msy_name(e2e_name: str) -> str:
+    """将 end2end 的参数名转换为 msy_master_2 的格式（反向转换）"""
+    import re
+    
+    # ============ LLM 部分 ============
+    if e2e_name == "model.embed_tokens.weight":
+        return "model.model.tok_embeddings.weight"
+    
+    if e2e_name == "model.norm.weight":
+        return "model.model.norm.scale"
+    
+    if e2e_name == "lm_head.weight":
+        return "model.model.output.weight"
+    
+    # model.layers.{i}.* -> model.model.layers.{i}.*
+    match = re.match(r"model\.layers\.(\d+)\.(.*)", e2e_name)
+    if match:
+        layer_idx = match.group(1)
+        rest = match.group(2)
+        
+        # self_attn.o_proj -> attn.output_proj
+        rest = rest.replace("self_attn.o_proj", "attn.output_proj")
+        # self_attn.* -> attn.*
+        rest = rest.replace("self_attn.", "attn.")
+        # q_norm.weight -> q_norm.scale
+        rest = rest.replace("q_norm.weight", "q_norm.scale")
+        rest = rest.replace("k_norm.weight", "k_norm.scale")
+        # mlp.gate_proj -> mlp.w1
+        rest = rest.replace("mlp.gate_proj.", "mlp.w1.")
+        # mlp.up_proj -> mlp.w3
+        rest = rest.replace("mlp.up_proj.", "mlp.w3.")
+        # mlp.down_proj -> mlp.w2
+        rest = rest.replace("mlp.down_proj.", "mlp.w2.")
+        # input_layernorm.weight -> sa_norm.scale
+        rest = rest.replace("input_layernorm.weight", "sa_norm.scale")
+        # post_attention_layernorm.weight -> mlp_norm.scale
+        rest = rest.replace("post_attention_layernorm.weight", "mlp_norm.scale")
+        
+        return f"model.model.layers.{layer_idx}.{rest}"
+    
+    # ============ Visual Tokenizer 部分 ============
+    if e2e_name.startswith("visual_tokenizer.visual.vision_model.post_layernorm."):
+        suffix = e2e_name.replace("visual_tokenizer.visual.vision_model.post_layernorm.", "")
+        return f"visual_tokenizer.visual.ln_post.{suffix}"
+    
+    if e2e_name.startswith("visual_tokenizer.visual.vision_model.embeddings."):
+        suffix = e2e_name.replace("visual_tokenizer.visual.vision_model.embeddings.", "")
+        return f"visual_tokenizer.visual.embeddings.{suffix}"
+    
+    match = re.match(r"visual_tokenizer\.visual\.vision_model\.encoder\.layers\.(\d+)\.(.*)", e2e_name)
+    if match:
+        layer_idx = match.group(1)
+        rest = match.group(2)
+        
+        # layer_norm1.* -> sa_norm.*
+        rest = rest.replace("layer_norm1.", "sa_norm.")
+        # layer_norm2.* -> mlp_norm.*
+        rest = rest.replace("layer_norm2.", "mlp_norm.")
+        # self_attn.out_proj -> attn.output_proj
+        rest = rest.replace("self_attn.out_proj", "attn.output_proj")
+        # self_attn.* -> attn.*
+        rest = rest.replace("self_attn.", "attn.")
+        # mlp.fc1 -> mlp.w1
+        rest = rest.replace("mlp.fc1", "mlp.w1")
+        # mlp.fc2 -> mlp.w2
+        rest = rest.replace("mlp.fc2", "mlp.w2")
+        
+        return f"visual_tokenizer.visual.encoder.layers.{layer_idx}.{rest}"
+    
+    return e2e_name
+
+
+def save_gradients(model, summary_dict, prefix="grad", convert_names=False, is_msy=False):
+    """保存模型中所有参数的梯度
+    
+    Args:
+        model: 模型
+        summary_dict: 保存结果的字典
+        prefix: 键前缀
+        convert_names: 是否转换参数名
+        is_msy: 如果 convert_names=True，是否是 msy_master_2 模型（需要转换为 end2end 格式）
+    """
     grad_info = {}
     for name, param in model.named_parameters():
         if param.grad is not None:
+            # 根据需要转换参数名
+            if convert_names:
+                if is_msy:
+                    converted_name = convert_msy_to_end2end_name(name)
+                else:
+                    converted_name = name
+            else:
+                converted_name = name
+            
             grad = param.grad.detach().cpu().float()
-            grad_info[f"{prefix}/{name}_shape"] = list(grad.shape)
-            grad_info[f"{prefix}/{name}_sum"] = float(grad.sum().item())
-            grad_info[f"{prefix}/{name}_mean"] = float(grad.mean().item())
-            grad_info[f"{prefix}/{name}_max"] = float(grad.max().item())
-            grad_info[f"{prefix}/{name}_min"] = float(grad.min().item())
-            grad_info[f"{prefix}/{name}_std"] = float(grad.std().item())
-            grad_info[f"{prefix}/{name}_norm"] = float(grad.norm().item())
+            grad_info[f"{prefix}/{converted_name}_shape"] = list(grad.shape)
+            grad_info[f"{prefix}/{converted_name}_sum"] = float(grad.sum().item())
+            grad_info[f"{prefix}/{converted_name}_mean"] = float(grad.mean().item())
+            grad_info[f"{prefix}/{converted_name}_max"] = float(grad.max().item())
+            grad_info[f"{prefix}/{converted_name}_min"] = float(grad.min().item())
+            grad_info[f"{prefix}/{converted_name}_std"] = float(grad.std().item())
+            grad_info[f"{prefix}/{converted_name}_norm"] = float(grad.norm().item())
             # 保存前100个元素
-            grad_info[f"{prefix}/{name}_first100"] = grad.flatten()[:100].tolist()
+            grad_info[f"{prefix}/{converted_name}_first100"] = grad.flatten()[:100].tolist()
+            
+            # 同时保存原始名称（用于调试）
+            if convert_names and converted_name != name:
+                grad_info[f"{prefix}/{converted_name}_original_name"] = name
     
     summary_dict["gradients"] = grad_info
     return grad_info
@@ -538,8 +710,8 @@ def run_msy_master_2():
         # 保存 per_token_loss
         save_tensor_summary(per_token_loss, "per_token_loss", summary)
         
-        # 保存梯度
-        save_gradients(model, summary)
+        # 保存梯度（转换参数名以匹配 end2end 格式）
+        save_gradients(model, summary, convert_names=True, is_msy=True)
         
         # 保存输入信息
         save_tensor_summary(batch["input_ids"], "input_ids", summary)
