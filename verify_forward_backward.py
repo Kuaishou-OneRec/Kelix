@@ -41,9 +41,15 @@ TEST_MESSAGES = [
     }
 ]
 
-# 使用相同的模型路径
-MODEL_PATH_END2END = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_video_baseline"
-MODEL_PATH_MSY_MASTER_2 = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video"
+# 使用相同的模型路径 - 两个仓库必须加载同一个 checkpoint 才能对比代码逻辑
+# 可选的 checkpoint 路径：
+# 1. "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/"
+# 2. "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_video_baseline"
+
+# 重要：两个路径必须相同才能正确对比前向/后向逻辑！
+COMMON_MODEL_PATH = "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_video_baseline"
+MODEL_PATH_END2END = COMMON_MODEL_PATH
+MODEL_PATH_MSY_MASTER_2 = COMMON_MODEL_PATH
 
 # 输出目录
 OUTPUT_DIR = "/llm_reco/maosiyang/temp"
