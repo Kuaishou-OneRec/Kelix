@@ -124,9 +124,9 @@ def run_evaluation(step_name: str) -> bool:
         f"source /mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate && "
         f"conda activate ulmevalkit2 && "
         f"cd {ulm_dir} && "
-        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)}"
+        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)} > {work_dir}/eval_${cf}.out 2>&1 &"
     ]
-    
+    print(f"Activation command: {' '.join(activation_cmd)}")
     return run_command(activation_cmd)
 
 
