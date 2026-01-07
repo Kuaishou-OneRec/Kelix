@@ -17,6 +17,7 @@ INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom.sh"
 
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp22_ar_dit_324tokens_1e-4_reproduce"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp25_ar_dit_324tokens_1e-4_reproduce_lbs_v2/"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs/"
 
 DATASET_CONFIG="examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json"
 DATASET_CONFIG="examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json"

@@ -768,7 +768,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
         tb_writer = SummaryWriter(log_dir=tf_eval_dir)
         
         # Find all score files
-        score_pattern = os.path.join(dcp_ckpt_dir, "**", f"{model_tag}_GenEval_score.csv")
+        score_pattern = os.path.join(dcp_ckpt_dir, "**", f"{model_tag}_{args.benchname}_score.csv")
         score_files = glob.glob(score_pattern, recursive=True)
         
         if not score_files:
