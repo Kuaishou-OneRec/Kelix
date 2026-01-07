@@ -274,6 +274,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     vision_start_id = ar_model.config.qwen_config.vision_start_token_id
     vision_end_id = ar_model.config.qwen_config.vision_end_token_id
     image_token_id = ar_model.config.qwen_config.image_token_id
+    voc_size = ar_model.config.qwen_config.vocab_size
 
     if input_ids[0][-1].item() != vision_start_id:
         input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
@@ -306,6 +307,12 @@ def tokenize_images(ar_processor : AutoProcessor,
         # Get the flat input_ids (remove batch dimension for packing case)
         flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
         
+        if flat_input_ids.ndim == 2:
+            is_image_id = flat_input_ids[:,0] >= voc_size
+        else:
+            is_image_id = flat_input_ids == image_token_id
+
+
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
@@ -314,9 +321,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         if len(start_positions) != len(end_positions):
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
             vision_embeddings = embeddings[0, -max_condition_length:, :]
-            vision_ids = flat_input_ids[-max_condition_length:]
-            print(f"vision_ids: {vision_ids.shape}, vision_embeddings: {vision_embeddings.shape}")
-            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
+            vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
         else:
@@ -329,8 +334,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                 # Extract embeddings for this segment
                 # embeddings shape is [1, total_seq_len, embed_dim] in packing case
                 vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-                vision_ids = flat_input_ids[start_pos:end_pos+1]
-                vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
+                vision_embeddings = vision_embeddings[is_image_id[start_pos:end_pos+1], :]  # [valid_len, embed_dim]
                 vision_embeddings_list.append(vision_embeddings)
                 vision_seq_lens.append(vision_embeddings.shape[0])
         
@@ -339,7 +343,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         if len(vision_embeddings_list) != batch_size:
             vision_embeddings = embeddings[0, -max_condition_length:, :]
             vision_ids = flat_input_ids[-max_condition_length:]
-            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
+            vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
             
