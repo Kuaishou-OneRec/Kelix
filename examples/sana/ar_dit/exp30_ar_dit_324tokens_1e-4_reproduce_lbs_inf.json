@@ -1,0 +1,15 @@
+{
+    "sources": "/mmu_mllm_hdd_2/zangdunju/index/mix_896_1024/index_v3.json",
+    "name": "Chat2ImageDataset",
+    "image_size": 1024,
+    "max_condition_length": 324,
+    "center_crop": true,
+    "packing": false,
+    "valid_hw_range": [896, 1280],
+    "multi_scale": false,
+    "force_assistant_image_size": 504,
+    "template": "Generate an image based on the given text: {}.",
+    "infer_repeats": 4,
+    "gen_eval_csv_path": "/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
+
+}

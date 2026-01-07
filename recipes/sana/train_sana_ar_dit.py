@@ -400,6 +400,7 @@ def tokenize_images(tokenizer,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     cond_embeds_op = None,
+                    keep_image_token_id_thresh: int = 999999999,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -411,6 +412,8 @@ def tokenize_images(tokenizer,
         max_condition_length: Maximum condition sequence length for padding
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
         cu_seqlens: Cumulative sequence lengths for flash attention
+        cond_embeds_op: Optional function to apply to condition embeddings
+        keep_image_token_id_thresh: Threshold for image tokens to keep, only tokens greater than this threshold will be kept
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -479,6 +482,8 @@ def tokenize_images(tokenizer,
             # Extract embeddings for this segment
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+            vision_ids = vision_embeddings[start_pos:end_pos+1]
+            vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
         
@@ -666,7 +671,8 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        cond_embeds_op=model.diffusion_connector
+        cond_embeds_op=model.diffusion_connector,
+        keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1359,6 +1365,7 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
                     # cond_embeds_op=model.diffusion_connector,
+                    keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size
                 )
             
             pos_args = compute_pos_args(
