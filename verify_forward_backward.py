@@ -548,6 +548,55 @@ def run_end2end():
         traceback.print_exc()
 
 
+def _load_config_json(ckpt_path: str) -> dict:
+    """从 checkpoint 路径加载 config.json"""
+    from pathlib import Path
+    p = Path(ckpt_path)
+    base_dir = p if p.is_dir() else p.parent
+    cfg_path = base_dir / "config.json"
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"config.json not found in {base_dir}")
+    with open(cfg_path, "r") as f:
+        return json.load(f)
+
+
+def _load_checkpoint_robust(path_str: str, device="cpu") -> dict:
+    """健壮地加载 checkpoint（支持 safetensors 和 bin 文件）"""
+    from pathlib import Path
+    import glob
+    
+    path = Path(path_str)
+    if path.is_file():
+        state_dict = torch.load(path, map_location=device)
+        return state_dict.get("module", state_dict)
+
+    state_dict = {}
+    
+    # 优先处理 safetensors 文件
+    try:
+        from safetensors.torch import load_file
+        print(f"   Loading weights from {path_str}...")
+        for f in os.listdir(path_str):
+            if f.endswith(".safetensors"):
+                state_dict.update(load_file(os.path.join(path_str, f)))
+    except ImportError:
+        pass
+
+    # 如果没有 safetensors 文件，回退到 bin 文件
+    if not state_dict:
+        bin_files = sorted(glob.glob(str(path / "*.bin")))
+        if bin_files:
+            for f in bin_files:
+                if any(x in f for x in ["training_args", "optimizer", "scheduler"]): 
+                    continue
+                part = torch.load(f, map_location=device)
+                if "module" in part: 
+                    part = part["module"]
+                state_dict.update(part)
+
+    return state_dict
+
+
 def run_msy_master_2():
     """在 msy_master_2 环境下运行前向和后向"""
     print("=" * 70)
@@ -584,48 +633,111 @@ def run_msy_master_2():
             if value is not None and hasattr(value, 'shape'):
                 print(f"   {key}: shape={value.shape}, dtype={value.dtype}")
         
-        # 加载模型 - 使用 from_pretrained 方式避免 meta tensor 问题
-        print("\n⚙️ Loading Model...")
-        from muse.models import get_model_class
-        from muse.config import load_config
+        # 加载模型 - 仿照 test_keye_vl_video_circle.py 的方式，从 config.json 构建配置
+        print("\n⚙️ Loading Model (from config.json)...")
+        from muse.models.keye_tokenizer_end2end_video import modeling as muse_mod
+        from muse.config import KeyeTokenizerEnd2EndVideoConfig, Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
         from muse.training.common import set_default_dtype
-        from muse.training.checkpoint import load_hf_checkpoint
-        from pathlib import Path
         
-        model_config_path = Path(MODEL_PATH_MSY_MASTER_2) / "muse_config.json"
-        model_config = load_config(model_config_path)
-        model_config.qwen_config.attention_function = "flash_attention_2"
+        device = "cuda"
+        dtype = torch.bfloat16
         
-        model_cls = get_model_class(model_config.model_class)
+        # 从 config.json 读取配置
+        raw_cfg = _load_config_json(MODEL_PATH_MSY_MASTER_2)
+        print(f"   Loaded config.json")
         
-        # 加载权重到 CPU
-        print("   Loading state dict...")
-        state_dict = load_hf_checkpoint(MODEL_PATH_MSY_MASTER_2)
+        # 构建 Qwen3Config
+        rope_scaling = raw_cfg.get("rope_scaling")
+        mrope_section = rope_scaling.get("mrope_section") if rope_scaling else None
         
-        # 在 CPU 上创建模型并加载权重
-        print("   Creating model on CPU...")
-        with set_default_dtype(torch.bfloat16):
-            model = model_cls(model_config)
+        qwen_cfg = Qwen3Config(
+            model_class="Qwen3Model",
+            vocab_size=raw_cfg["vocab_size"],
+            embed_dim=raw_cfg["hidden_size"],
+            num_layers=raw_cfg["num_hidden_layers"],
+            num_heads=raw_cfg["num_attention_heads"],
+            num_kv_heads=raw_cfg["num_key_value_heads"],
+            head_dim=raw_cfg["head_dim"],
+            intermediate_dim=raw_cfg["intermediate_size"],
+            max_seq_len=raw_cfg["max_position_embeddings"],
+            hidden_act=raw_cfg.get("hidden_act", "silu"),
+            attention_bias=raw_cfg.get("attention_bias", False),
+            rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
+            rope_theta=float(raw_cfg.get("rope_theta", 1_000_000)),
+            rope_scaling=rope_scaling,
+            attention_function="flash_attention_2",
+            use_sliding_window=raw_cfg.get("use_sliding_window", False),
+            sliding_window=raw_cfg.get("sliding_window"),
+            norm_eps=raw_cfg.get("norm_eps", 1e-6),
+            rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
+            tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
+            use_multimodal_rope=True,
+            mrope_section=mrope_section,
+        )
+        
+        # 构建 VisionConfig
+        outer_vcfg = raw_cfg["vision_config"]
+        inner_vcfg = outer_vcfg["vision_config"]
+        
+        vision_cfg = KeyeVisionConfig(
+            hidden_size=inner_vcfg["hidden_size"],
+            num_hidden_layers=inner_vcfg["num_hidden_layers"],
+            num_attention_heads=inner_vcfg["num_attention_heads"],
+            image_size=inner_vcfg["image_size"],
+            patch_size=inner_vcfg["patch_size"],
+            intermediate_size=inner_vcfg["intermediate_size"],
+            hidden_act=inner_vcfg.get("hidden_act", "gelu_pytorch_tanh"),
+            has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
+            attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
+            rope_theta=inner_vcfg.get("rope_theta", 10000.0),
+            use_qk_norm=inner_vcfg.get("use_qk_norm", False),
+            qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
+            attention_function="flash_attention_2",
+        )
+        vision_cfg._attn_implementation = "flash_attention_2"
+        
+        # 构建 TokenizerConfig
+        tokenizer_cfg = KeyeTokenizerConfig(
+            vision_config=vision_cfg,
+            llm_hidden_size=outer_vcfg.get("llm_hidden_size", 4096),
+            embedding_dim=outer_vcfg.get("embedding_dim", 128),
+            init_embedding_dim=outer_vcfg.get("init_embedding_dim", 4096),
+            codebook_size=outer_vcfg.get("codebook_size", 65536),
+            n_q_tokens=outer_vcfg.get("n_q_tokens", 8),
+            split_voc=outer_vcfg.get("split_voc", 1),
+            add_voc_reducer=outer_vcfg.get("add_voc_reducer", False),
+            split_dim=outer_vcfg.get("split_dim", False),
+            vq_sampling_mode="argmin",
+        )
+        
+        # 构建完整的模型配置
+        model_cfg = KeyeTokenizerEnd2EndVideoConfig(
+            qwen_config=qwen_cfg,
+            vision_config=vision_cfg,
+            tokenizer_config=tokenizer_cfg,
+            image_token_id=raw_cfg.get("image_token_id", 151655),
+            video_token_id=raw_cfg.get("video_token_id", 151656),
+            pool="sum",
+        )
+        
+        # 创建模型
+        print("   Creating model...")
+        with set_default_dtype(dtype):
+            model = muse_mod.KeyeTokenizerEnd2EndVideo(model_cfg).to(device)
         
         # 加载权重
         print("   Loading weights...")
-        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+        state_dict = _load_checkpoint_robust(MODEL_PATH_MSY_MASTER_2, device="cpu")
+        
+        # 转换权重格式
+        muse_state = model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
+        missing_keys, unexpected_keys = model.load_state_dict(muse_state, strict=False)
         if missing_keys:
-            print(f"   Warning: Missing keys: {missing_keys[:10]}..." if len(missing_keys) > 10 else f"   Warning: Missing keys: {missing_keys}")
+            print(f"   Warning: Missing keys: {len(missing_keys)} keys")
         if unexpected_keys:
-            print(f"   Warning: Unexpected keys: {unexpected_keys[:10]}..." if len(unexpected_keys) > 10 else f"   Warning: Unexpected keys: {unexpected_keys}")
+            print(f"   Warning: Unexpected keys: {len(unexpected_keys)} keys")
         
-        # 移动到 GPU
-        print("   Moving model to GPU...")
-        model = model.cuda().bfloat16()
-        
-        # 初始化 RoPE（如果需要）
-        with torch.device(torch.cuda.current_device()):
-            for m in model.modules():
-                if hasattr(m, "rope_init"):
-                    print("   Initializing RoPE...")
-                    m.rope_init()
-        
+        model.to(device, dtype)
         model.train()
         
         print(f"   Model loaded: {type(model).__name__}")
