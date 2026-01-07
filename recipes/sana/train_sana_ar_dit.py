@@ -482,7 +482,7 @@ def tokenize_images(tokenizer,
             # Extract embeddings for this segment
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-            vision_ids = vision_embeddings[start_pos:end_pos+1]
+            vision_ids = flat_input_ids[start_pos:end_pos+1]
             vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
