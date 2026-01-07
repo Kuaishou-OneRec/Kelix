@@ -258,6 +258,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     # Extract embeddings between vision_start_id and vision_end_id
     vision_start_id = ar_model.config.qwen_config.vision_start_token_id
     vision_end_id = ar_model.config.qwen_config.vision_end_token_id
+    image_token_id = tokenizer.config.qwen_config.image_token_id
 
     if input_ids[0][-1].item() != vision_start_id:
         input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
@@ -314,17 +315,16 @@ def tokenize_images(ar_processor : AutoProcessor,
                 # embeddings shape is [1, total_seq_len, embed_dim] in packing case
                 vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
                 vision_ids = flat_input_ids[start_pos:end_pos+1]
-                vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
+                vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
                 vision_embeddings_list.append(vision_embeddings)
                 vision_seq_lens.append(vision_embeddings.shape[0])
         
         vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
             vision_embeddings = embeddings[0, -max_condition_length:, :]
             vision_ids = flat_input_ids[start_pos:end_pos+1]
-            vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
+            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
             

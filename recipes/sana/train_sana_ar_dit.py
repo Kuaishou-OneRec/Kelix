@@ -486,6 +486,7 @@ def tokenize_images(tokenizer,
             import time
             if int(time.time() * 1000) % 1000 == 0:
                 print(f"image_token_id={image_token_id}, {vision_embeddings.shape} -> {vision_embeddings[vision_ids == image_token_id, :].shape}")
+            
             vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
