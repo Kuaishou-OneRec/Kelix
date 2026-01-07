@@ -406,11 +406,12 @@ def run_msy_master_2():
             if value is not None and hasattr(value, 'shape'):
                 print(f"   {key}: shape={value.shape}, dtype={value.dtype}")
         
-        # 加载模型
+        # 加载模型 - 使用 from_pretrained 方式避免 meta tensor 问题
         print("\n⚙️ Loading Model...")
         from muse.models import get_model_class
         from muse.config import load_config
         from muse.training.common import set_default_dtype
+        from muse.training.checkpoint import load_hf_checkpoint
         from pathlib import Path
         
         model_config_path = Path(MODEL_PATH_MSY_MASTER_2) / "muse_config.json"
@@ -419,17 +420,34 @@ def run_msy_master_2():
         
         model_cls = get_model_class(model_config.model_class)
         
-        with set_default_dtype(torch.bfloat16), torch.device("meta"):
+        # 加载权重到 CPU
+        print("   Loading state dict...")
+        state_dict = load_hf_checkpoint(MODEL_PATH_MSY_MASTER_2)
+        
+        # 在 CPU 上创建模型并加载权重
+        print("   Creating model on CPU...")
+        with set_default_dtype(torch.bfloat16):
             model = model_cls(model_config)
         
         # 加载权重
-        from muse.training.checkpoint import load_hf_checkpoint
-        state_dict = load_hf_checkpoint(MODEL_PATH_MSY_MASTER_2)
+        print("   Loading weights...")
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+        if missing_keys:
+            print(f"   Warning: Missing keys: {missing_keys[:10]}..." if len(missing_keys) > 10 else f"   Warning: Missing keys: {missing_keys}")
+        if unexpected_keys:
+            print(f"   Warning: Unexpected keys: {unexpected_keys[:10]}..." if len(unexpected_keys) > 10 else f"   Warning: Unexpected keys: {unexpected_keys}")
         
-        # 使用简单的 load_state_dict
-        model = model.to(torch.bfloat16)
-        model.load_state_dict(state_dict, strict=False)
-        model = model.cuda()
+        # 移动到 GPU
+        print("   Moving model to GPU...")
+        model = model.cuda().bfloat16()
+        
+        # 初始化 RoPE（如果需要）
+        with torch.device(torch.cuda.current_device()):
+            for m in model.modules():
+                if hasattr(m, "rope_init"):
+                    print("   Initializing RoPE...")
+                    m.rope_init()
+        
         model.train()
         
         print(f"   Model loaded: {type(model).__name__}")
