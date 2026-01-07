@@ -129,6 +129,11 @@ BENCHNAME2CSV_MAP = {
     "WISE_all": "/mmu_mllm_hdd_2/zangdunju/analysis/WISE/WISE_all.tsv",
     "DPGBench": "/mmu_mllm_hdd_2/zangdunju/analysis/DPGBench/DPG_Bench.tsv",
 }
+BENCHNAME2PROMPT_KEY_MAP = {
+    "GenEval": "question",
+    "WISE_all": "prompt",
+    "DPGBench": "text",
+}
 
 
 def setup_distributed_environment() -> bool:
@@ -491,6 +496,7 @@ def main():
     benchmark_csv_path = BENCHNAME2CSV_MAP.get(args.benchname, None)
     if benchmark_csv_path is not None:
         dataset_cfg["gen_eval_csv_path"] = benchmark_csv_path
+        dataset_cfg["prompt_key"] = BENCHNAME2PROMPT_KEY_MAP[args.benchname]
         print(f"Using benchmark CSV: {benchmark_csv_path}")
 
     dataset = GenEvalInferenceDataset(

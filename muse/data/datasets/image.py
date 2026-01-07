@@ -1372,6 +1372,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  template='{}', 
                  systemp_prompt="You are a helpful assistant.",
                  infer_repeats=4,
+                 prompt_key='question',
                  **kwargs
                  ):
         self.gen_eval_csv_path = gen_eval_csv_path
@@ -1383,6 +1384,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         self.processor = AutoProcessor.from_pretrained(
             self.processor_path, trust_remote_code=True)
         self.infer_repeats = infer_repeats
+        self.prompt_key = prompt_key
     
     def _load_all_data(self):
         """
@@ -1405,14 +1407,20 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                 # 转换数据类型
                 sample_dict = {
                     'index': int(row['index']),
-                    'tag': row['tag'],
-                    'include_class': row['include_class'],
-                    'include_count': row['include_count'] if row['include_count'] else None,
-                    'include_color': row['include_color'] or None,
-                    'include_position': row['include_position'] or None,
-                    'exclude_class': row['exclude_class'] or None,
-                    'exclude_count': row['exclude_count'] if row['exclude_count'] else None,
-                    'question': row['question']
+                    'tag': row.get('tag', None),
+                    'include_class': row.get('include_class', None),
+                    'include_count': row.get('include_count', None),
+                    'include_color': row.get('include_color', None),
+                    'include_position': row.get('include_position', None),
+                    'exclude_class': row.get('exclude_class', None),
+                    'exclude_count': row.get('exclude_count', None),
+                    'question': row.get('question', None), # GenEval
+                    'questions': row.get('questions', ''),
+                    'text': row.get('text', ''), # DPG
+                    'item_id': row.get('item_id', ''),
+                    "discipline": row.get('discipline', ''),
+                    "explanation": row.get('explanation', ''),
+                    "prompt": row.get('prompt', ''), # WISE
                 }
                 all_data.append(sample_dict)
         from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
@@ -1431,7 +1439,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": [
-            {"type": "text", "text": self.template.format(sample["question"])},
+            {"type": "text", "text": self.template.format(sample[self.prompt_key])},
         ]})
         text = self.processor.apply_chat_template(
             messages, 
