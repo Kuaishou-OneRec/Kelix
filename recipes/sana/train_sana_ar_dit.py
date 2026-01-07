@@ -400,7 +400,6 @@ def tokenize_images(tokenizer,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     cond_embeds_op = None,
-                    keep_image_token_id_thresh: int = 999999999,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -413,7 +412,6 @@ def tokenize_images(tokenizer,
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
         cu_seqlens: Cumulative sequence lengths for flash attention
         cond_embeds_op: Optional function to apply to condition embeddings
-        keep_image_token_id_thresh: Threshold for image tokens to keep, only tokens greater than this threshold will be kept
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -451,6 +449,7 @@ def tokenize_images(tokenizer,
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
         vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
+        image_token_id = image_tokenizer.config.qwen_config.image_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
@@ -483,11 +482,11 @@ def tokenize_images(tokenizer,
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
             vision_ids = flat_input_ids[start_pos:end_pos+1]
-            print(f"vision_ids={vision_ids}")
+
             import time
-            if int(time.time() * 100) % 100 == 0:
-                print(f"keep_image_token_id_thresh={keep_image_token_id_thresh}, {vision_embeddings.shape} -> {vision_embeddings[vision_ids > keep_image_token_id_thresh, :].shape}")
-            vision_embeddings = vision_embeddings[vision_ids > keep_image_token_id_thresh, :]  # [valid_len, embed_dim]
+            if int(time.time() * 1000) % 1000 == 0:
+                print(f"image_token_id={image_token_id}, keep_image_token_id_thresh={keep_image_token_id_thresh}, {vision_embeddings.shape} -> {vision_embeddings[vision_ids == image_token_id, :].shape}")
+            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
         
@@ -675,8 +674,7 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        cond_embeds_op=model.diffusion_connector,
-        keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size
+        cond_embeds_op=model.diffusion_connector
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1368,8 +1366,6 @@ def train():
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
-                    # cond_embeds_op=model.diffusion_connector,
-                    keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size
                 )
             
             pos_args = compute_pos_args(
