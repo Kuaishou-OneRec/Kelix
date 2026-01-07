@@ -17,9 +17,11 @@ export PYTHONPATH="${PYTHONPATH:-.}"
 # Use environment variables with sensible defaults for auto-usage scenarios
 MODEL_DIR="${MODEL_DIR:-/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105}"
 VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/}"
+KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted/}"
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
 
-DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/inference/run_ar_dit_lzx_4096_v2_1024im_multiscale_inf.json}"
+
+DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs_inf.json}"
 PARQUET_PATH="${PARQUET_PATH:-/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet}"
 
 RESULTS_DIR="${RESULTS_DIR:-./results}"
@@ -40,7 +42,7 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=324}"
 # DCP_TAG="${DCP_TAG:-global_step12000}"
 
 DCP_CKPT_DIR="${DCP_CKPT_DIR:-}"
-DCP_TAG="${DCP_TAG:-}"
+DCP_TAG="${DCP_TAG:-global_step16000}"
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
