@@ -314,7 +314,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         if len(start_positions) != len(end_positions):
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
             vision_embeddings = embeddings[0, -max_condition_length:, :]
-            vision_ids = flat_input_ids[start_pos:end_pos+1]
+            vision_ids = flat_input_ids[-max_condition_length:]
             vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
@@ -337,7 +337,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
             vision_embeddings = embeddings[0, -max_condition_length:, :]
-            vision_ids = flat_input_ids[start_pos:end_pos+1]
+            vision_ids = flat_input_ids[-max_condition_length:]
             vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(max_condition_length)
