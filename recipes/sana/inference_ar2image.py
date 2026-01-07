@@ -406,6 +406,12 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
 
 def main():
     args = parse_args()
+    agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
+    output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
+    
+    if os.path.exists(output_pkl):
+        print(f"{output_pkl} already exists, skipping")
+        return
 
     device = torch.device(args.device if torch.cuda.is_available() and args.device.startswith("cuda") else "cpu")
     dtype = train_rec.get_torch_dtype(args.dtype) if hasattr(train_rec, 'get_torch_dtype') else torch.float32
@@ -670,7 +676,6 @@ def main():
 
         
         # Create aggresults directory if not exists
-        agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
         os.makedirs(agg_output_dir, exist_ok=True)
         
         # Find all JSON and PKL files in subresults
@@ -727,7 +732,7 @@ def main():
         
         # Sort by index and save to pickle
         if 'index' in df: df = df.sort_values('index').reset_index(drop=True)
-        output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
+        # output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 
