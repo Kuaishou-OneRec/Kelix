@@ -483,7 +483,7 @@ def tokenize_images(tokenizer,
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
             vision_ids = flat_input_ids[start_pos:end_pos+1]
-
+            print(f"vision_ids={vision_ids}")
             import time
             if int(time.time() * 100) % 100 == 0:
                 print(f"keep_image_token_id_thresh={keep_image_token_id_thresh}, {vision_embeddings.shape} -> {vision_embeddings[vision_ids > keep_image_token_id_thresh, :].shape}")
