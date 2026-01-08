@@ -217,19 +217,35 @@ def forward_ar_model(
     import IPython
     IPython.embed()
     # forward one sample
+    input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
     with torch.no_grad():
         outputs = ar_model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
+            input_pos=input_pos,
         )
-        print(f"outputs={outputs}")
+    assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
+    print(f"outputs={outputs.shape}")
 
 
     # forward two samples in packing
-    input_ids = torch.cat([input_ids, input_ids], dim=1)
-
+    input_ids2 = torch.cat([input_ids, input_ids], dim=1) # torch.Size([1, 712])
+    pixel_values2 = torch.cat([pixel_values, pixel_values], dim=0) # torch.Size([2592, 3, 14, 14])
+    image_grid_thw2 = torch.cat([image_grid_thw, image_grid_thw], dim=0)   # b x 3
+    cu_seqlens2 = torch.tensor([0, input_ids2.shape[1], input_ids2.shape[1] * 2]).to(input_ids2.device)
+    input_pos2 = torch.cat([input_pos, input_pos], dim=-1)
+    with torch.no_grad():
+        outputs2 = ar_model(
+            input_ids=input_ids2,
+            pixel_values=pixel_values2,
+            image_grid_thw=image_grid_thw2,
+            cu_seqlens=cu_seqlens2,
+            input_pos=input_pos2,
+        )
+    
+    print(f"outputs2={outputs2.shape}")
 
 
 
