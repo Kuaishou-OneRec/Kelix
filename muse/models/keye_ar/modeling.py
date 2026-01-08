@@ -792,6 +792,7 @@ class KeyeARModel(Model):
 
         if pixel_values is not None:
             with torch.no_grad():
+                print(1111, pixel_values.shape, image_grid_thw)
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 aligned_indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T
                 aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
