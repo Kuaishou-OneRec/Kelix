@@ -1304,6 +1304,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    print("packed_position_idspacked_position_ids", [x.shape for x in packed_position_ids])
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
