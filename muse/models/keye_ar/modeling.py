@@ -407,6 +407,9 @@ class UnifiedQwen3Model(Qwen3Model):
                 tokens=tokens,
             )
 
+
+        print(f"input_image_ids={input_image_ids.shape}, tokens={tokens.shape}, input_image_ids={input_image_ids.shape}")
+        print(f"input_image_ids={input_image_ids.shape}, tokens={tokens.shape}, input_image_ids={input_image_ids.shape}")
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             tokens=tokens,

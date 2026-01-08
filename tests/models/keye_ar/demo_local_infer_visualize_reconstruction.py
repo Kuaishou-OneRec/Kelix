@@ -214,8 +214,7 @@ def forward_ar_model(
         pixel_values,
         image_grid_thw,
     ):
-    import IPython
-    IPython.embed()
+
     # forward one sample
     input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
     with torch.no_grad():
@@ -244,9 +243,10 @@ def forward_ar_model(
             cu_seqlens=cu_seqlens2,
             input_pos=input_pos2,
         )
-    
-    print(f"outputs2={outputs2.shape}")
 
+    print(f"outputs2={outputs2.shape}")
+    import IPython
+    IPython.embed()
 
 
 def main():
