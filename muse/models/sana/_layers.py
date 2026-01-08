@@ -437,7 +437,7 @@ class MultiHeadCrossAttention(nn.Module):
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
-        print(f"x_input_pos={x_input_pos}, cond_input_pos={cond_input_pos}, self.pos_embeddings={self.pos_embeddings}")
+
         # Apply 2D RoPE using Roraty2DPositionalEmbeddings
         if self.pos_embeddings is not None and x_input_pos is not None:
             q = self.pos_embeddings(q, input_pos=x_input_pos)
