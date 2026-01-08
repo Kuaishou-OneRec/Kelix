@@ -142,6 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --dtype bf16 \
                 --warmup-steps 1000 \
                 --lr-scheduler cosine \
+                --min-lr 1e-6 \
                 --logging-per-step 20 \
                 --max-steps 2500000 \
                 --save-checkpoint-per-step 1000 \
