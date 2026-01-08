@@ -134,7 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --model-dir $MODEL_DIR \
                 --model-name KeyeARModel \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/keye_ar/train_scripts/run_train.json \                
+                --dataset-config examples/keye_ar/train_scripts/run_train.json \
                 --learning-rate 2e-4 \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
