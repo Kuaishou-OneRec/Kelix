@@ -97,6 +97,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr-scheduler", type=str, default="cosine", help="see muse.training.lr_schedulers")
     parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--min-lr", type=float, default=1e-6, help="Minimum learning rate (对齐 sana)")
+    parser.add_argument("--max-length", type=int, default=16000, help="Maximum sequence length for packing (对齐 keye_tokenizer_end2end_video)")
 
     # precision
     parser.add_argument("--dtype", type=str, default="bf16", choices=["fp32", "fp16", "bf16"])
@@ -185,6 +186,10 @@ def _load_dataset_config(path: str) -> Dict[str, Any]:
 
 def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     ds_cfg = _load_dataset_config(args.dataset_config)
+
+    # 传递 max_length 到 dataset config（对齐 train_keye_tok_end2end_video）
+    if args.max_length:
+        ds_cfg["max_length"] = args.max_length
 
     dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast(**ds_cfg)
 
