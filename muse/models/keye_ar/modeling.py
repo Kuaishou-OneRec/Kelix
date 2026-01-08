@@ -500,7 +500,7 @@ class KeyeARModel(Model):
         """
         self.config.qwen_config.token_decoder_with_teacher_forcing = teacher_forcing
         self.model.model.token_decoder_with_teacher_forcing = teacher_forcing
-        return teacher_forcing
+        return teacher_forcing    
     
     def set_output_hidden_states(self, output_hidden_states):
         """
@@ -508,6 +508,48 @@ class KeyeARModel(Model):
         """
         self.model.model.output_hidden_states = output_hidden_states
         return output_hidden_states
+    
+    def get_initializer(self, name: str):
+        """Return an initializer function for the given parameter name.
+        
+        KeyeARModel delegates initialization to its sub-components:
+        - visual_tokenizer: KeyeImageTokenizer handles its own initialization
+        - model: UnifiedQwen3Model/Qwen3Model handles initialization
+        - lm_head: Linear layer uses lecun_normal_
+        
+        Args:
+            name: Parameter name (e.g., "visual_tokenizer.xxx", "model.xxx", "lm_head.weight")
+            
+        Returns:
+            A callable function that takes a tensor and initializes it
+        """
+        from torch.nn import init
+        from muse.models.qwen3.modeling import lecun_normal_
+        
+        # Delegate to sub-components based on parameter prefix
+        if name.startswith("visual_tokenizer."):
+            # Remove prefix and delegate to visual_tokenizer
+            sub_name = name[len("visual_tokenizer."):]
+            return self.visual_tokenizer.get_initializer(sub_name)
+        
+        elif name.startswith("model."):
+            # Remove prefix and delegate to model (UnifiedQwen3Model -> Qwen3Model)
+            sub_name = name[len("model."):]
+            return self.model.get_initializer(sub_name)
+        
+        elif name.startswith("lm_head."):
+            # lm_head is a Linear layer
+            param_suffix = name.rsplit(".", 1)[1] if "." in name else ""
+            
+            def lm_head_init(tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return lm_head_init
+        
+        # Default: lecun_normal initialization
+        return lecun_normal_
 
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
