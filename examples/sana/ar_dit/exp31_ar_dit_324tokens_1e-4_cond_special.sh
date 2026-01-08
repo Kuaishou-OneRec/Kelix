@@ -168,6 +168,6 @@ nohup mpirun --allow-run-as-root \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --enable-profile \
-                --ignore-special-tokens \
+                --condition-on-special-tokens \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
