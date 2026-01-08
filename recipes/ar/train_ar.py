@@ -314,11 +314,9 @@ def train() -> None:
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler,
         optimizer=optimizer,
-        scheduler_kwargs={
-            "warmup_steps": args.warmup_steps,
-            "max_steps": args.max_steps,
-            "min_lr": args.min_lr,
-        },
+        num_warmup_steps=args.warmup_steps,
+        num_training_steps=args.max_steps,
+        min_lr=args.min_lr,
     )
 
     # loss
