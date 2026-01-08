@@ -983,6 +983,10 @@ class KeyeARModel(Model):
         # Prefill阶段：首次输入完整prompt，获取初始cache
         if prompt_groups > 0:
             prefill_pos = torch.arange(input_seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
+            print(f"prefill step {step}")
+            for k,v in model_kwargs:
+                print(f"{k}: {v.shape}")
+            print(f"prefill_pos: {prefill_pos.shape}, current_ids: {current_ids.shape}")
             outputs = self(
                 current_ids,
                 input_pos=prefill_pos,
@@ -1012,7 +1016,10 @@ class KeyeARModel(Model):
             for key in ["pixel_values", "image_grid_thw", "video_grid_thw", 
                     "fast_video_grid_thw", "pixel_values_videos", "input_image_ids"]:
                 model_kwargs.pop(key, None)
-
+            print(f"decoding step {step}")
+            for k,v in model_kwargs:
+                print(f"{k}: {v.shape}")
+            print(f"current_pos: {current_pos.shape}, last_group: {last_group.shape}")
             # 模型前向（使用cache）
             outputs = self(
                 last_group,
