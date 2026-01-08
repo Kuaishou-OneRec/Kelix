@@ -1089,13 +1089,13 @@ def train():
             else:
                 num_valid_tokens = num_tokens / get_context_parallel_world_size()
             
-            # 计算 image_tokens 和 video_tokens (根据 pixel_values 和 pixel_values_videos)
+            # 计算 image_tokens 和 video_tokens (根据 grid_thw)
             num_image_tokens = 0
             num_video_tokens = 0
-            if image_grid_thw is not None:
+            if image_grid_thw is not None and image_grid_thw.numel() > 0:
                 # image tokens = sum of (t * h * w) for each image
                 num_image_tokens = image_grid_thw.prod(dim=-1).sum().item() / get_context_parallel_world_size()
-            if video_grid_thw is not None:
+            if video_grid_thw is not None and video_grid_thw.numel() > 0:
                 # video tokens = sum of (t * h * w) for each video
                 num_video_tokens = video_grid_thw.prod(dim=-1).sum().item() / get_context_parallel_world_size()
             
