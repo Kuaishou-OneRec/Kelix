@@ -327,7 +327,7 @@ def train() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     app_state = AppState(model=model, optimizer=optimizer)
-    dist_checkpointer = DistributedCheckpointer(app_state=app_state)
+    dist_checkpointer = DistributedCheckpointer()
 
     if args.resume:
         ckpt_path = get_checkpoint_path(str(output_dir), args.resume_step)
