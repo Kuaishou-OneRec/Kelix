@@ -572,7 +572,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
          logger.warning(f"Failed to load config/Processor from {base_model_dir}: {e}. Using default args.")
 
     self.use_flops_balance = kwargs.pop("use_flops_balance", False)
-    self.slowfast_padder = SlowFastVisionPadder(base_model_dir)
+    self.get_rope_index_fn = eval(get_rope_index_fn) if isinstance(get_rope_index_fn, str) else get_rope_index_fn
+    self.slowfast_padder = SlowFastVisionPadder(base_model_dir, get_rope_index=self.get_rope_index_fn)
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.process_vision_info = process_vision_info
@@ -581,7 +582,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
-    self.get_rope_index_fn = eval(get_rope_index_fn) if isinstance(get_rope_index_fn, str) else get_rope_index_fn
+    
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -1304,7 +1305,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-    print("packed_position_idspacked_position_ids", [x.shape for x in packed_position_ids])
+
+    if packed_position_ids[0].ndim == 2: 
+      packed_position_ids = [x if x.ndim == 2 else x[0] for x in packed_position_ids]
+
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
@@ -1517,7 +1521,7 @@ class SlowFastVisionPadder:
     """
     给slow fast的padding，最多使用4+6个token
     """
-    def __init__(self, model_dir):
+    def __init__(self, model_dir, get_rope_index):
         processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
         self.processor = processor
         self.patch_size = processor.image_processor.patch_size
@@ -1531,6 +1535,7 @@ class SlowFastVisionPadder:
         self.vision_start = processor.tokenizer.encode("<|vision_start|>")[0]
         self.vision_end = processor.tokenizer.encode("<|vision_end|>")[0]
         self.frame = processor.tokenizer.encode("<|frame|>")[0]
+        self.get_rope_index = get_rope_index
 
     def __call__(self, packed_pixel_values, packed_pixel_values_videos, packed_fast_pixel_values_videos):
           return [
@@ -1563,7 +1568,7 @@ class SlowFastVisionPadder:
             "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
+        inputs["position_ids"] = self.get_rope_index(
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),
@@ -1607,7 +1612,7 @@ class SlowFastVisionPadder:
             "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
+        inputs["position_ids"] = self.get_rope_index(
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),
