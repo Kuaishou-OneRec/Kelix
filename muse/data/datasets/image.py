@@ -1214,6 +1214,11 @@ class Chat2ImageDataset(Token2ImageDataset):
             return_tensors="pt",
         )
 
+        if np.random.rand() < 0.00004:
+            input_ids = inputs["input_ids"].squeeze(0)
+            print(f"text: {text}")
+            print(f"input_ids: {input_ids.shape}/{input_ids.flatten().cpu().tolist()[:1000]}")
+
         # Include all processor output fields in result
         for key, value in inputs.items():
             result[key] = value
@@ -1453,8 +1458,9 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
             truncation=False,
             return_tensors="pt",
         )
+        input_ids = inputs["input_ids"]
         return {
-            "input_ids": inputs["input_ids"],
+            "input_ids": input_ids,
             "messages": messages,
             "metadata": sample
         }
