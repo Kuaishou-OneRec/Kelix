@@ -141,14 +141,28 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _setup_distributed(args: argparse.Namespace) -> None:
-    if dist.is_initialized():
-        return
-    dist.init_process_group(
-        backend=args.backend,
-        init_method=args.init_method,
-        timeout=process_group_timeout,
-    )
+def _setup_distributed(args: argparse.Namespace) -> tuple[int, int, int]:
+    """Setup distributed training environment using OMPI environment variables.
+    
+    Returns:
+        tuple: (rank, world_size, local_rank)
+    """
+    # 对齐 recipes/sana/train_sana_ar_dit.py：使用 OMPI 环境变量
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 1))
+    local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
+    torch.cuda.set_device(local_rank)
+    
+    if not dist.is_initialized():
+        dist.init_process_group(
+            backend=args.backend,
+            rank=rank,
+            world_size=world_size,
+            timeout=process_group_timeout,
+        )
+    
+    return rank, world_size, local_rank
 
 
 def _build_loggers(args: argparse.Namespace) -> list[Logger]:
@@ -210,21 +224,30 @@ def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], 
 def train() -> None:
     args = _build_arg_parser().parse_args()
 
-    _setup_distributed(args)
+    rank, world_size, local_rank = _setup_distributed(args)
     initialize_model_parallel()
-
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
 
     # logging
     loggers = _build_loggers(args)
-    print_rank_0(f"rank/world_size: {rank}/{world_size}")
+    print_rank_0(f"rank/world_size/local_rank: {rank}/{world_size}/{local_rank}")
     print_rank_0(f"output_dir: {args.output_dir}")
+    
+    # 保存训练参数到 output_dir（对齐 sana）
+    if rank == 0:
+        import datetime
+        args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
+        print_rank_0(f"Training Arguments:\n{args_str}")
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w', encoding="utf-8") as f:
+            f.write(args_str + "\n")
 
-    # dtype & seed
+    # dtype & seed (对齐 sana：使用 rank-specific seed)
     torch_dtype = get_torch_dtype(args.dtype)
     set_default_dtype(torch_dtype)
-    set_random_seed(args.seed)
+    
+    training_seed = args.seed + rank
+    set_random_seed(training_seed)
+    print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
     # model
     # KeyeARModel 需要 KeyeARConfig
