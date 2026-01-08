@@ -468,6 +468,7 @@ def main():
             else:
                 raise ValueError(f"Unknown model config field: {key}")
 
+    print(f"model_config=\n{model_config}")
     model_class_name = model_config.model_class
     model_cls = get_model_class(model_class_name)
 
