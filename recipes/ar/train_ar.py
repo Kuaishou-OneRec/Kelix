@@ -423,8 +423,9 @@ def train() -> None:
             f"input_ids: {input_ids.shape}, "
             f"position_ids: {position_ids.shape}, "
             f"loss_mask: {loss_mask.shape}, "
-            f"labels: {labels.shape}"
-            f"cu_seqlens: {cu_seqlens}"
+            f"labels: {labels.shape}, "
+            f"cu_seqlens: {cu_seqlens}, "
+            f"pixel_values: {pixel_values.shape}"
         )
 
         # forward
