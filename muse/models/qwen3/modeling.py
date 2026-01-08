@@ -12,7 +12,7 @@ from muse.layers.position_embeddings import RotaryPositionalEmbeddings
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.layers.linear import TiedLinear
-from muse.models.qwen3._layers import qwen3_mlp, Qwen3Attention,KeyeFlashAttention2
+from muse.models.qwen3._layers import qwen3_mlp, Qwen3Attention
 from muse.layers.feed_forward import FeedForward
 
 # Import will be done when muse.models is imported, avoiding circular import
@@ -68,60 +68,32 @@ class Qwen3Model(Model):
             dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base)
 
         layers = nn.ModuleList()
-        if config.use_multimodal_rope == False:
-            for _ in range(config.num_layers):
-                self_attn = Qwen3Attention(
-                    embed_dim=config.embed_dim,
-                    num_heads=num_heads,
-                    num_kv_heads=num_kv_heads,
-                    head_dim=head_dim,
-                    q_proj=nn.Linear(config.embed_dim, num_heads * head_dim, bias=config.q_proj_bias),
-                    k_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.k_proj_bias),
-                    v_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.v_proj_bias),
-                    output_proj=nn.Linear(num_heads * head_dim, config.embed_dim, bias=False),
-                    pos_embeddings=self.rope,
-                    q_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.q_norm else None, # norm on head_dim
-                    k_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.k_norm else None,
-                    kv_cache=None,
-                    max_seq_len=config.max_seq_len,
-                    attn_dropout=config.attn_dropout,
-                    attention_function=config.attention_function
-                )
-                mlp = qwen3_mlp(dim=config.embed_dim, hidden_dim=config.intermediate_dim)
-                layer = TransformerSelfAttentionLayer(
-                    attn=self_attn,
-                    mlp=mlp,
-                    sa_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
-                    mlp_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
-                )
-                layers.append(layer)
-        else:
-            for _ in range(config.num_layers):
-                self_attn = KeyeFlashAttention2(
-                    embed_dim=config.embed_dim,
-                    num_heads=num_heads,
-                    num_kv_heads=num_kv_heads,
-                    head_dim=head_dim,
-                    q_proj=nn.Linear(config.embed_dim, num_heads * head_dim, bias=config.q_proj_bias),
-                    k_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.k_proj_bias),
-                    v_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.v_proj_bias),
-                    output_proj=nn.Linear(num_heads * head_dim, config.embed_dim, bias=False),
-                    pos_embeddings=self.rope,
-                    q_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.q_norm else None, # norm on head_dim
-                    k_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.k_norm else None,
-                    kv_cache=None,
-                    max_seq_len=config.max_seq_len,
-                    attn_dropout=config.attn_dropout,
-                    attention_function=config.attention_function
-                )
-                mlp = qwen3_mlp(dim=config.embed_dim, hidden_dim=config.intermediate_dim)
-                layer = TransformerSelfAttentionLayer(
-                    attn=self_attn,
-                    mlp=mlp,
-                    sa_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
-                    mlp_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
-                )
-                layers.append(layer)
+        for _ in range(config.num_layers):
+            self_attn = Qwen3Attention(
+                embed_dim=config.embed_dim,
+                num_heads=num_heads,
+                num_kv_heads=num_kv_heads,
+                head_dim=head_dim,
+                q_proj=nn.Linear(config.embed_dim, num_heads * head_dim, bias=config.q_proj_bias),
+                k_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.k_proj_bias),
+                v_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.v_proj_bias),
+                output_proj=nn.Linear(num_heads * head_dim, config.embed_dim, bias=False),
+                pos_embeddings=self.rope,
+                q_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.q_norm else None, # norm on head_dim
+                k_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.k_norm else None,
+                kv_cache=None,
+                max_seq_len=config.max_seq_len,
+                attn_dropout=config.attn_dropout,
+                attention_function=config.attention_function
+            )
+            mlp = qwen3_mlp(dim=config.embed_dim, hidden_dim=config.intermediate_dim)
+            layer = TransformerSelfAttentionLayer(
+                attn=self_attn,
+                mlp=mlp,
+                sa_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
+                mlp_norm=RMSNorm(dim=config.embed_dim, eps=config.norm_eps),
+            )
+            layers.append(layer)
 
         tok_embeddings = nn.Embedding(config.vocab_size, config.embed_dim)
         if config.tie_word_embeddings:
