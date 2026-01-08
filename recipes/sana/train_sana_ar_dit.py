@@ -632,6 +632,7 @@ def visualize_reconstruction(
     dtype: torch.dtype,
     tb_writer=None,
     num_images: Optional[int] = None,
+    args = None,
 ):
     """Visualize DiT reconstruction results.
     
@@ -1321,6 +1322,7 @@ def train():
                     dtype=get_torch_dtype(args.model_dtype),
                     tb_writer=tb_writer,
                     num_images=args.num_vis_images,
+                    args=args
                 )
             
             # Move model back to CPU to save memory
@@ -1491,6 +1493,7 @@ def train():
                             dtype=get_torch_dtype(args.model_dtype),
                             tb_writer=tb_writer,
                             num_images=args.num_vis_images,
+                            args=args
                         )
                     
                     # Move model back to CPU to save memory
