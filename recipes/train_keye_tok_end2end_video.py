@@ -1002,17 +1002,11 @@ def train():
     ticker = TimeTracker(n=args.logging_per_step)
     iter_ticker = TimeTracker(n=args.logging_per_step)
     
-    # Initialize perf monitoring variables (仿照 end2end 版本)
+    # Initialize perf monitoring variables (仿照 end2end 版本，但只保留简单累积值避免 segfault)
     total_num_tokens = 0
     total_num_samples = 0
-    total_num_valid_tokens = 0
-    total_num_image_tokens = 0
-    total_num_video_tokens = 0
     acc_num_tokens = 0
     acc_num_samples = 0
-    acc_valid_num_tokens = 0
-    acc_num_image_tokens = 0
-    acc_num_video_tokens = 0
     start_time = time.perf_counter()
     
     print_rank_0("Starting training...")
@@ -1077,10 +1071,18 @@ def train():
             metrics.append("tokens", num_tokens)
             if sample_idx is not None:
                 # 考虑 CP 和 Packing 的逻辑样本数
-                logical_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
-                metrics.append("samples", logical_samples)
+                num_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
+                metrics.append("samples", num_samples)
             else:
-                metrics.append("samples", input_ids.shape[0] / get_context_parallel_world_size())
+                num_samples = input_ids.shape[0] / get_context_parallel_world_size()
+                metrics.append("samples", num_samples)
+            
+            # 累积 perf 统计 (只累积简单数值，不涉及 grid_thw 操作)
+            total_num_tokens += num_tokens
+            total_num_samples += num_samples
+            acc_num_tokens += num_tokens
+            acc_num_samples += num_samples
+            
             ticker.tick("token_metrics_init")
 
             # ================================================ Forward pass ================================================
@@ -1318,20 +1320,50 @@ def train():
 
             # Logging at specified intervals
             if scheduler.should_logging():
+                # 计算 perf 指标 (仿照 end2end 版本)
+                end_time = time.perf_counter()
+                elapsed_time = end_time - start_time
+                world_size = dist.get_world_size()
+                
+                # 计算速率指标 (只使用简单累积值)
+                sec_per_step = elapsed_time / args.logging_per_step if args.logging_per_step > 0 else 0
+                tokens_per_sec_per_gpu = acc_num_tokens / elapsed_time / world_size if elapsed_time > 0 else 0
+                samples_per_sec_per_gpu = acc_num_samples / elapsed_time / world_size if elapsed_time > 0 else 0
+                
                 # 获取 ticker 统计信息
                 ticker_stats = {}
                 for t in [ticker, iter_ticker]:
                     ticker_stats.update(t.stat())
                 
-                # 将 ticker 统计信息添加到 metrics（可选：写入 TensorBoard）
+                # 将 ticker 统计信息和 perf 指标写入 TensorBoard
                 if dist.get_rank() == 0 and tb_writer is not None:
                     for name, data in ticker_stats.items():
                         tb_writer.add_scalar(f"ticker/{name}", data, global_step=scheduler.global_step, new_style=True)
+                    
+                    # 添加 perf 指标到 TensorBoard
+                    perf_metrics = {
+                        "perf/sec_per_step": sec_per_step,
+                        "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+                        "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+                        "perf/total_num_tokens": total_num_tokens,
+                        "perf/total_num_samples": total_num_samples,
+                        "perf/num_sample_per_gpu": total_num_samples / world_size,
+                    }
+                    for name, data in perf_metrics.items():
+                        tb_writer.add_scalar(name, data, global_step=scheduler.global_step, new_style=True)
                 
-                # 打印 ticker 统计信息
+                # 打印 ticker 统计信息和 perf 指标
                 print_rank_0(f"Step: {scheduler.global_step}, ticker_stats: {ticker_stats}")
+                print_rank_0(f"Step: {scheduler.global_step}, perf: sec_per_step={sec_per_step:.3f}, "
+                           f"tokens/s/gpu={tokens_per_sec_per_gpu:.1f}, samples/s/gpu={samples_per_sec_per_gpu:.2f}, "
+                           f"total_tokens={total_num_tokens}, total_samples={total_num_samples}")
                 
                 metrics.write_logs(scheduler.global_step)
+                
+                # 重置累积变量和计时器
+                acc_num_tokens = 0
+                acc_num_samples = 0
+                start_time = time.perf_counter()
                 
                 # Reduce data source metrics across all ranks (must be called on all ranks)
                 reduced_batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
