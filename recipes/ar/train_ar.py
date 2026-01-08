@@ -419,6 +419,14 @@ def train() -> None:
         # labels: 用loss_mask将非监督位置置为ignore_index
         labels = _prepare_labels(input_ids, loss_mask, ignore_index=loss_fn.ignore_index)
 
+        print(
+            f"input_ids: {input_ids.shape}, "
+            f"position_ids: {position_ids.shape}, "
+            f"loss_mask: {loss_mask.shape}, "
+            f"labels: {labels.shape}"
+            f"cu_seqlens: {cu_seqlens}"
+        )
+
         # forward
         with contextlib.nullcontext():
             logits = model(
