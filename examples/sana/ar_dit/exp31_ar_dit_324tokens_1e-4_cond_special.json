@@ -1,0 +1,12 @@
+{
+    "name": "Chat2ImageDataset",
+    "sources": "/mmu_mllm_hdd_2/zangdunju/index/mix_896_1024/index_v3.json",
+    "image_size": 1024,
+    "max_condition_length": 658,
+    "center_crop": true,
+    "packing": false,
+    "valid_hw_range": [896, 1280],
+    "multi_scale": false,
+    "force_assistant_image_size": 504,
+    "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working"
+}

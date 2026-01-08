@@ -148,6 +148,9 @@ def get_argument_parser():
     parser.add_argument("--cond-pos-scale", type=float, default=1.0,
                         help="Scale factor for condition position embeddings")
 
+    parser.add_argument("--condition-on-special-tokens", action="store_true",
+                        help="Condition on special tokens")
+
     ############ Dataset args ############
     parser.add_argument("--dataset-config", type=str, required=True,
                         help="The config file path of the dataset to train")
@@ -400,6 +403,7 @@ def tokenize_images(tokenizer,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     cond_embeds_op = None,
+                    condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -412,6 +416,7 @@ def tokenize_images(tokenizer,
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
         cu_seqlens: Cumulative sequence lengths for flash attention
         cond_embeds_op: Optional function to apply to condition embeddings
+        condition_on_special_tokens: Whether to condition on special tokens (BOS/EOS/POS) or not
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -481,13 +486,13 @@ def tokenize_images(tokenizer,
             # Extract embeddings for this segment
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-            vision_ids = flat_input_ids[start_pos:end_pos+1]
 
-            import time
-            if int(time.time() * 1000) % 1000 == 0:
-                print(f"image_token_id={image_token_id}, {vision_embeddings.shape} -> {vision_embeddings[vision_ids == image_token_id, :].shape}")
+            if not condition_on_special_tokens:
+                vision_embeddings = vision_embeddings[flat_input_ids[start_pos:end_pos+1] == image_token_id, :]  # [valid_len, embed_dim]
             
-            vision_embeddings = vision_embeddings[vision_ids == image_token_id, :]  # [valid_len, embed_dim]
+            if np.random.rand() < 0.001:
+                print(f"start_pos={start_pos}, end_pos={end_pos}, vision_embeddings={vision_embeddings.shape}")
+            
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
         
@@ -675,7 +680,8 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        cond_embeds_op=model.diffusion_connector
+        cond_embeds_op=model.diffusion_connector,
+        condition_on_special_tokens=args.condition_on_special_tokens
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1367,6 +1373,7 @@ def train():
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
+                    condition_on_special_tokens=args.condition_on_special_tokens,
                 )
             
             pos_args = compute_pos_args(

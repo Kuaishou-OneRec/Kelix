@@ -121,6 +121,7 @@ def parse_args():
                         help="Use linspace sigmas for scheduler")
     parser.add_argument("--benchname", type=str, default="GenEval",
                         help="Benchmark name for result aggregation, GenEval|WISE_all|DPGBench")
+    parser.add_argument("--condition-on-special-tokens", action="store_true", help="Condition on special tokens like pos_start")
     return parser.parse_args()
 
 
@@ -222,6 +223,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
                     keep_image_token_id_thresh: int = 999999999,
+                    condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -232,7 +234,8 @@ def tokenize_images(ar_processor : AutoProcessor,
         batch_size: Batch size (number of packed sequences)
         max_condition_length: Maximum condition sequence length for padding
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
-        cu_seqlens: Cumulative sequence lengths for flash attention
+        cu_seqlens: Cumulative sequence lengths for flash attention,
+        teacher_forcing: whe the teacher forcing mode is enabled in inference
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -317,18 +320,21 @@ def tokenize_images(ar_processor : AutoProcessor,
         else:
             is_image_id = flat_input_ids == image_token_id
 
+        if condition_on_special_tokens: is_image_id = is_image_id | True
 
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
         
+        default_vision_embeddings = embeddings[0, -max_condition_length:, :]
+        default_vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
+        
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
-            vision_embeddings = embeddings[0, -max_condition_length:, :]
-            vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
-            vision_embeddings_list.append(vision_embeddings)
-            vision_seq_lens.append(max_condition_length)
+            vision_embeddings_list.append(default_vision_embeddings)
+            vision_seq_lens.append(default_vision_embeddings.shape[1])
+
         else:
             # Extract embeddings for each vision segment
             for start_pos, end_pos in zip(start_positions, end_positions):
@@ -346,11 +352,8 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            vision_embeddings = embeddings[0, -max_condition_length:, :]
-            vision_ids = flat_input_ids[-max_condition_length:]
-            vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
-            vision_embeddings_list.append(vision_embeddings)
-            vision_seq_lens.append(max_condition_length)
+            vision_embeddings_list.append(default_vision_embeddings)
+            vision_seq_lens.append(default_vision_embeddings.shape[1])
             
         
         # Stack the embeddings and handle variable sequence lengths
@@ -408,7 +411,7 @@ def main():
     args = parse_args()
     agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
     output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
-    
+
     if os.path.exists(output_pkl):
         print(f"{output_pkl} already exists, skipping")
         return
@@ -549,7 +552,8 @@ def main():
                 input_ids=samples.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
-                keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size
+                keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
+                condition_on_special_tokens=args.condition_on_special_tokens
             )
             cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
             # Prepare unconditional embeddings for CFG
