@@ -328,8 +328,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         
         default_vision_embeddings = embeddings[0, start_positions[0]:start_positions[0]+max_condition_length:, :]
 
-        if not condition_on_special_tokens:
-            default_vision_embeddings = default_vision_embeddings[is_image_id[-default_vision_embeddings.shape[0]:], :]  # [valid_len, embed_dim]
+        default_vision_embeddings = default_vision_embeddings[is_image_id[-default_vision_embeddings.shape[0]:], :]  # [valid_len, embed_dim]
         
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
