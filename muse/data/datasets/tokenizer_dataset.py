@@ -581,7 +581,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
-    self.get_rope_fn = eval(get_rope_fn) if isinstane(get_rope_fn, str) else get_rope_fn
+    self.get_rope_fn = eval(get_rope_fn) if isinstance(get_rope_fn, str) else get_rope_fn
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
