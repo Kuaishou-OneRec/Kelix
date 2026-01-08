@@ -218,13 +218,14 @@ def forward_ar_model(
     # forward one sample
     input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
     with torch.no_grad():
-        outputs = ar_model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
-            input_pos=input_pos,
-        )
+        pass
+        # outputs = ar_model(
+        #     input_ids=input_ids,
+        #     pixel_values=pixel_values,
+        #     image_grid_thw=image_grid_thw,
+        #     cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
+        #     input_pos=input_pos,
+        # )
     assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
     print(f"outputs={outputs.shape}")
 
