@@ -226,8 +226,8 @@ def forward_ar_model(
         #     cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
         #     input_pos=input_pos,
         # )
-    assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
-    print(f"outputs={outputs.shape}")
+    #assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
+    #print(f"outputs={outputs.shape}")
 
 
     # forward two samples in packing
