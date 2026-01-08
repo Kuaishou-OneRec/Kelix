@@ -84,6 +84,7 @@ from muse.models import keye_tokenizer_end2end_video  # noqa: E402, F401
 from muse.models import keye_tokenizer_end2end_video_transformers  # noqa: E402, F401 - transformers-style modeling from end2end repo
 from muse.models import keye_tokenizer  # noqa: E402, F401
 from muse.models import keye_vit  # noqa: E402, F401
+from muse.models import keye_ar  # noqa: E402, F401
 
 # Export public API
 __all__ = [
