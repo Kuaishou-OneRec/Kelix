@@ -1230,16 +1230,6 @@ def train():
                     n_q_tokens=n_q_tokens
                 )
                 ticker.tick("compute_codebook_metrics_image")
-                
-                # Record average perplexity and usage
-                if global_perplexities:
-                    metrics.append("avg_perplexity", sum(global_perplexities) / len(global_perplexities))
-                    metrics.append("avg_codebook_usage", sum(codebook_usages) / len(codebook_usages))
-                    
-                    # Record per-codebook metrics
-                    for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
-                        metrics.append(f"perplexity_{i}", ppl)
-                        metrics.append(f"codebook_usage_{i}", usage)
             
             # ============ Compute codebook perplexity and usage (video) ============
             video_vq_indices = output.get("video_indices", None)
@@ -1250,16 +1240,6 @@ def train():
                     n_q_tokens=n_q_tokens
                 )
                 ticker.tick("compute_codebook_metrics_video")
-
-                # Record average perplexity and usage for video
-                if video_global_perplexities:
-                    metrics.append("video_avg_perplexity", sum(video_global_perplexities) / len(video_global_perplexities))
-                    metrics.append("video_avg_codebook_usage", sum(video_codebook_usages) / len(video_codebook_usages))
-
-                    # Record per-codebook metrics for video
-                    for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
-                        metrics.append(f"video_perplexity_{i}", ppl)
-                        metrics.append(f"video_codebook_usage_{i}", usage)
             
             # ============ Compute combined (image+video) codebook perplexity and usage ============
             if vq_indices is not None or video_vq_indices is not None:
@@ -1271,7 +1251,7 @@ def train():
                 )
                 ticker.tick("compute_codebook_metrics_combined")
                 
-                # Record average perplexity and usage for combined
+                # Record average perplexity and usage for combined (放在最前面)
                 if combined_perplexities:
                     metrics.append("combined_avg_perplexity", sum(combined_perplexities) / len(combined_perplexities))
                     metrics.append("combined_avg_codebook_usage", sum(combined_usages) / len(combined_usages))
@@ -1280,6 +1260,26 @@ def train():
                     for i, (ppl, usage) in enumerate(zip(combined_perplexities, combined_usages)):
                         metrics.append(f"combined_perplexity_{i}", ppl)
                         metrics.append(f"combined_codebook_usage_{i}", usage)
+            
+            # Record average perplexity and usage (image)
+            if vq_indices is not None and global_perplexities:
+                metrics.append("image_avg_perplexity", sum(global_perplexities) / len(global_perplexities))
+                metrics.append("image_avg_codebook_usage", sum(codebook_usages) / len(codebook_usages))
+                
+                # Record per-codebook metrics
+                for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
+                    metrics.append(f"image_perplexity_{i}", ppl)
+                    metrics.append(f"image_codebook_usage_{i}", usage)
+
+            # Record average perplexity and usage for video
+            if video_vq_indices is not None and video_global_perplexities:
+                metrics.append("video_avg_perplexity", sum(video_global_perplexities) / len(video_global_perplexities))
+                metrics.append("video_avg_codebook_usage", sum(video_codebook_usages) / len(video_codebook_usages))
+
+                # Record per-codebook metrics for video
+                for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
+                    metrics.append(f"video_perplexity_{i}", ppl)
+                    metrics.append(f"video_codebook_usage_{i}", usage)
                         
             # ============ Compute data source loss and sample count ============
             if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
