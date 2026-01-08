@@ -153,7 +153,7 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 24 \
+                --batch-size 20 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 10000 \
                 --num-training-steps 300000 \

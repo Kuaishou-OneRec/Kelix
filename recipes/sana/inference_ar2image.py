@@ -29,6 +29,7 @@ This demo imports and reuses helper functions from
 `recipes/sana/train_sana_ar_dit.py` (e.g., `load_vae`, `load_keye_ar`,
 `visualize_reconstruction`) to ensure parity with the training pipeline.
 """
+import numpy as np
 import tqdm
 import argparse
 import os
@@ -116,7 +117,29 @@ def parse_args():
                         help="Tag for model checkpoint (e.g., global_step8000)")
     parser.add_argument("--eval-id", type=str, default="default",
                         help="Eval ID for GenEval results")
+    parser.add_argument("--linspace-sigmas", action="store_true",
+                        help="Use linspace sigmas for scheduler")
+    parser.add_argument("--benchname", type=str, default="GenEval",
+                        help="Benchmark name for result aggregation, GenEval|WISE_all|DPGBench")
+    parser.add_argument("--condition-on-special-tokens", action="store_true", help="Condition on special tokens like pos_start")
     return parser.parse_args()
+
+
+BENCHNAME2CSV_MAP = {
+    "GenEval": "/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
+    "WISE_all": "/mmu_mllm_hdd_2/zangdunju/analysis/WISE/WISE_all.tsv",
+    "DPGBench": "/mmu_mllm_hdd_2/zangdunju/analysis/DPGBench/DPG_Bench.tsv",
+}
+BENCHNAME2PROMPT_KEY_MAP = {
+    "GenEval": "question",
+    "WISE_all": "prompt",
+    "DPGBench": "text",
+}
+BENCHNAME2INFER_REPEATS_MAP = {
+    "GenEval": 4,
+    "WISE_all": 1,
+    "DPGBench": 4,
+}
 
 
 def setup_distributed_environment() -> bool:
@@ -148,11 +171,26 @@ def get_model_embedding_and_tokens(
         input_ids: Optional[torch.Tensor] = None,
         **kwargs
     ):
+    """获取模型嵌入和token。
+    
+    Args:
+        model: KeyeAR模型实例
+        teacher_forcing: 是否使用teacher forcing模式
+        input_ids: 输入token ID张量
+        **kwargs: 其他模型参数
+    
+    Returns:
+        tuple: (tokens, embeddings) - token序列和对应的嵌入表示
+    """
     if teacher_forcing:
+        # Teacher forcing模式：直接使用输入token
+        kwargs["tokens"] = input_ids
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
-        return embeddings, embeddings
+        model.set_output_hidden_states([len(model.model.model.layers)])
+        return input_ids, embeddings
     else:
+        # 自回归生成模式：移除不需要的参数
         if "input_pos" in kwargs:
             del kwargs["input_pos"]
         if "pixel_values" in kwargs:
@@ -163,6 +201,7 @@ def get_model_embedding_and_tokens(
 
         model.set_output_hidden_states([len(model.model.model.layers)])
         try:
+            # 生成token和嵌入
             tokens, embeddings = model.generate(
                 input_ids=input_ids,
                 top_k=1,
@@ -183,6 +222,8 @@ def tokenize_images(ar_processor : AutoProcessor,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
+                    keep_image_token_id_thresh: int = 999999999,
+                    condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -193,7 +234,8 @@ def tokenize_images(ar_processor : AutoProcessor,
         batch_size: Batch size (number of packed sequences)
         max_condition_length: Maximum condition sequence length for padding
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
-        cu_seqlens: Cumulative sequence lengths for flash attention
+        cu_seqlens: Cumulative sequence lengths for flash attention,
+        teacher_forcing: whe the teacher forcing mode is enabled in inference
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -239,6 +281,8 @@ def tokenize_images(ar_processor : AutoProcessor,
     # Extract embeddings between vision_start_id and vision_end_id
     vision_start_id = ar_model.config.qwen_config.vision_start_token_id
     vision_end_id = ar_model.config.qwen_config.vision_end_token_id
+    image_token_id = ar_model.config.qwen_config.image_token_id
+    voc_size = ar_model.config.qwen_config.vocab_size
 
     if input_ids[0][-1].item() != vision_start_id:
         input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
@@ -255,7 +299,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
+            max_new_tokens=max_condition_length*2+10, # space,vis_start,vis_tok,vis_end,eos
         )
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
@@ -268,17 +312,29 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = []
         vision_seq_lens = []
         
+        # Get the flat input_ids (remove batch dimension for packing case)
+        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
+        
+        if flat_input_ids.ndim == 2:
+            is_image_id = flat_input_ids[:,0] >= voc_size
+        else:
+            is_image_id = flat_input_ids == image_token_id
+
+        if condition_on_special_tokens: is_image_id = is_image_id | True
+
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
         
+        default_vision_embeddings = embeddings[0, -max_condition_length:, :]
+        default_vision_embeddings = vision_embeddings[is_image_id[-max_condition_length:], :]  # [valid_len, embed_dim]
+        
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
-            torch.save(input_ids, "input_ids.pt")
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
-            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
-            vision_seq_lens.append(max_condition_length)
-        
+            vision_embeddings_list.append(default_vision_embeddings)
+            vision_seq_lens.append(default_vision_embeddings.shape[1])
+
         else:
             # Extract embeddings for each vision segment
             for start_pos, end_pos in zip(start_positions, end_positions):
@@ -289,15 +345,15 @@ def tokenize_images(ar_processor : AutoProcessor,
                 # Extract embeddings for this segment
                 # embeddings shape is [1, total_seq_len, embed_dim] in packing case
                 vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+                vision_embeddings = vision_embeddings[is_image_id[start_pos:end_pos+1], :]  # [valid_len, embed_dim]
                 vision_embeddings_list.append(vision_embeddings)
                 vision_seq_lens.append(vision_embeddings.shape[0])
         
         vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
-            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
-            vision_seq_lens.append(max_condition_length)
+            vision_embeddings_list.append(default_vision_embeddings)
+            vision_seq_lens.append(default_vision_embeddings.shape[1])
             
         
         # Stack the embeddings and handle variable sequence lengths
@@ -353,6 +409,12 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
 
 def main():
     args = parse_args()
+    agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
+    output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
+
+    if os.path.exists(output_pkl):
+        print(f"{output_pkl} already exists, skipping")
+        return
 
     device = torch.device(args.device if torch.cuda.is_available() and args.device.startswith("cuda") else "cpu")
     dtype = train_rec.get_torch_dtype(args.dtype) if hasattr(train_rec, 'get_torch_dtype') else torch.float32
@@ -449,6 +511,13 @@ def main():
     dataset_cfg['max_condition_length'] = args.max_condition_length
     # Pass rank/world_size so datasets expecting distributed info work in single-process mode
 
+    benchmark_csv_path = BENCHNAME2CSV_MAP.get(args.benchname, None)
+    if benchmark_csv_path is not None:
+        dataset_cfg["gen_eval_csv_path"] = benchmark_csv_path
+        dataset_cfg["prompt_key"] = BENCHNAME2PROMPT_KEY_MAP[args.benchname]
+        dataset_cfg["infer_repeats"] = BENCHNAME2INFER_REPEATS_MAP[args.benchname]
+        print(f"Using benchmark CSV: {benchmark_csv_path}")
+
     dataset = GenEvalInferenceDataset(
         # processor_path=args.keye_ar_dir, 
         **dataset_cfg
@@ -483,6 +552,8 @@ def main():
                 input_ids=samples.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
+                keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
+                condition_on_special_tokens=args.condition_on_special_tokens
             )
             cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
             # Prepare unconditional embeddings for CFG
@@ -502,7 +573,11 @@ def main():
 
             # Create scheduler and sample
             scheduler = FlowMatchEulerDiscreteScheduler(shift=args.flow_shift)
-            scheduler.set_timesteps(args.num_sampling_steps, device=device)
+            if args.linspace_sigmas:
+                sigmas = np.linspace(1.0, 1 / args.num_sampling_steps, args.num_sampling_steps)
+                scheduler.set_timesteps(args.num_sampling_steps, sigmas=sigmas, device=device)
+            else:
+                scheduler.set_timesteps(args.num_sampling_steps, device=device)
 
             generator = torch.Generator(device=device).manual_seed(args.seed)
             dit_latents = torch.randn(
@@ -575,7 +650,7 @@ def main():
                 samples_dict[sample_index] = sample_data
 
     # Save results in the required format after all inference is done
-    print("Saving GenEval results...")
+    print(f"Saving {args.benchname} results...")
     ulmeval_dir = os.path.join(args.output_dir, 'ulmeval', "subresults")
     ulmeval_agg_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults")
     os.makedirs(ulmeval_dir, exist_ok=True)
@@ -585,13 +660,13 @@ def main():
     rank = torch.distributed.get_rank()
 
     # Save images as pickle file
-    images_filename = f"{rank}{world_size}_GenEval.pkl"
+    images_filename = f"{rank}{world_size}_{args.benchname}.pkl"
     images_filepath = os.path.join(ulmeval_dir, images_filename)
     with open(images_filepath, 'wb') as f:
         pickle.dump(images_dict, f)
     
     # Save samples as json file
-    samples_filename = f"{rank}{world_size}_GenEval.json"
+    samples_filename = f"{rank}{world_size}_{args.benchname}.json"
     samples_filepath = os.path.join(ulmeval_dir, samples_filename)
     with open(samples_filepath, 'w', encoding='utf-8') as f:
         json.dump(samples_dict, f, ensure_ascii=False, indent=2)
@@ -605,18 +680,19 @@ def main():
 
         
         # Create aggresults directory if not exists
-        agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
         os.makedirs(agg_output_dir, exist_ok=True)
         
         # Find all JSON and PKL files in subresults
-        json_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.json"))
-        pkl_files = glob.glob(os.path.join(ulmeval_dir, "*_GenEval.pkl"))
+        json_files = glob.glob(os.path.join(ulmeval_dir, f"*{args.benchname}.json"))
+        pkl_files = glob.glob(os.path.join(ulmeval_dir, f"*{args.benchname}.pkl"))
         
         # Initialize DataFrame with the required columns
         columns = [
             "index", "tag", "include_class", "include_count", 
             "include_color", "include_position", "exclude_class", 
-            "exclude_count", "question", "prediction"
+            "exclude_count", "question", "questions", "text",
+            "item_id", "discipline", "explanation", "prompt"
+            "prediction", 
         ]
         df = pd.DataFrame(columns=columns)
         
@@ -648,13 +724,19 @@ def main():
                     "exclude_class": metadata.get('exclude_class', ''),
                     "exclude_count": metadata.get('exclude_count', 0),
                     "question": metadata.get('question', ''),
+                    "questions": metadata.get('questions', ''),
+                    "text": metadata.get('text', ''),
+                    "item_id": metadata.get('item_id', ''),
+                    "discipline": metadata.get('discipline', ''),
+                    "explanation": metadata.get('explanation', ''),
+                    "prompt": metadata.get('prompt', ''),
                     "prediction": prediction_images  # Keep as original PIL Image list
                 }
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         
         # Sort by index and save to pickle
         if 'index' in df: df = df.sort_values('index').reset_index(drop=True)
-        output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_GenEval.pkl")
+        # output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
         df.to_pickle(output_pkl)
         print(f"Aggregated results saved to: {output_pkl}")
 
@@ -689,13 +771,13 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
         os.makedirs(tf_eval_dir, exist_ok=True)
         
         # CSV file to store all scores (overwrite existing)
-        csv_file = os.path.join(dcp_ckpt_dir, "gen_eval_scores.csv")
+        csv_file = os.path.join(dcp_ckpt_dir, f"{args.benchname}_scores.csv")
         
         # TensorBoard writer
         tb_writer = SummaryWriter(log_dir=tf_eval_dir)
         
         # Find all score files
-        score_pattern = os.path.join(dcp_ckpt_dir, "**", f"{model_tag}_GenEval_score.csv")
+        score_pattern = os.path.join(dcp_ckpt_dir, "**", f"{model_tag}_{args.benchname}_score.csv")
         score_files = glob.glob(score_pattern, recursive=True)
         
         if not score_files:
@@ -738,7 +820,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
                     
                     if all_score is not None:
                         scores_data.append((step, all_score))
-                        tb_writer.add_scalar('GenEval/Overall_Score', all_score, step)
+                        tb_writer.add_scalar(f'{args.benchname}/Overall_Score', all_score, step)
                         print(f"Step {step}: Overall Score = {all_score}")
                     else:
                         print(f"Could not parse overall score from {score_file}")
@@ -756,7 +838,7 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 # First row: benchmark names
-                writer.writerow(['Step', 'GenEval'])
+                writer.writerow(['Step', f'{args.benchname}'])
                 
                 # Subsequent rows: step and scores
                 for step, score in scores_data:

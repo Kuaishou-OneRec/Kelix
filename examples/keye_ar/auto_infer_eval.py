@@ -126,7 +126,8 @@ def run_evaluation(step_name: str) -> bool:
         f"cd {ulm_dir} && "
         f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)}"
     ]
-    
+    # > {work_dir}/eval_${cf}.out 2>&1 &
+    print(f"Activation command: {' '.join(activation_cmd)}")
     return run_command(activation_cmd)
 
 
@@ -177,6 +178,7 @@ def monitor():
         new_steps = [step for step in available_steps if step not in processed_steps]
         
         for step_name in new_steps:
+            # if int(step_name.split('step')[-1]) % 4000 != 0: continue
             log(f"Found new step: {step_name}")
             processed_steps.add(step_name)
             
@@ -185,7 +187,8 @@ def monitor():
                     collect_scores(step_name)
             else:
                 log(f"Failed to process {step_name}, skipping further steps")
-        
+            break
+            
         if not new_steps:
             time.sleep(MONITOR_INTERVAL)
 

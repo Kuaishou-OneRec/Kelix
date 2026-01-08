@@ -15,7 +15,7 @@ export PYTHONPATH="${PYTHONPATH:-.}"
 
 # ---- Defaults (edit or override via env) ----
 # Use environment variables with sensible defaults for auto-usage scenarios
-MODEL_DIR="${MODEL_DIR:-/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/}"
+MODEL_DIR="${MODEL_DIR:-/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105}"
 VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/}"
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
 
@@ -34,7 +34,10 @@ MAX_CONDITION_LENGTH="${MAX_CONDITION_LENGTH:-324}"
 IMAGE_SIZE="${IMAGE_SIZE:-1024}"
 SEED="${SEED:-42}"
 INITIALIZE_DIST="${INITIALIZE_DIST:-true}"  # initialize a local single-process dist group
-MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-caption_channels=4096 model_max_length=324 y_norm_scale_factor=1 use_cross_attn_rope=True}"
+MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=324}"
+
+# DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
+# DCP_TAG="${DCP_TAG:-global_step12000}"
 
 DCP_CKPT_DIR="${DCP_CKPT_DIR:-}"
 DCP_TAG="${DCP_TAG:-}"
@@ -46,7 +49,7 @@ N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
 if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
     OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/GenEval/outputs}"
 else
-    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/GenEval/outputs}"
+    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/GenEval/outputs}"      
 fi
 
 # Log configuration for debugging
@@ -171,6 +174,9 @@ mpirun --allow-run-as-root \
       --seed ${SEED} \
       --results-dir "${RESULTS_DIR}" \
       --teacher-forcing ${TEACHER_FORCING} \
+      --cfg-scale 2.0 \
+      --linspace-sigmas \
+--num-sampling-steps 50 \
       --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log

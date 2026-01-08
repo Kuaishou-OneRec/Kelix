@@ -100,10 +100,14 @@ def parse_args():
                         help="Distributed world_size to set in dataset config (default: 1)")
     parser.add_argument("--teacher-forcing", type=int, default=1,
                         help="Enable teacher forcing during inference")
+    parser.add_argument("--port", type=int, default=29500,
+                        help="Port to use for distributed communication")
+    parser.add_argument("--linspace-sigmas", action="store_true",
+                        help="Use linspace sigmas for scheduler")
     return parser.parse_args()
 
 
-def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
+def setup_distributed_environment(rank: int = 0, world_size: int = 1, port:int = 29500) -> bool:
     """
     Initialize distributed environment for single-process inference runs using the
     same approach as our tests: TCP init on localhost (gloo backend).
@@ -114,11 +118,11 @@ def setup_distributed_environment(rank: int = 0, world_size: int = 1) -> bool:
     print(f"going to init: {rank}/{world_size}")
     dist.init_process_group(
         backend='gloo',
-        init_method='tcp://127.0.0.1:29500',
+        init_method=f'tcp://127.0.0.1:{port}',
         rank=rank,
         world_size=world_size,
     )
-    print("Initialized local TCP-based distributed process group (127.0.0.1:29500)")
+    print(f"Initialized local TCP-based distributed process group (127.0.0.1:{port})")
     return True
 
 
@@ -130,9 +134,11 @@ def get_model_embedding_and_tokens(
         **kwargs
     ):
     if teacher_forcing:
+        kwargs["tokens"] = input_ids
+        model.set_output_hidden_states([len(model.model.model.layers)])
         outputs = model(**kwargs)
         embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
-        return embeddings, embeddings
+        return input_ids, embeddings[0]
     else:
         if "input_pos" in kwargs:
             del kwargs["input_pos"]
@@ -143,11 +149,14 @@ def get_model_embedding_and_tokens(
             del kwargs["cu_seqlens"]
 
         model.set_output_hidden_states([len(model.model.model.layers)])
-        tokens, embeddings = model.generate(
-            input_ids=input_ids,
-            **kwargs
-        )
-        print(f"after generate")
+        try:
+            tokens, embeddings = model.generate(
+                input_ids=input_ids,
+                top_k=1,
+                **kwargs
+            )
+        except Exception as e:
+            raise Exception(f"Error in generate: {e}, input_ids: {input_ids}, kwargs: {kwargs}")
         embeddings = embeddings[0]
         return tokens, embeddings
         
@@ -180,7 +189,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     """
     import IPython
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
-    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant") # [151644, 77091]
+    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant\n") # [151644, 77091]
     # input_ids: [batch_size, total_seq_len]
     if not teacher_forcing:
         # find assistant_start_ids in input_ids and delete the tokens after
@@ -206,21 +215,15 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_ids = input_ids[:, :assistant_start_idx]
             print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
 
+    # Extract embeddings between vision_start_id and vision_end_id
+    vision_start_id = ar_model.config.qwen_config.vision_start_token_id
+    vision_end_id = ar_model.config.qwen_config.vision_end_token_id
+
+    if input_ids[0][-1].item() != vision_start_id:
+        input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
+
     with torch.no_grad():
-        
-        # Create input_pos using cu_seqlens if provided
-        if cu_seqlens is not None:
-            # Calculate input_pos based on cu_seqlens
-            # cu_seqlens: [0, seq_len1, seq_len1+seq_len2, ...]
-            input_pos = []
-            for i in range(len(cu_seqlens) - 1):
-                seq_len = cu_seqlens[i+1] - cu_seqlens[i]
-                pos_ids = torch.arange(seq_len, device=pixel_values.device, dtype=torch.long)
-                input_pos.append(pos_ids)
-            input_pos = torch.cat(input_pos, dim=0).unsqueeze(0)  # [1, total_seq_len]
-        else:
-            # Fallback: create input_pos from input_ids shape
-            input_pos = torch.arange(input_ids.shape[1], device=pixel_values.device, dtype=torch.long).unsqueeze(0)
+        input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
 
         # embeddings = outputs # .last_hidden_state  # [B, seq_len, embed_dim]
         input_ids, embeddings = get_model_embedding_and_tokens(
@@ -231,12 +234,8 @@ def tokenize_images(ar_processor : AutoProcessor,
             image_grid_thw=image_grid_thw,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4, # space,vis_start,vis_tok,vis_end,eos
+            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
         )
-
-        # Extract embeddings between vision_start_id and vision_end_id
-        vision_start_id = ar_model.config.qwen_config.vision_start_token_id
-        vision_end_id = ar_model.config.qwen_config.vision_end_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
@@ -248,32 +247,37 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = []
         vision_seq_lens = []
         
-        # Get the flat input_ids (remove batch dimension for packing case)
-        flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
-        
         # Find all start and end positions
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
         
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
-            raise ValueError(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens")
+            torch.save(input_ids, "input_ids.pt")
+            print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
         
-        # Extract embeddings for each vision segment
-        for start_pos, end_pos in zip(start_positions, end_positions):
-            # Check if start_pos comes before end_pos
-            if start_pos >= end_pos:
-                raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
-            
-            # Extract embeddings for this segment
-            # embeddings shape is [1, total_seq_len, embed_dim] in packing case
-            vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-            vision_embeddings_list.append(vision_embeddings)
-            vision_seq_lens.append(vision_embeddings.shape[0])
+        else:
+            # Extract embeddings for each vision segment
+            for start_pos, end_pos in zip(start_positions, end_positions):
+                # Check if start_pos comes before end_pos
+                if start_pos >= end_pos:
+                    raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
+                
+                # Extract embeddings for this segment
+                # embeddings shape is [1, total_seq_len, embed_dim] in packing case
+                vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+                vision_embeddings_list.append(vision_embeddings)
+                vision_seq_lens.append(vision_embeddings.shape[0])
         
+        vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
         if len(vision_embeddings_list) != batch_size:
-            raise ValueError(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
+            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
+            vision_seq_lens.append(max_condition_length)
+            
         
         # Stack the embeddings and handle variable sequence lengths
         max_vision_seq_len = max(vision_seq_lens)
@@ -287,6 +291,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         
         for i, emb in enumerate(vision_embeddings_list):
             seq_len = emb.shape[0]
+            print(111, processed_embeddings.shape, emb.shape)
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
@@ -312,7 +317,6 @@ def tokenize_images(ar_processor : AutoProcessor,
 
     return processed_embeddings, attention_mask
 
-
 def main():
     args = parse_args()
 
@@ -322,7 +326,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
-    setup_distributed_environment(args.rank, args.world_size)
+    setup_distributed_environment(args.rank, args.world_size, args.port)
 
     # Convert DCP checkpoint if needed
     model_dir = args.model_dir
@@ -443,7 +447,11 @@ def main():
                 input_ids=loaded.input_ids.to(device=device),
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
+
             )
+            print(f"loaded.pixel_values={loaded.pixel_values.shape}")
+            print(f"cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}")
+            cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
 
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding
@@ -462,7 +470,12 @@ def main():
 
             # Create scheduler and sample
             scheduler = FlowMatchEulerDiscreteScheduler(shift=args.flow_shift)
-            scheduler.set_timesteps(args.num_sampling_steps, device=device)
+
+            if args.linspace_sigmas:
+                sigmas = np.linspace(1.0, 1 / args.num_sampling_steps, args.num_sampling_steps)
+                scheduler.set_timesteps(args.num_sampling_steps, sigmas=sigmas, device=device)
+            else:
+                scheduler.set_timesteps(args.num_sampling_steps, device=device)
 
             generator = torch.Generator(device=device).manual_seed(args.seed)
             dit_latents = torch.randn(
@@ -472,13 +485,15 @@ def main():
                 dtype=dtype,
             )
 
+            print(f"uncond_embedsuncond_embeds={uncond_embeds.shape}, cond_embeds={cond_embeds.shape}")
+
             cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
             mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
             for t in scheduler.timesteps:
                 latent_input = torch.cat([dit_latents] * 2)
                 timestep = t.expand(latent_input.shape[0])
-                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg)
+                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True)
                 noise_uncond, noise_cond = noise_pred.chunk(2)
                 noise_pred = noise_uncond + args.cfg_scale * (noise_cond - noise_uncond)
                 dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]

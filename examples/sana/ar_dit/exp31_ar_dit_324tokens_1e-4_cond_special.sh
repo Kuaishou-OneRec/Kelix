@@ -19,7 +19,7 @@ MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
@@ -136,28 +136,29 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 200 \
+                --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --max-condition-length 324 \
+                --max-condition-length 658 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce.json \
-                --resolution-budgets "1024:48" \
+                --dataset-config examples/sana/ar_dit/exp31_ar_dit_324tokens_1e-4_cond_special.json \
+                --resolution-budgets "1024:12" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 24 \
+                --batch-size 12 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 10000 \
                 --num-training-steps 300000 \
-                --model-config-overrides model_max_length=324 \
+                --model-config-overrides model_max_length=658 \
+                --condition-on-special-tokens \
                 --save-checkpoint-per-step 2000 \
                 --logging-per-step 20 \
                 --clip-range 9999999 \
@@ -167,5 +168,6 @@ nohup mpirun --allow-run-as-root \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --enable-profile \
+                --condition-on-special-tokens \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

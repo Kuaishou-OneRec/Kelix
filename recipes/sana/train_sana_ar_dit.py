@@ -148,6 +148,9 @@ def get_argument_parser():
     parser.add_argument("--cond-pos-scale", type=float, default=1.0,
                         help="Scale factor for condition position embeddings")
 
+    parser.add_argument("--condition-on-special-tokens", action="store_true",
+                        help="Condition on special tokens")
+
     ############ Dataset args ############
     parser.add_argument("--dataset-config", type=str, required=True,
                         help="The config file path of the dataset to train")
@@ -400,6 +403,7 @@ def tokenize_images(tokenizer,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     cond_embeds_op = None,
+                    condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -411,6 +415,8 @@ def tokenize_images(tokenizer,
         max_condition_length: Maximum condition sequence length for padding
         input_ids: Input token IDs [1, total_seq_len] (packed sequences)
         cu_seqlens: Cumulative sequence lengths for flash attention
+        cond_embeds_op: Optional function to apply to condition embeddings
+        condition_on_special_tokens: Whether to condition on special tokens (BOS/EOS/POS) or not
     
     Returns:
         Tuple of (embeddings, attention_mask):
@@ -448,6 +454,7 @@ def tokenize_images(tokenizer,
         # Extract embeddings between vision_start_id and vision_end_id
         vision_start_id = tokenizer.config.qwen_config.vision_start_token_id
         vision_end_id = tokenizer.config.qwen_config.vision_end_token_id
+        image_token_id = tokenizer.config.qwen_config.image_token_id
         
         # Find the positions of vision_start_id and vision_end_id in input_ids
         # input_ids shape is [1, total_seq_len] in packing case
@@ -479,6 +486,13 @@ def tokenize_images(tokenizer,
             # Extract embeddings for this segment
             # embeddings shape is [1, total_seq_len, embed_dim] in packing case
             vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
+
+            if not condition_on_special_tokens:
+                vision_embeddings = vision_embeddings[flat_input_ids[start_pos:end_pos+1] == image_token_id, :]  # [valid_len, embed_dim]
+            
+            if np.random.rand() < 0.001:
+                print(f"start_pos={start_pos}, end_pos={end_pos}, vision_embeddings={vision_embeddings.shape}")
+            
             vision_embeddings_list.append(vision_embeddings)
             vision_seq_lens.append(vision_embeddings.shape[0])
         
@@ -618,6 +632,7 @@ def visualize_reconstruction(
     dtype: torch.dtype,
     tb_writer=None,
     num_images: Optional[int] = None,
+    args = None,
 ):
     """Visualize DiT reconstruction results.
     
@@ -666,7 +681,8 @@ def visualize_reconstruction(
         batch_size=loaded.batch_size,
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
-        cond_embeds_op=model.diffusion_connector
+        cond_embeds_op=model.diffusion_connector,
+        condition_on_special_tokens=args.condition_on_special_tokens
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1306,6 +1322,7 @@ def train():
                     dtype=get_torch_dtype(args.model_dtype),
                     tb_writer=tb_writer,
                     num_images=args.num_vis_images,
+                    args=args
                 )
             
             # Move model back to CPU to save memory
@@ -1358,7 +1375,7 @@ def train():
                     args.max_condition_length,
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
-                    # cond_embeds_op=model.diffusion_connector,
+                    condition_on_special_tokens=args.condition_on_special_tokens,
                 )
             
             pos_args = compute_pos_args(
@@ -1368,6 +1385,9 @@ def train():
                 device=latents.device,
                 cond_pos_scale=args.cond_pos_scale,
             )
+
+            if np.random.rand() < 0.0001:
+                print(f"token_embeds={token_embeds.shape}, pos_args={pos_args}")
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1414,7 +1434,10 @@ def train():
 
             # Logging
             if scheduler.should_logging():
-                metrics.write_logs(scheduler.global_step)
+                try:
+                    metrics.write_logs(scheduler.global_step)
+                except Exception as e:
+                    print(f"Logging failed: {e}")
 
             # Save checkpoint
             if scheduler.should_save_checkpoint():
@@ -1473,6 +1496,7 @@ def train():
                             dtype=get_torch_dtype(args.model_dtype),
                             tb_writer=tb_writer,
                             num_images=args.num_vis_images,
+                            args=args
                         )
                     
                     # Move model back to CPU to save memory

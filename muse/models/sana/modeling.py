@@ -162,8 +162,6 @@ class SanaModel(Model):
             nn.Linear(config.hidden_size, 6 * config.hidden_size, bias=True),
         )
         
-        print(f"self.use_connector={self.use_connector}")
-
         # caption_channels is hidden size from LLM model
         # hidden_size is sana hidden size (pretrained in sana)
         self.diffusion_connector = nn.Sequential(

@@ -1,6 +1,10 @@
-DCP_CKPT_DIR=${DCP_CKPT_DIR} DCP_TAG=${DCP_TAG}  bash examples/sana/ar_dit/inference/mpi_infer_custom.sh
-DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/
-DCP_TAG=global_step12000
+export http_proxy=http://oversea-squid1.jp.txyun:11080 https_proxy=http://oversea-squid1.jp.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
+
+DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp22_ar_dit_324tokens_1e-4_reproduce
+DCP_TAG=global_step24000
+
+
+# DCP_CKPT_DIR=${DCP_CKPT_DIR} DCP_TAG=${DCP_TAG}  bash examples/sana/ar_dit/inference/mpi_infer_custom.sh
 
 #DCP_CKPT_DIR=${DCP_CKPT_DIR} DCP_TAG=${DCP_TAG}  bash examples/sana/ar_dit/inference/mpi_infer_custom.sh
 work_dir=${DCP_CKPT_DIR}/${DCP_TAG}/inference/GenEval/outputs/ulmeval/aggresults/
