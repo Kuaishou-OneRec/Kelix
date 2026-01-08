@@ -39,7 +39,6 @@ from muse.training.checkpoint import (
     AppState,
     DistributedCheckpointer,
     get_checkpoint_path,
-    load_from_full_model_state_dict,
     load_hf_checkpoint,
     save_checkpoint,
 )
@@ -52,7 +51,7 @@ from muse.training.common import (
     set_default_dtype,
     StepScheduler,
 )
-from muse.training.distributed import initialize_model_params, shard_model
+from muse.training.distributed import initialize_model_params, shard_model, load_from_full_model_state_dict
 from muse.training.lr_schedulers import get_scheduler
 from muse.training.parallel import (
     gather_by_group,
