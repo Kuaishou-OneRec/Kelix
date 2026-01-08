@@ -36,6 +36,8 @@ echo "log_file=${log_file}"
 
 # Run the Python script with all parameters
 PYTHONPATH=. \
+MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES} \
+MAX_CONDITION_LENGTH=${MAX_CONDITION_LENGTH} \
 nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dcp-ckpt-dir "$DCP_CKPT_DIR" \
     --monitor-interval "$MONITOR_INTERVAL" \
