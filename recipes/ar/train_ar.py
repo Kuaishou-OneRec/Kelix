@@ -427,6 +427,9 @@ def train() -> None:
             f"cu_seqlens: {cu_seqlens}, "
             f"pixel_values: {pixel_values.shape}"
         )
+        if pixel_values.ndim == 5:
+            pixel_values = pixel_values.squeeze(0)
+
 
         # forward
         with contextlib.nullcontext():
