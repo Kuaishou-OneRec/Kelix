@@ -122,6 +122,9 @@ def parse_args():
     parser.add_argument("--benchname", type=str, default="GenEval",
                         help="Benchmark name for result aggregation, GenEval|WISE_all|DPGBench")
     parser.add_argument("--condition-on-special-tokens", action="store_true", help="Condition on special tokens like pos_start")
+    parser.add_argument("--overwrite-output", action="store_true",
+                        help="Overwrite existing output files")
+        
     return parser.parse_args()
 
 
@@ -413,7 +416,7 @@ def main():
     agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
     output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
 
-    if os.path.exists(output_pkl):
+    if os.path.exists(output_pkl) and args.overwrite_output:
         print(f"{output_pkl} already exists, skipping")
         return
 
