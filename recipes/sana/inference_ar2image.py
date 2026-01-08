@@ -597,7 +597,7 @@ def main():
 
             pos_args = train_rec.compute_pos_args(
                 latent_hw=(latent_size, latent_size), 
-                image_grid_thw=torch.tensor([1, args.max_condition_length**0.5, args.max_condition_length**0.5])[None], 
+                image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
                 max_seq_len=args.max_condition_length, 
                 device=device, 
                 cond_pos_scale=args.cond_pos_scale)
