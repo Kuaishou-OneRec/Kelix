@@ -352,7 +352,116 @@ def main():
     dataset_cfg['rank'] = 0
     dataset_cfg['world_size'] = 1
 
+
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
+    dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
+
+    # Run DiT sampling pipeline locally and save results
+    print("Running DiT sampling and saving results...")
+
+    try:
+        with torch.no_grad():
+            # Load samples / preprocess
+            loaded = train_rec.VisReconstructionLoader()(
+                args.parquet_path,
+                dataset,
+                args.image_size,
+                device,
+                dtype,
+                args.num_images,
+                None,
+                vae,
+            )
+
+            # Tokenize images to condition embeddings
+            cond_embeds, cond_mask = tokenize_images(
+                ar_processor=ar_processor,
+                ar_model=image_tokenizer,
+                pixel_values=loaded.pixel_values.to(device=device),
+                image_grid_thw=loaded.image_grid_thw.to(device=device),
+                batch_size=loaded.batch_size,
+                max_condition_length=args.max_condition_length,
+                input_ids=loaded.input_ids.to(device=device),
+                teacher_forcing=args.teacher_forcing,
+            )
+
+            print(f"loaded.pixel_values={loaded.pixel_values.shape}")
+            print(f"cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}")
+            cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
+
+            # Prepare unconditional embeddings for CFG
+            null_embed = model_for_vis.y_embedder.y_embedding
+            seq_len = min(null_embed.shape[0], args.max_condition_length)
+            uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(loaded.batch_size, -1, -1)
+            if seq_len < args.max_condition_length:
+                padding = torch.zeros(
+                    loaded.batch_size, args.max_condition_length - seq_len, uncond_embeds.shape[-1],
+                    device=device, dtype=dtype
+                )
+                uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
+            uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
+            uncond_mask = torch.zeros(loaded.batch_size, args.max_condition_length, device=device)
+            uncond_mask[:, :seq_len] = 1
+            uncond_mask = uncond_mask[:, None, None, :]
+
+            # Create scheduler and sample
+            scheduler = FlowMatchEulerDiscreteScheduler(shift=args.flow_shift)
+
+            if args.linspace_sigmas:
+                sigmas = np.linspace(1.0, 1 / args.num_sampling_steps, args.num_sampling_steps)
+                scheduler.set_timesteps(args.num_sampling_steps, sigmas=sigmas, device=device)
+            else:
+                scheduler.set_timesteps(args.num_sampling_steps, device=device)
+
+            generator = torch.Generator(device=device).manual_seed(args.seed)
+            dit_latents = torch.randn(
+                (loaded.batch_size, loaded.latent_channels, loaded.latent_size, loaded.latent_size),
+                generator=generator,
+                device=device,
+                dtype=dtype,
+            )
+
+            print(f"uncond_embeds={uncond_embeds.shape}, cond_embeds={cond_embeds.shape}")
+
+            cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
+            mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
+
+            for t in scheduler.timesteps:
+                latent_input = torch.cat([dit_latents] * 2)
+                timestep = t.expand(latent_input.shape[0])
+                noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True)
+                noise_uncond, noise_cond = noise_pred.chunk(2)
+                noise_pred = noise_uncond + args.cfg_scale * (noise_cond - noise_uncond)
+                dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
+
+            # Decode DiT latents
+            dit_recon_latents = dit_latents / vae.config.scaling_factor
+            dit_recon_images = vae.decode(dit_recon_latents).sample
+            dit_recon_images = (dit_recon_images / 2 + 0.5).clamp(0, 1)
+
+            # Save DiT JPEGs and messages JSON
+            results_step_dir = os.path.join(args.results_dir, "step_0")
+            os.makedirs(results_step_dir, exist_ok=True)
+
+            dit_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
+            messages = list(getattr(loaded, 'texts', []))
+            mapping = {}
+            for i in range(len(dit_np)):
+                img = Image.fromarray((dit_np[i] * 255).round().astype("uint8"))
+                img_fname = f"dit_{i}.jpg"
+                img.save(os.path.join(results_step_dir, img_fname), quality=95)
+                mapping[img_fname] = messages[i] if i < len(messages) else ""
+
+            # Save messages mapping
+            with open(os.path.join(results_step_dir, "messages.json"), 'w', encoding='utf-8') as f:
+                json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+            print(f"Saved {len(dit_np)} DiT images and messages to: {results_step_dir}")
+    except Exception as e:
+        print(f"Error running DiT sampling: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":
