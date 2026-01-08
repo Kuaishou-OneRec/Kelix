@@ -326,7 +326,7 @@ def train() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    app_state = AppState(model=model, optimizer=optimizer, lr_scheduler=lr_scheduler)
+    app_state = AppState(model=model, optimizer=optimizer)
     dist_checkpointer = DistributedCheckpointer(app_state=app_state)
 
     if args.resume:
