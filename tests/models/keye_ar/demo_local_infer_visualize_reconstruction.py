@@ -350,7 +350,7 @@ def main():
         trust_remote_code=True
     )
 
-    image_tokenizer = image_tokenizer.to(device)
+    image_tokenizer = image_tokenizer.to(device).bfloat16()
 
     # Build dataset using provided dataset config
     with open(args.dataset_config, encoding='utf-8') as f:
