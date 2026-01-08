@@ -16,9 +16,26 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video
+MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo/MuseV2/video/stage1
+# 动态构建 OUTPUT_DIR，对齐 exp30_ar_dit_324tokens_1e-4_reproduce_lbs.sh 命名风格
+SCRIPT_ABS_PATH=$(readlink -f "$0")
+if [ $? -ne 0 ]; then
+    # 兼容macOS（macOS无readlink -f，用realpath替代）
+    SCRIPT_ABS_PATH=$(realpath "$0")
+fi
+
+# 提取倒数第二级目录名
+SCRIPT_DIR=$(dirname "${SCRIPT_ABS_PATH}")
+SECOND_LAST_DIR=$(basename "$(dirname "${SCRIPT_DIR}")")
+
+# 提取最后一级目录名
+LAST_DIR=$(basename "${SCRIPT_DIR}")
+SCRIPT_NAME=$(basename "${SCRIPT_ABS_PATH}")
+SCRIPT_NAME_NO_SUFFIX=${SCRIPT_NAME%.*}  # 去掉最后一个.及后面的内容
+
+# 构建最终 OUTPUT_DIR：/mmu_mllm_hdd_2/maosiyang/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_NAME_NO_SUFFIX}
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_NAME_NO_SUFFIX}
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 KAI_FLAG_FILE=msy
@@ -27,10 +44,10 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="keye_tokenizer_end2end_image_train_video_stage1"
+comment="keye_ar_train"
 
-git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+# git add --all
+# git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -113,22 +130,24 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "bash numa_runner.sh python3 recipes/ar/train_ar.py \
-                        --model-dir $MODEL_DIR \
-                        --model-name KeyeARModel \
-                        --output-dir $OUTPUT_DIR \
-                        --dataset-config examples/keye_ar/train_scripts/dataset.json \
-                        --learning-rate 2e-4 \
-                        --weight-decay 0.1 \
-                        --beta1 0.9 \
-                        --beta2 0.95 \
-                        --dtype bf16 \
-                        --warmup-steps 1000 \
-                        --lr-scheduler cosine \
-                        --logging-per-step 20 \
-                        --max-steps 2500000 \
-                        --save-per-step 1000 \
-                        --seed 19260817" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+        bash -c "python3 recipes/ar/train_ar.py \
+                --model-dir $MODEL_DIR \
+                --model-name KeyeARModel \
+                --output-dir $OUTPUT_DIR \
+                --dataset-config examples/keye_ar/train_scripts/run_train.json \                
+                --learning-rate 2e-4 \
+                --weight-decay 0.1 \
+                --beta1 0.9 \
+                --beta2 0.95 \
+                --dtype bf16 \
+                --warmup-steps 1000 \
+                --lr-scheduler cosine \
+                --logging-per-step 20 \
+                --max-steps 2500000 \
+                --save-checkpoint-per-step 1000 \
+                --seed 19260817 \
+                --comment '$comment' \
+                --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 
 

@@ -1,6 +1,6 @@
 """AR（自回归）模型训练脚本。
 
-该脚本仿照 `recipes/train_keye_tok_end2end.py` 的组织方式，提供：
+- 训练muse/models/keye_ar/modeling.py的KeyeARModel模型
 - 参数解析（训练/日志/分布式/恢复等）
 - 配置加载（与 muse config 体系对齐）
 - 模型构建与并行初始化（FSDP/TP/CP 等由框架内部控制）
@@ -9,8 +9,9 @@
 - checkpoint 保存/恢复
 
 注：当前实现以 KeyeAR 模型的 forward 形参为准（tokens/cu_seqlens/input_pos/pixel_values/image_grid_thw）。
-如果你使用的 AR 模型 forward 签名不同，请告诉我模型名和 batch 字段，我再对齐。
+
 """
+
 
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 # muse imports
-from muse.config import load_config
+from muse.config import KeyeARConfig, load_config
 from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
 from muse.losses import CrossEntropyLoss
 from muse.models import get_model_class
@@ -45,6 +46,7 @@ from muse.training.checkpoint import (
 from muse.training.common import (
     clip_grad_by_value,
     compute_fsdp_zero2_grad_norm,
+    freeze_params_by_pattern,
     get_torch_dtype,
     initialize_metrics,
     set_default_dtype,
@@ -70,7 +72,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Muse AR training")
 
     # basic
-    parser.add_argument("--model-dir", type=str, default=None, help="HF checkpoint dir or model config dir")
+    parser.add_argument("--model-dir", type=str, default=None, help="checkpoint dir (optional)")
+    parser.add_argument(
+        "--model-config",
+        type=str,
+        default=None,
+        help="The config file path of the model to train (optional).",
+    )
     parser.add_argument("--model-name", type=str, default="KeyeARModel", help="muse.models registry name")
     parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--dataset-config", type=str, required=True, help="dataset json config")
@@ -98,10 +106,27 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     # logging/checkpoint
     parser.add_argument("--logging-per-step", type=int, default=10)
-    parser.add_argument("--save-per-step", type=int, default=1000)
+    parser.add_argument("--save-checkpoint-per-step", type=int, default=1000)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--resume-step", type=int, default=None)
     parser.add_argument("--overfit-batches", type=int, default=0)
+
+    # freeze
+    parser.add_argument(
+        "--freeze-params",
+        type=str,
+        default="",
+        help=(
+            "Parameter name patterns to freeze (comma-separated). Uses 'contains' matching. "
+            "E.g., 'y_embedder,cross_attn' freezes all params containing these substrings. "
+            "Use ^ prefix for inverse: '^y_embedder,^cross_attn' freezes all EXCEPT matching params"
+        ),
+    )
+
+    # legacy/shortcut flags: --freeze_xxx will be converted to --freeze-params xxx
+    parser.add_argument("--freeze-llm", action="store_true", help="Legacy alias -> freeze-params=llm")
+    parser.add_argument("--freeze-navit", action="store_true", help="Legacy alias -> freeze-params=navit")
+    parser.add_argument("--freeze-vision", action="store_true", help="Legacy alias -> freeze-params=vision")
 
     # distributed init
     parser.add_argument("--backend", type=str, default="nccl")
@@ -127,11 +152,20 @@ def _build_loggers(args: argparse.Namespace) -> list[Logger]:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # 对齐 recipes/sana/train_sana_ar_dit.py：只有 rank0 写日志，避免多卡重复写文件
+    rank = dist.get_rank() if dist.is_initialized() else 0
+    if rank != 0:
+        return []
+
     loggers: list[Logger] = []
     loggers.append(Logger(backend=StdoutBackend()))
-    loggers.append(Logger(backend=CSVBackend(str(output_dir / "train.csv"))))
+    loggers.append(Logger(backend=CSVBackend(str(output_dir / "metrics.csv"))))
+    loggers.append(Logger(backend=TensorBoardBackend(str(output_dir))))
+
     if args.tensorboard:
+        # 兼容旧习惯：也可以写到 tb 子目录
         loggers.append(Logger(backend=TensorBoardBackend(str(output_dir / "tb"))))
+
     return loggers
 
 
@@ -190,17 +224,47 @@ def train() -> None:
     set_random_seed(args.seed)
 
     # model
+    # KeyeARModel 需要 KeyeARConfig
     model_cls = get_model_class(args.model_name)
-    model = model_cls.from_pretrained(args.model_dir) if args.model_dir else model_cls()
+
+    if args.model_dir:
+        # continue pretrain mode: model_dir should contain config.json & weights
+        model = model_cls.from_pretrained(args.model_dir)
+    elif args.model_config:
+        # train from scratch mode: build config from a json
+        cfg = load_config(args.model_config, config_class=KeyeARConfig)
+        model = model_cls(cfg)
+    else:
+        raise ValueError(
+            "Either --model-dir (for continue pretrain) or --model-config (for train from scratch) must be provided."
+        )
 
     # init/shard
     initialize_model_params(model)
     model = shard_model(model)
     model.train()
 
+    # Freeze specified parameters (align with recipes/sana/train_sana_ar_dit.py)
+    freeze_patterns: list[str] = []
+
+    if args.freeze_params:
+        freeze_patterns.extend([p.strip() for p in args.freeze_params.split(",") if p.strip()])
+
+    # Convert legacy flags into patterns
+    if getattr(args, "freeze_llm", False):
+        freeze_patterns.append("llm")
+    if getattr(args, "freeze_navit", False):
+        freeze_patterns.append("navit")
+    if getattr(args, "freeze_vision", False):
+        freeze_patterns.append("vision")
+
+    if freeze_patterns:
+        frozen_count = freeze_params_by_pattern(model, freeze_patterns)
+        print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+
     # optimizer
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        (p for p in model.parameters() if p.requires_grad),
         lr=args.learning_rate,
         betas=(args.beta1, args.beta2),
         eps=args.eps,
@@ -276,30 +340,52 @@ def train() -> None:
 
         input_ids = batch["input_ids"]
         loss_mask = batch.get("loss_mask", None)
-        position_ids = batch.get("position_ids", None)
+        # KeyeARModel.forward:
+        #   - tokens: (b, s)
+        #   - input_pos: (b, s)
+        #   - **kwargs 支持 cu_seqlens（packed sequences for flash-attn）
+        #   - pixel_values+image_grid_thw: 提供则内部用visual_tokenizer得到image ids并expand
+        #   - 返回：通常是 logits tensor (b, s, vocab)
+        position_ids = batch.get("input_pos", None)
+        if position_ids is None:
+            position_ids = batch.get("position_ids", None)
         cu_seqlens = batch.get("cu_seqlens", None)
         pixel_values = batch.get("pixel_values", None)
         image_grid_thw = batch.get("image_grid_thw", None)
 
+        if position_ids is None:
+            if cu_seqlens is not None:
+                # 参考 recipes/sana/train_sana_ar_dit.py：根据cu_seqlens构造packed input_pos
+                input_pos_list = []
+                for i in range(len(cu_seqlens) - 1):
+                    seq_len = cu_seqlens[i + 1] - cu_seqlens[i]
+                    pos_ids = torch.arange(seq_len, device=input_ids.device, dtype=torch.long)
+                    input_pos_list.append(pos_ids)
+                position_ids = torch.cat(input_pos_list, dim=0).unsqueeze(0)
+            else:
+                # 未packed fallback
+                position_ids = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
+                if position_ids.shape[0] != input_ids.shape[0]:
+                    position_ids = position_ids.expand_as(input_ids)
+
+        # labels: 用loss_mask将非监督位置置为ignore_index
         labels = _prepare_labels(input_ids, loss_mask, ignore_index=loss_fn.ignore_index)
 
         # forward
         with contextlib.nullcontext():
-            output = model(
+            logits = model(
                 tokens=input_ids,
-                cu_seqlens=cu_seqlens,
                 input_pos=position_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                cu_seqlens=cu_seqlens,
             )
 
-        logits = output.logits if hasattr(output, "logits") else output
         loss = loss_fn(logits, labels)
 
-        metrics.loss.append(loss.detach().item())
+        # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
+        metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
-        if cu_seqlens is not None:
-            metrics.samples.append(cu_seqlens.shape[0])
 
         # backward
         loss.backward()
