@@ -134,6 +134,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     # tensorboard
     parser.add_argument("--tensorboard", action="store_true")
 
+    # metadata (对齐 sana 脚本)
+    parser.add_argument("--comment", type=str, default="", help="Experiment comment/description")
+    parser.add_argument("--commit-id", type=str, default="", help="Git commit hash")
+
     return parser
 
 
