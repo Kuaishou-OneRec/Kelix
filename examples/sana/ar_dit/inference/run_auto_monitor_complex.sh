@@ -29,6 +29,7 @@ INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_v2.sh"
 #DATASET_CONFIG="examples/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs_inf.jsonn"
 
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp31_ar_dit_324tokens_1e-4_cond_special/"
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
 MAX_CONDITION_LENGTH=658
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=658"
