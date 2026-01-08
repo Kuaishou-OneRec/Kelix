@@ -98,6 +98,11 @@ class KeyeImageTokenizer(Model):
                 for i in range(config.n_q_tokens)
             ]
         )
+        self.up_projectors = nn.ModuleList(
+            [nn.Linear(config.embedding_dim // config.n_q_tokens \
+                if config.split_dim else config.embedding_dim,
+                config.output_dim, bias=False) for _ in range(self.n_q_tokens)])
+
 
     def get_image_embeds(
         self,
