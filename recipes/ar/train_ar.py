@@ -42,6 +42,8 @@ from muse.training.checkpoint import (
     load_hf_checkpoint,
     save_checkpoint,
 )
+from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
+
 from muse.training.common import (
     clip_grad_by_value,
     compute_fsdp_zero2_grad_norm,
@@ -261,8 +263,7 @@ def train() -> None:
         model = model.float()
     
     # Shard model for distributed training
-    from muse.training.parallel import get_device_mesh
-    device_mesh = get_device_mesh()
+    device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
     
     shard_model(
         model=model,
