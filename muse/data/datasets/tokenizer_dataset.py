@@ -540,7 +540,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
                max_visual_tokens_per_frame: int = 512,
                shuffle_window: int = 5,
                train_video: bool = True,
-               get_rope_fn: str="get_rope_index_slowfast",
+               get_rope_index_fn: str="get_rope_index_slowfast",
                **kwargs
                ):
     """
@@ -581,7 +581,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
-    self.get_rope_fn = eval(get_rope_fn) if isinstance(get_rope_fn, str) else get_rope_fn
+    self.get_rope_index_fn = eval(get_rope_index_fn) if isinstance(get_rope_index_fn, str) else get_rope_index_fn
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -823,7 +823,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
-    inputs["position_ids"] = self.get_rope_fn(
+    inputs["position_ids"] = self.get_rope_index_fn(
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
@@ -834,7 +834,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
         spatial_merge_size=self.spatial_merge_size,
         vision_start_token_id=self.vision_start_token_id,
     )
-
+    print(f"getppp ", inputs["position_ids"].shape)
     inputs.pop("attention_mask")
     return inputs
 
@@ -946,7 +946,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
           f"Unable to generate sample with 0 loss_mask."
         )
 
-    inputs["position_ids"] = self.get_rope_fn(
+    inputs["position_ids"] = self.get_rope_index_fn(
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
