@@ -153,6 +153,26 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         self.token_decoder_with_teacher_forcing = token_decoder_with_teacher_forcing
         self.token_head_max_new_tokens = token_head_max_new_tokens
     
+    def get_initializer(self, name: str):
+        """Return an initializer function for the given parameter name.
+        
+        UnifiedTransformerDecoder extends TransformerDecoder with token_head.
+        Delegates to parent for standard decoder params, and to token_head for token_head.* params.
+        
+        Args:
+            name: Parameter name (e.g., "token_head.xxx", "layers.0.xxx", "tok_embeddings.xxx")
+            
+        Returns:
+            A callable function that takes a tensor and initializes it
+        """
+        if name.startswith("token_head."):
+            # Remove prefix and delegate to token_head
+            sub_name = name[len("token_head."):]
+            return self.token_head.get_initializer(sub_name)
+        
+        # Delegate to parent TransformerDecoder
+        return super().get_initializer(name)
+    
     def forward(
         self,
         tokens: Optional[torch.Tensor],

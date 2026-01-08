@@ -127,6 +127,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freeze-navit", action="store_true", help="Legacy alias -> freeze-params=navit")
     parser.add_argument("--freeze-vision", action="store_true", help="Legacy alias -> freeze-params=vision")
 
+    # FSDP options (对齐 sana)
+    parser.add_argument("--cpu-offload", action="store_true", help="Offload to CPU")
+    parser.add_argument("--reshard-after-forward", action="store_true", help="Reshard after forward (Zero3)")
+    parser.add_argument("--prefetch-params-in-forward", action="store_true", help="Prefetch parameters in forward pass")
+    parser.add_argument("--fp32-weight", action="store_true", help="Use fp32 for model weight updating")
+    parser.add_argument("--fp32-reduce", action="store_true", help="Use fp32 for model gradient reduction")
+
     # distributed init
     parser.add_argument("--backend", type=str, default="nccl")
     parser.add_argument("--init-method", type=str, default="env://")
@@ -246,9 +253,27 @@ def train() -> None:
             "Either --model-dir (for continue pretrain) or --model-config (for train from scratch) must be provided."
         )
 
-    # init/shard
+    # init/shard (对齐 sana)
     initialize_model_params(model)
-    model = shard_model(model)
+    
+    # fp32_weight mode: convert model to float32 before sharding
+    if args.fp32_weight:
+        model = model.float()
+    
+    # Shard model for distributed training
+    from muse.training.parallel import get_device_mesh
+    device_mesh = get_device_mesh()
+    
+    shard_model(
+        model=model,
+        cpu_offload=args.cpu_offload,
+        reshard_after_forward=args.reshard_after_forward,
+        dp_mesh=device_mesh,
+        fp32_weight=args.fp32_weight,
+        prefetch_params_in_forward=args.prefetch_params_in_forward,
+        fp32_reduce=args.fp32_reduce,
+    )
+    dist.barrier()
     model.train()
 
     # Freeze specified parameters (align with recipes/sana/train_sana_ar_dit.py)
