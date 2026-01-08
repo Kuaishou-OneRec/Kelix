@@ -1254,6 +1254,9 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     valid_seq_len = 0
 
     for _, inputs in enumerate(buffer):
+      print(f"packking")
+      for k, v in inputs.items():
+        print(f"{k}: {v.shape}")
       image_pad = True if self.use_flops_balance else False
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
 
