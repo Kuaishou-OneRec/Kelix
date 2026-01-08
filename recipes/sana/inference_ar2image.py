@@ -326,8 +326,10 @@ def tokenize_images(ar_processor : AutoProcessor,
         start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
         end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
         
-        default_vision_embeddings = embeddings[0, -max_condition_length:, :]
-        default_vision_embeddings = default_vision_embeddings[is_image_id[-min(max_condition_length, default_vision_embeddings.shape[0]):], :]  # [valid_len, embed_dim]
+        default_vision_embeddings = embeddings[0, start_positions[0]:start_positions[0]+max_condition_length:, :]
+
+        if not condition_on_special_tokens:
+            default_vision_embeddings = default_vision_embeddings[is_image_id[-default_vision_embeddings.shape[0]:], :]  # [valid_len, embed_dim]
         
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
