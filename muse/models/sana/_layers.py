@@ -391,7 +391,7 @@ class MultiHeadCrossAttention(nn.Module):
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
-        
+        print(f"2d self.use_rope={self.use_rope}")
         # 2D RoPE for cross attention (when use_rope=True)
         if use_rope:
             self.pos_embeddings = Roraty2DPositionalEmbeddings(self.head_dim)
@@ -437,7 +437,7 @@ class MultiHeadCrossAttention(nn.Module):
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
-        
+        print(f"x_input_pos={x_input_pos}, cond_input_pos={cond_input_pos}, self.pos_embeddings={self.pos_embeddings}")
         # Apply 2D RoPE using Roraty2DPositionalEmbeddings
         if self.pos_embeddings is not None and x_input_pos is not None:
             q = self.pos_embeddings(q, input_pos=x_input_pos)
