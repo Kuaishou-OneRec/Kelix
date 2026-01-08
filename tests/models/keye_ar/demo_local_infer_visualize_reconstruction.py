@@ -199,7 +199,7 @@ def load_keye_ar_local(tokenizer_dir: str, device: torch.device, dtype: torch.dt
     """Local version of load_keye_ar without distributed computing."""
     from muse.models.keye_ar import KeyeARModel
     with set_default_dtype(dtype), torch.device(device):
-        tokenizer = KeyeARModel.from_pretrained(tokenizer_dir, _attn_implementation="flash_attention_2",).eval()
+        tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
         # Remove distributed print
         print(f"tokenizer={tokenizer}")
         tokenizer.config.qwen_config.output_last_hidden_states_only = output_last_hidden_states_only
@@ -270,7 +270,7 @@ def main():
             self.cfg_scale = 1.0
             self.num_sampling_steps = 50
             self.flow_shift = 3.0
-            self.max_condition_length = 324
+            self.max_condition_length = 32 #324
             self.image_size = 1024
             self.seed = 42
             self.results_dir = "./vis_output_local/results"
