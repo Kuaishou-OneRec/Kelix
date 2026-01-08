@@ -96,6 +96,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--eps", type=float, default=1e-8)
     parser.add_argument("--lr-scheduler", type=str, default="cosine", help="see muse.training.lr_schedulers")
     parser.add_argument("--warmup-steps", type=int, default=100)
+    parser.add_argument("--min-lr", type=float, default=1e-6, help="Minimum learning rate (对齐 sana)")
 
     # precision
     parser.add_argument("--dtype", type=str, default="bf16", choices=["fp32", "fp16", "bf16"])
@@ -304,12 +305,15 @@ def train() -> None:
         weight_decay=args.weight_decay,
     )
 
-    # lr scheduler
+    # lr scheduler (对齐 sana)
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler,
         optimizer=optimizer,
-        num_warmup_steps=args.warmup_steps,
-        num_training_steps=args.max_steps,
+        scheduler_kwargs={
+            "warmup_steps": args.warmup_steps,
+            "max_steps": args.max_steps,
+            "min_lr": args.min_lr,
+        },
     )
 
     # loss
