@@ -118,7 +118,7 @@ class KeyeImageTokenizer(Model):
         image_grid_hws = []
         sample_indices = []
         cu_seqlens = [0]
-
+        print(f"image_grid_thw=",image_grid_thw)
         for idx, thw in enumerate(image_grid_thw):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
             numel = np.prod(thw_tuple)
@@ -131,7 +131,7 @@ class KeyeImageTokenizer(Model):
         siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
         cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
         sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
-
+        print(f"image_grid_hws=",image_grid_hws)
         vision_outputs = self.visual(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_hws,

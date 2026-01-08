@@ -137,10 +137,12 @@ class KeyeVisionEmbeddings(nn.Module):
         ) else has_learnable_position_embedding
         target_dtype = self.patch_embedding.weight.dtype
         if pixel_values.dim() == 5:
+            print(f"pixel_valuespixel_values", pixel_values.shape, image_grid_thw)
             if position_ids is None:
                 for thw_tuple in image_grid_thw:
                     numel = np.prod(thw_tuple)
                     position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                print(f"position_ids={position_ids}")
                 raise ValueError(
                     "position_ids must be provided when pixel_values has 5 dimensions."
                 )
