@@ -1255,9 +1255,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     valid_seq_len = 0
 
     for _, inputs in enumerate(buffer):
-      for k, v in inputs.items():
-        try: print(f"packkingpackking {k}: {v.shape}")
-        except: pass
       image_pad = True if self.use_flops_balance else False
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
 
@@ -1305,10 +1302,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-
-    if packed_position_ids[0].ndim == 2: 
-      packed_position_ids = [x if x.ndim == 2 else x[0] for x in packed_position_ids]
-
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
