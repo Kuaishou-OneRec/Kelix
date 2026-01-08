@@ -158,6 +158,7 @@ from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
     get_context_parallel_group,
     get_context_parallel_world_size,
+    get_data_parallel_group,
     get_data_parallel_rank,
     get_data_parallel_world_size,
     get_local_sequence,
@@ -1002,11 +1003,13 @@ def train():
     ticker = TimeTracker(n=args.logging_per_step)
     iter_ticker = TimeTracker(n=args.logging_per_step)
     
-    # Initialize perf monitoring variables (仿照 end2end 版本，但只保留简单累积值避免 segfault)
+    # Initialize perf monitoring variables (与 end2end 对齐)
     total_num_tokens = 0
     total_num_samples = 0
+    total_num_valid_tokens = 0
     acc_num_tokens = 0
     acc_num_samples = 0
+    acc_valid_num_tokens = 0
     start_time = time.perf_counter()
     
     print_rank_0("Starting training...")
@@ -1067,23 +1070,53 @@ def train():
                 # Fallback: use input_ids as labels if no loss_mask provided
                 labels = input_ids.clone()
 
-            num_tokens = input_ids.numel()
-            metrics.append("tokens", num_tokens)
+            # 计算 token 统计 (与 end2end 对齐)
+            num_tokens = input_ids.numel() / get_context_parallel_world_size()
             if sample_idx is not None:
-                # 考虑 CP 和 Packing 的逻辑样本数
                 num_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
-                metrics.append("samples", num_samples)
             else:
                 num_samples = input_ids.shape[0] / get_context_parallel_world_size()
-                metrics.append("samples", num_samples)
             
-            # 累积 perf 统计 (只累积简单数值，不涉及 grid_thw 操作)
+            # 计算 valid_tokens (与 end2end 对齐：使用 loss_mask 最后一个有效位置)
+            if loss_mask is not None and loss_mask.numel() > 0:
+                valid_indices = torch.nonzero(loss_mask[0] == 1)
+                if valid_indices.numel() > 0:
+                    num_valid_tokens = (valid_indices[-1].item() + 1) / get_context_parallel_world_size()
+                else:
+                    num_valid_tokens = 0
+            else:
+                num_valid_tokens = num_tokens
+            
+            # 使用 all_reduce 汇总所有 GPU 的统计 (与 end2end 对齐)
+            token_metrics = torch.tensor(
+                [num_tokens, num_samples, num_valid_tokens], 
+                dtype=torch.float32, device=torch.cuda.current_device()
+            )
+            ticker.tick("token_metrics_init")
+            
+            dist.all_reduce(token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+            ticker.tick("token_metrics_reduce")
+            
+            # 获取汇总后的值 (乘以 context_parallel_size 得到真实全局值)
+            num_tokens, num_samples, num_valid_tokens = (
+                token_metrics[0].item() * get_context_parallel_world_size(),
+                token_metrics[1].item() * get_context_parallel_world_size(),
+                token_metrics[2].item() * get_context_parallel_world_size()
+            )
+            
+            # 记录到 metrics
+            metrics.append("tokens", num_tokens)
+            metrics.append("samples", num_samples)
+            
+            # 累积 perf 统计 (与 end2end 对齐)
             total_num_tokens += num_tokens
             total_num_samples += num_samples
+            total_num_valid_tokens += num_valid_tokens
             acc_num_tokens += num_tokens
             acc_num_samples += num_samples
+            acc_valid_num_tokens += num_valid_tokens
             
-            ticker.tick("token_metrics_init")
+            ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
             # ================================================ Forward pass ================================================
             # Note: Do NOT pass labels to model - loss is computed externally (same as end2end)
@@ -1320,15 +1353,16 @@ def train():
 
             # Logging at specified intervals
             if scheduler.should_logging():
-                # 计算 perf 指标 (仿照 end2end 版本)
+                # 计算 perf 指标 (与 end2end 对齐)
                 end_time = time.perf_counter()
                 elapsed_time = end_time - start_time
                 world_size = dist.get_world_size()
                 
-                # 计算速率指标 (只使用简单累积值)
+                # 计算速率指标 (与 end2end 对齐)
                 sec_per_step = elapsed_time / args.logging_per_step if args.logging_per_step > 0 else 0
                 tokens_per_sec_per_gpu = acc_num_tokens / elapsed_time / world_size if elapsed_time > 0 else 0
                 samples_per_sec_per_gpu = acc_num_samples / elapsed_time / world_size if elapsed_time > 0 else 0
+                valid_tokens_per_sec_per_gpu = acc_valid_num_tokens / elapsed_time / world_size if elapsed_time > 0 else 0
                 
                 # 获取 ticker 统计信息
                 ticker_stats = {}
@@ -1340,14 +1374,17 @@ def train():
                     for name, data in ticker_stats.items():
                         tb_writer.add_scalar(f"ticker/{name}", data, global_step=scheduler.global_step, new_style=True)
                     
-                    # 添加 perf 指标到 TensorBoard
+                    # 添加 perf 指标到 TensorBoard (与 end2end 对齐)
                     perf_metrics = {
                         "perf/sec_per_step": sec_per_step,
                         "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
                         "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+                        "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
                         "perf/total_num_tokens": total_num_tokens,
                         "perf/total_num_samples": total_num_samples,
+                        "perf/valid_total_num_tokens": total_num_valid_tokens,
                         "perf/num_sample_per_gpu": total_num_samples / world_size,
+                        "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens if total_num_tokens > 0 else 0,
                     }
                     for name, data in perf_metrics.items():
                         tb_writer.add_scalar(name, data, global_step=scheduler.global_step, new_style=True)
@@ -1356,13 +1393,15 @@ def train():
                 print_rank_0(f"Step: {scheduler.global_step}, ticker_stats: {ticker_stats}")
                 print_rank_0(f"Step: {scheduler.global_step}, perf: sec_per_step={sec_per_step:.3f}, "
                            f"tokens/s/gpu={tokens_per_sec_per_gpu:.1f}, samples/s/gpu={samples_per_sec_per_gpu:.2f}, "
-                           f"total_tokens={total_num_tokens}, total_samples={total_num_samples}")
+                           f"total_tokens={total_num_tokens}, total_samples={total_num_samples}, "
+                           f"valid_tokens={total_num_valid_tokens}")
                 
                 metrics.write_logs(scheduler.global_step)
                 
-                # 重置累积变量和计时器
+                # 重置累积变量和计时器 (与 end2end 对齐)
                 acc_num_tokens = 0
                 acc_num_samples = 0
+                acc_valid_num_tokens = 0
                 start_time = time.perf_counter()
                 
                 # Reduce data source metrics across all ranks (must be called on all ranks)
