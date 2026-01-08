@@ -227,7 +227,6 @@ class KeyeProcessor(ProcessorMixin):
                                 **output_kwargs["images_kwargs"],
                             )
                         slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
-                        print("maosiyang2222222222::slow_video_grid_thw", slow_video_grid_thw, slow_fast_order)
                         all_slow_videos.append(slow_videos_inputs)
                     else:
                         all_slow_videos.append(None) # 这样的话，slow_fast_order都是1了，这里应该不会用到的
@@ -270,7 +269,7 @@ class KeyeProcessor(ProcessorMixin):
             #     video_grid_thw = videos_inputs["video_grid_thw"]
             # else:
             #     videos_inputs = {}
-            #     video_grid_thw = None
+            #     video_grid_thw = Nones
 
             if self.slowfast:
                 # todo: zdj debug 多次concat速度会慢很多
@@ -278,7 +277,6 @@ class KeyeProcessor(ProcessorMixin):
                 fast_video_grid_thw_list = [single_fast_video["video_grid_thw"] for single_fast_video in all_fast_videos if single_fast_video is not None]
 
                 if len(fast_pixel_values_videos_list):
-                    print('maosiyang::::fast_pixel_values_videos_list',fast_pixel_values_videos_list)
                     videos_inputs["fast_pixel_values_videos"] = torch.concat(fast_pixel_values_videos_list, dim=0)
                     videos_inputs["fast_video_grid_thw"] = torch.concat(fast_video_grid_thw_list, dim=0)
                     fast_video_grid_thw = videos_inputs["fast_video_grid_thw"]
