@@ -28,12 +28,12 @@ from muse.config.model_config import (
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
+    KeyeTokenizerEnd2EndImageConfig,
+    KeyeTokenizerEnd2EndVideoConfig,
     SanaConfig,
     UnifiedTokenDecoderConfig,
     KeyeARConfig,
-    UnifiedQwen3Config
-    KeyeTokenizerEnd2EndImageConfig,
-    KeyeTokenizerEnd2EndVideoConfig,
+    UnifiedQwen3Config,
 )
 
 from muse.config.dataset_config import DatasetConfig
