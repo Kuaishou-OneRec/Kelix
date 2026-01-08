@@ -19,5 +19,6 @@
     "video_total_pixels": 154140672,
     "max_sample_length": 16000,
     "train_video": true,
-    "shuffle_window": 5
+    "shuffle_window": 5,
+    "get_rope_fn": "get_rope_index_qwen3"
 }

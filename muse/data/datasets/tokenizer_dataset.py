@@ -475,6 +475,32 @@ def get_rope_index_slowfast(
             return position_ids
 
 
+def get_rope_index_qwen3(
+    input_ids: torch.LongTensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    **kwargs
+) -> torch.Tensor:
+    """
+    Calculate the rope index for Qwen3 model (pure text model).
+    
+    For Qwen3, we use standard 1D position embeddings since it's a pure text model.
+    
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
+    """
+    position_ids = torch.arange(input_ids.shape[1], device=input_ids.device)
+    position_ids = position_ids.unsqueeze(0).expand(input_ids.shape[0], -1)
+    return position_ids
+
+
 
 class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
   """
@@ -514,6 +540,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
                max_visual_tokens_per_frame: int = 512,
                shuffle_window: int = 5,
                train_video: bool = True,
+               get_rope_fn: str="get_rope_index_slowfast",
                **kwargs
                ):
     """
@@ -554,6 +581,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
+    self.get_rope_fn = eval(get_rope_fn) if isinstane(get_rope_fn, str) else get_rope_fn
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -795,7 +823,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
-    inputs["position_ids"] = get_rope_index_slowfast(
+    inputs["position_ids"] = self.get_rope_fn(
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
@@ -918,7 +946,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
           f"Unable to generate sample with 0 loss_mask."
         )
 
-    inputs["position_ids"] = get_rope_index_slowfast(
+    inputs["position_ids"] = self.get_rope_fn(
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
