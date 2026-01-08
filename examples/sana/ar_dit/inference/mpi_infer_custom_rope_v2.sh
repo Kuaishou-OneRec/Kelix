@@ -177,6 +177,7 @@ mpirun --allow-run-as-root \
       --cfg-scale 2.0 \
       --linspace-sigmas \
 --num-sampling-steps 50 \
+--overwrite-output \
       --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log
