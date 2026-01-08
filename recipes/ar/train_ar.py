@@ -199,7 +199,6 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     dataloader = DataLoader(
         dataset,
         batch_size=ds_cfg.get("batch_size", 1),
-        shuffle=True,
         num_workers=args.num_workers,
         pin_memory=args.pin_memory,
         prefetch_factor=args.prefetch_factor if args.num_workers > 0 else None,
