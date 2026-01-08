@@ -1386,6 +1386,9 @@ def train():
                 cond_pos_scale=args.cond_pos_scale,
             )
 
+            if np.random.rand() < 0.0001:
+                print(f"token_embeds={token_embeds.shape}, pos_args={pos_args}")
+
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
                 loss_dict = loss_fn(
