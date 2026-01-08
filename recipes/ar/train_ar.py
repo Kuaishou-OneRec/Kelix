@@ -165,25 +165,7 @@ def _setup_distributed(args: argparse.Namespace) -> tuple[int, int, int]:
     return rank, world_size, local_rank
 
 
-def _build_loggers(args: argparse.Namespace) -> list[Logger]:
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 对齐 recipes/sana/train_sana_ar_dit.py：只有 rank0 写日志，避免多卡重复写文件
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    if rank != 0:
-        return []
-
-    loggers: list[Logger] = []
-    loggers.append(Logger(backend=StdoutBackend()))
-    loggers.append(Logger(backend=CSVBackend(str(output_dir / "metrics.csv"))))
-    loggers.append(Logger(backend=TensorBoardBackend(str(output_dir))))
-
-    if args.tensorboard:
-        # 兼容旧习惯：也可以写到 tb 子目录
-        loggers.append(Logger(backend=TensorBoardBackend(str(output_dir / "tb"))))
-
-    return loggers
 
 
 def _load_dataset_config(path: str) -> Dict[str, Any]:
@@ -227,14 +209,11 @@ def train() -> None:
     rank, world_size, local_rank = _setup_distributed(args)
     initialize_model_parallel()
 
-    # logging
-    loggers = _build_loggers(args)
     print_rank_0(f"rank/world_size/local_rank: {rank}/{world_size}/{local_rank}")
     print_rank_0(f"output_dir: {args.output_dir}")
     
     # 保存训练参数到 output_dir（对齐 sana）
     if rank == 0:
-        import datetime
         args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
         print_rank_0(f"Training Arguments:\n{args_str}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -242,7 +221,9 @@ def train() -> None:
             f.write(args_str + "\n")
 
     # dtype & seed (对齐 sana：使用 rank-specific seed)
-    torch_dtype = get_torch_dtype(args.dtype)
+    # 注意：get_torch_dtype 需要完整名称 "bfloat16"/"float16"/"float32"
+    dtype_map = {"bf16": "bfloat16", "fp16": "float16", "fp32": "float32"}
+    torch_dtype = get_torch_dtype(dtype_map.get(args.dtype, args.dtype))
     set_default_dtype(torch_dtype)
     
     training_seed = args.seed + rank
@@ -329,6 +310,15 @@ def train() -> None:
 
     # data
     dataloader = _build_dataloader(args)
+
+    # Setup logging (对齐 sana)
+    if rank == 0:
+        stdout_logger = Logger("stdout", [StdoutBackend()])
+        csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
+        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
+        loggers = [stdout_logger, csv_logger, tb_logger]
+    else:
+        loggers = []
 
     # metrics & scheduler
     metrics = initialize_metrics(
