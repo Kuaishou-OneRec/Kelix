@@ -571,6 +571,11 @@ class KeyeARModel(Model):
         # Default: lecun_normal initialization
         return lecun_normal_
 
+    def get_layers_to_shard(self):
+        model_layers = list(self.model.get_layers_to_shard())
+        visual_layers = list(self.visual_tokenizer.get_layers_to_shard())
+        return visual_layers + model_layers
+
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
                               tie_word_embeddings: bool = True,
