@@ -657,6 +657,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
         fast_pixel_values_videos: Optional[torch.FloatTensor] = None,
         fast_video_grid_thw: Optional[torch.LongTensor] = None,
         vision_token_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,  # for sample packing with flash_attn_varlen
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -759,7 +760,8 @@ class KeyeTokenizerEnd2EndVideo(Model):
             tokens=None,
             mask=attention_mask,
             input_embeds=inputs_embeds,
-            input_pos=position_ids
+            input_pos=position_ids,
+            cu_seqlens=cu_seqlens,  # pass cu_seqlens for sample packing
         )
 
         # TransformerDecoder可能返回list/张量，这里取最后一个为logits
