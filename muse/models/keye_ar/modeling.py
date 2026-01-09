@@ -581,13 +581,13 @@ class KeyeARModel(Model):
         return visual_layers + model_layers
 
     def get_checkpointable_module_classes(self):
-        checkpointable = []
+        checkpointable = set()
         for module in [
             self.visual_tokenizer,
             self.model
         ]:
             if hasattr(module, 'get_checkpointable_module_classes'):
-                checkpointable += list(module.get_checkpointable_module_classes())
+                checkpointable |= set(module.get_checkpointable_module_classes())
         
         print(f"checkpointable={checkpointable}")
         return checkpointable
