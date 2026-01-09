@@ -401,6 +401,8 @@ def train() -> None:
         pixel_values = batch.get("pixel_values", None)
         image_grid_thw = batch.get("image_grid_thw", None)
 
+        if image_grid_thw is not None: image_grid_thw = image_grid_thw[0]
+
         if position_ids is None:
             if cu_seqlens is not None:
                 # 参考 recipes/sana/train_sana_ar_dit.py：根据cu_seqlens构造packed input_pos
