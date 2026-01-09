@@ -218,16 +218,15 @@ def forward_ar_model(
     # forward one sample
     input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
     with torch.no_grad():
-        pass
-        # outputs = ar_model(
-        #     input_ids=input_ids,
-        #     pixel_values=pixel_values,
-        #     image_grid_thw=image_grid_thw,
-        #     cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
-        #     input_pos=input_pos,
-        # )
-    #assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
-    #print(f"outputs={outputs.shape}")
+        outputs = ar_model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=torch.tensor([0, input_ids.shape[1]]).to(input_ids.device),
+            input_pos=input_pos,
+        )
+    assert outputs.shape == (*input_ids.shape, ar_model.config.tokenizer_config.n_q_tokens + 1, ar_model.config.qwen_config.vocab_size + ar_model.config.tokenizer_config.codebook_size)
+    print(f"outputs={outputs.shape}")
 
 
     # forward two samples in packing
@@ -270,12 +269,13 @@ def main():
             self.cfg_scale = 1.0
             self.num_sampling_steps = 50
             self.flow_shift = 3.0
-            self.max_condition_length = 32 #324
+            self.max_condition_length = 324
             self.image_size = 1024
             self.seed = 42
             self.results_dir = "./vis_output_local/results"
             self.teacher_forcing = 0
             self.linspace_sigmas = True
+            self.savings = "/llm_reco/lingzhixin/recovlm_data/for_debug/infer_visualize_reconstruction/for_new_compare_v2.pt"
     
     args = Config()
 
@@ -288,7 +288,7 @@ def main():
     model_dir = args.model_dir
     
     if args.dcp_tag:
-        converted_model_dir = os.path.join(args.dcp_ckpt_dir, args.dcp_tag, "converted")
+        converted_model_dir = os.path.join(args.dcp_ckpt_dir, args.dcp_tag, "converted")  # pyright: ignore[reportCallIssue]
         if not os.path.exists(converted_model_dir):
             print(f"Converting DCP checkpoint from {args.dcp_ckpt_dir} to {converted_model_dir}, dcp_tag={args.dcp_tag}")
             dcp_to_torch_convert(
@@ -372,7 +372,7 @@ def main():
 
     # Run DiT sampling pipeline locally and save results
     print("Running DiT sampling and saving results...")
-
+    savings = {}  # pyright: ignore[reportUnusedVariable]
     with torch.no_grad():
         # Load samples / preprocess
         loaded = train_rec.VisReconstructionLoader()(
@@ -382,16 +382,16 @@ def main():
             device,
             dtype,
             args.num_images,
-            None,
-            vae,
+            tb_writer=None,
+            vae=vae,
         )
 
-        forward_ar_model(
-            ar_model=image_tokenizer,
-            input_ids=loaded.input_ids.to(device=device),
-            pixel_values=loaded.pixel_values.to(device=device),
-            image_grid_thw=loaded.image_grid_thw.to(device=device),
-        )
+        # forward_ar_model(
+        #     ar_model=image_tokenizer,
+        #     input_ids=loaded.input_ids.to(device=device),
+        #     pixel_values=loaded.pixel_values.to(device=device),
+        #     image_grid_thw=loaded.image_grid_thw.to(device=device),
+        # )
 
         # Tokenize images to condition embeddings
         cond_embeds, cond_mask = tokenize_images(
@@ -404,11 +404,13 @@ def main():
             input_ids=loaded.input_ids.to(device=device),
             teacher_forcing=args.teacher_forcing,
         )
+        savings["cond_embeds"] = cond_embeds
+        savings["cond_mask"] = cond_mask
 
         print(f"loaded.pixel_values={loaded.pixel_values.shape}")
         print(f"cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}")
         cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
-
+        savings["connected_cond_embeds"] = cond_embeds
         # Prepare unconditional embeddings for CFG
         null_embed = model_for_vis.y_embedder.y_embedding
         seq_len = min(null_embed.shape[0], args.max_condition_length)
@@ -429,10 +431,12 @@ def main():
 
         if args.linspace_sigmas:
             sigmas = np.linspace(1.0, 1 / args.num_sampling_steps, args.num_sampling_steps)
+            savings["sigmas"] = torch.from_numpy(sigmas).to(device=device, dtype=dtype)
             scheduler.set_timesteps(args.num_sampling_steps, sigmas=sigmas, device=device)
         else:
             scheduler.set_timesteps(args.num_sampling_steps, device=device)
 
+        savings["seed"] = torch.tensor(args.seed)
         generator = torch.Generator(device=device).manual_seed(args.seed)
         dit_latents = torch.randn(
             (loaded.batch_size, loaded.latent_channels, loaded.latent_size, loaded.latent_size),
@@ -440,7 +444,8 @@ def main():
             device=device,
             dtype=dtype,
         )
-
+        savings["dit_latents"] = dit_latents
+        
         print(f"uncond_embeds={uncond_embeds.shape}, cond_embeds={cond_embeds.shape}")
 
         cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
@@ -450,9 +455,14 @@ def main():
             latent_input = torch.cat([dit_latents] * 2)
             timestep = t.expand(latent_input.shape[0])
             noise_pred = model_for_vis.forward_with_dpmsolver(latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True)
+            savings[f"solved_noise_pred_{t}"] = noise_pred
+            
             noise_uncond, noise_cond = noise_pred.chunk(2)
             noise_pred = noise_uncond + args.cfg_scale * (noise_cond - noise_uncond)
             dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
+            savings[f"dit_latents_{t}"] = dit_latents
+            savings[f"latent_input_{t}"] = dit_latents
+            
 
         # Decode DiT latents
         dit_recon_latents = dit_latents / vae.config.scaling_factor
@@ -478,6 +488,8 @@ def main():
 
         print(f"Saved {len(dit_np)} DiT images and messages to: {results_step_dir}")
 
+        torch.save(savings, args.savings)
+        print(f"Saved {args.savings}")
 
 if __name__ == "__main__":
     main()

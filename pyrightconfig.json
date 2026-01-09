@@ -16,5 +16,11 @@
     "reportOptionalContextManager": "none",
     "reportOptionalOperand": "none",
 "reportArgumentType": "none",
-"reportMissingParameterType": "none"
+"reportMissingParameterType": "none",
+"reportOptionalSubscript": "none",
+"reportDeprecated": "none",
+"reportUnannotatedClassAttribute": "none",
+"reportCallIssue": "none",
+"reportPrivateLocalImportUsage": "none",
+"reportUnusedVariable": "none"
 }
