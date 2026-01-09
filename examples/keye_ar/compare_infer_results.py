@@ -63,6 +63,9 @@ def plot_geneval_from_csvs(csv_file_paths):
     print(f"图表已保存为：{output_png}")
     plt.show()
 
+
+# python3 examples/keye_ar/compare_infer_results.py /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp22_ar_dit_324tokens_1e-4_reproduce/GenEval_scores.csv /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp26_ar_dit_324tokens_1e-4_reproduce_with_pos/GenEval_scores.csv 
+# 
 if __name__ == "__main__":
     # 解析命令行参数，支持传入多个csv文件
     parser = argparse.ArgumentParser(description='绘制多个csv文件的Step vs GenEval折线图')
