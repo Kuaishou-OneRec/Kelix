@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
+from muse.training.activations import set_activation_checkpointing
 
 # muse imports
 from muse.config import KeyeARConfig, load_config, model_config
@@ -285,28 +286,39 @@ def train() -> None:
     set_random_seed(training_seed)
     print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
+    if args.model_dir:
+        # Continue pretrain mode: get model_class from model_dir/config.json
+        model_config_path = Path(args.model_dir) / "muse_config.json"
+        if not model_config_path.exists():
+            raise FileNotFoundError(
+                f"Config file not found: {model_config_path}. "
+                f"Cannot continue pretrain without config.json in {args.model_dir}"
+            )
+        model_config = load_config(model_config_path)
+    elif args.model_config:
+        # Train from scratch mode: get model_class from model_config
+        model_config = load_config(args.model_config)
+    else:
+        raise ValueError(
+            "Either --model-dir (for continue pretrain) or --model-config "
+            "(for train from scratch) must be provided."
+        )
+        
     # model
     # KeyeARModel 需要 KeyeARConfig
     with set_default_dtype(args.model_dtype), torch.device("meta"):
         model_cls = get_model_class(args.model_name)
+        model = model_cls(model_config)
 
-        state_dict = _load_state_dict(args)
-
-        if args.model_dir:
-            # continue pretrain mode: model_dir should contain config.json & weights
-            model = model_cls.from_pretrained(args.model_dir)
-        elif args.model_config:
-            # train from scratch mode: build config from a json
-            cfg = load_config(args.model_config)
-            model = model_cls(cfg)
-        else:
-            raise ValueError(
-                "Either --model-dir (for continue pretrain) or --model-config (for train from scratch) must be provided."
-            )
+    state_dict: Dict[str, Any] | None = _load_state_dict(args)
 
     # init/shard (对齐 sana)
-    initialize_model_params(model)
-    
+    if args.enable_gradient_checkpointing:
+        print_rank_0("Enable gradient checkpointing")
+        set_activation_checkpointing(
+            model, auto_wrap_policy=model.get_checkpointable_module_classes()
+        )
+
     # fp32_weight mode: convert model to float32 before sharding
     if args.fp32_weight:
         model = model.float()
@@ -325,6 +337,16 @@ def train() -> None:
     )
 
     dist.barrier()
+
+    print(f"state_dict")
+    for k, v in state_dict.items():
+        print(f"{k}: {v.shape}")
+
+    print(f"\nmodel")
+    for name, param in model.named_parameters():
+        print(f"{name}: {param.shape}/{param.dtype}/{param.device}")
+
+
     # 需要保证每个rank都执行了参数初始化或加载
     if args.model_dir:
         with Timer("Load state dict"):
