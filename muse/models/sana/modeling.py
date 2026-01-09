@@ -367,6 +367,8 @@ class SanaModel(Model):
         raw_cond_input_pos = kwargs.get("cond_input_pos", None)
         cond_input_pos = None
         if self.config.use_position_scale and x_input_pos and raw_cond_input_pos:
+            if np.random.rand() <= 0.0001:
+                print(f"use_position_scale")
             cond_input_pos = {}
             H_x, W_x = kwargs.get("H_x", 1), kwargs.get("W_x", 1)
             H_y, W_y = kwargs.get("H_y", 1), kwargs.get("W_y", 1)
