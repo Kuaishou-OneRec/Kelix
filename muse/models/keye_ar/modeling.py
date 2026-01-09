@@ -587,7 +587,9 @@ class KeyeARModel(Model):
             self.model
         ]:
             if hasattr(module, 'get_checkpointable_module_classes'):
-                checkpointable.extend(module.get_checkpointable_module_classes())
+                checkpointable += list(module.get_checkpointable_module_classes())
+        
+        print(f"checkpointable={checkpointable}")
         return checkpointable
 
     @override
