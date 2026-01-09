@@ -244,6 +244,22 @@ def train() -> None:
     set_random_seed(training_seed)
     print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
+    # Load state dict and convert using model's converter (only for continue pretrain)
+    state_dict = None
+    
+    # Load state_dict to CPU only on rank 0 to avoid CPU OOM
+    if args.model_dir:
+        # Continue pretrain: load weights from checkpoint
+        if dist.get_rank() == 0:
+            with set_default_dtype(args.model_dtype):
+                print_rank_0(f"Loading checkpoint from: {args.model_dir}")
+                state_dict = load_hf_checkpoint(args.model_dir)
+        dist.barrier()
+    else:
+        # Train from scratch: no weights to load
+        state_dict = None
+        dist.barrier()
+        
     # model
     # KeyeARModel 需要 KeyeARConfig
     model_cls = get_model_class(args.model_name)
@@ -280,7 +296,22 @@ def train() -> None:
         fp32_reduce=args.fp32_reduce,
     )
     dist.barrier()
-    model.train()
+
+    dist.barrier()
+    # 需要保证每个rank都执行了参数初始化或加载
+    if args.model_dir:
+        with Timer("Load state dict"):
+            # Convert meta tensors to CUDA tensors
+            # distribute the state_dict from rank 0 to all ranks
+            load_from_full_model_state_dict(
+                model=model, full_sd=state_dict,
+                allow_random_init_params=args.allow_random_init_params,
+                skip_load_params=args.skip_load_params
+            )
+    else:
+        # Train from scratch: initialize model parameters randomly
+        with Timer("Initialize model parameters"):
+            initialize_model_params(model)
 
     # Freeze specified parameters (align with recipes/sana/train_sana_ar_dit.py)
     freeze_patterns: list[str] = []
