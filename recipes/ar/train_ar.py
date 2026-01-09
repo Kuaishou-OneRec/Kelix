@@ -31,7 +31,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 # muse imports
-from muse.config import KeyeARConfig, load_config
+from muse.config import KeyeARConfig, load_config, model_config
 from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
 from muse.losses import CrossEntropyLoss
 from muse.models import get_model_class
@@ -184,6 +184,26 @@ def _load_dataset_config(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
+def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
+    # Determine training mode and get model_class
+    if args.model_dir:
+        # Continue pretrain mode: get model_class from model_dir/config.json
+        model_config_path = Path(args.model_dir) / "config.json"
+        if not model_config_path.exists():
+            raise FileNotFoundError(
+                f"Config file not found: {model_config_path}. "
+                f"Cannot continue pretrain without config.json in {args.model_dir}"
+            )
+        model_config = load_config(model_config_path)
+    elif args.model_config:
+        # Train from scratch mode: get model_class from model_config
+        model_config = load_config(args.model_config)
+    else:
+        raise ValueError(
+            "Either --model-dir (for continue pretrain) or --model-config "
+            "(for train from scratch) must be provided.")
+
+
 def _build_dataloader(args: argparse.Namespace) -> DataLoader:  # pyright: ignore[reportUnknownParameterType]
     ds_cfg = _load_dataset_config(args.dataset_config)
 
@@ -217,6 +237,25 @@ def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], 
     return labels.to(torch.int64)
 
 
+def _load_state_dict(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    # Load state dict and convert using model's converter (only for continue pretrain)
+    state_dict = None
+    
+    # Load state_dict to CPU only on rank 0 to avoid CPU OOM
+    if args.model_dir:
+        # Continue pretrain: load weights from checkpoint
+        if dist.get_rank() == 0:
+            with set_default_dtype(args.model_dtype):
+                print_rank_0(f"Loading checkpoint from: {args.model_dir}")
+                state_dict = load_hf_checkpoint(args.model_dir)
+        dist.barrier()
+    else:
+        # Train from scratch: no weights to load
+        state_dict = None
+        dist.barrier()
+
+
+
 def train() -> None:
     args = _build_arg_parser().parse_args()
 
@@ -236,33 +275,17 @@ def train() -> None:
 
     # dtype & seed (对齐 sana：使用 rank-specific seed)
     # 注意：get_torch_dtype 需要完整名称 "bfloat16"/"float16"/"float32"
-    dtype_map = {"bf16": "bfloat16", "fp16": "float16", "fp32": "float32"}
-    torch_dtype = get_torch_dtype(dtype_str=dtype_map.get(args.dtype, args.dtype))
-    set_default_dtype(torch_dtype)
+    set_default_dtype(args.model_dtype)
     
     training_seed = args.seed + rank
     set_random_seed(training_seed)
     print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
-    # Load state dict and convert using model's converter (only for continue pretrain)
-    state_dict = None
-    
-    # Load state_dict to CPU only on rank 0 to avoid CPU OOM
-    if args.model_dir:
-        # Continue pretrain: load weights from checkpoint
-        if dist.get_rank() == 0:
-            with set_default_dtype(args.model_dtype):
-                print_rank_0(f"Loading checkpoint from: {args.model_dir}")
-                state_dict = load_hf_checkpoint(args.model_dir)
-        dist.barrier()
-    else:
-        # Train from scratch: no weights to load
-        state_dict = None
-        dist.barrier()
-        
     # model
     # KeyeARModel 需要 KeyeARConfig
     model_cls = get_model_class(args.model_name)
+
+    state_dict = _load_state_dict(args)
 
     if args.model_dir:
         # continue pretrain mode: model_dir should contain config.json & weights
@@ -295,7 +318,6 @@ def train() -> None:
         prefetch_params_in_forward=args.prefetch_params_in_forward,
         fp32_reduce=args.fp32_reduce,
     )
-    dist.barrier()
 
     dist.barrier()
     # 需要保证每个rank都执行了参数初始化或加载
@@ -390,6 +412,8 @@ def train() -> None:
         loggers=loggers,
     )
     step_scheduler = StepScheduler(args)
+
+    model_config = _load_model_config(args)
 
     # iterator
     if args.overfit_batches and args.overfit_batches > 0:

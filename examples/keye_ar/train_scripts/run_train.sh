@@ -139,7 +139,7 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --dtype bf16 \
+                --model-dtype bfloat16 \
                 --warmup-steps 1000 \
                 --lr-scheduler cosine \
                 --min-lr 1e-6 \
