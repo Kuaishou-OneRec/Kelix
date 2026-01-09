@@ -39,7 +39,7 @@ echo "log_file=${log_file}"
 MODEL_CONFIG_OVERRIDES="model_max_length=324 use_cross_attn_rope=True use_position_scale=True"
 # Run the Python script with all parameters
 PYTHONPATH=. \
-MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES} \	
+MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES} \
 nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dcp-ckpt-dir "$DCP_CKPT_DIR" \
     --monitor-interval "$MONITOR_INTERVAL" \
