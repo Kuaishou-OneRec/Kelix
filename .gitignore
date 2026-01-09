@@ -25,3 +25,5 @@ hostfile
 results/
 *xlsx
 vis_output
+*png
+*jpg
