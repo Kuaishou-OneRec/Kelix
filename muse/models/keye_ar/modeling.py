@@ -1,4 +1,4 @@
-from typing import Dict, Callable, Union, List, Optional, Tuple, Any
+from typing import Dict, Callable, Union, List, Optional, Tuple, Any, override
 from functools import partial
 import math
 import numpy as np
@@ -580,6 +580,17 @@ class KeyeARModel(Model):
         visual_layers = list(self.visual_tokenizer.get_layers_to_shard())
         return visual_layers + model_layers
 
+    def get_checkpointable_module_classes(self):
+        checkpointable = []
+        for module in [
+            self.visual_tokenizer,
+            self.model
+        ]:
+            if hasattr(module, 'get_checkpointable_module_classes'):
+                checkpointable.extend(module.get_checkpointable_module_classes())
+        return checkpointable
+
+    @override
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
                               tie_word_embeddings: bool = True,
