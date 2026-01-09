@@ -100,7 +100,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-length", type=int, default=16000, help="Maximum sequence length for packing (对齐 keye_tokenizer_end2end_video)")
 
     # precision
-    parser.add_argument("--dtype", type=str, default="bf16", choices=["fp32", "fp16", "bf16"])
+    parser.add_argument("--model-dtype", type=str, default="bfloat16", choices=["float32", "float16", "bfloat16"])
 
     # data
     parser.add_argument("--num-workers", type=int, default=8)
