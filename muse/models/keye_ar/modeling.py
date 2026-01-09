@@ -408,7 +408,7 @@ class UnifiedQwen3Model(Qwen3Model):
             )
 
 
-        print(f"input_image_ids={input_image_ids.shape if input_image_ids}, tokens={tokens.shape}")
+        print(f"input_image_ids={input_image_ids.shape if input_image_ids is not None else 'None'}, tokens={tokens.shape}")
         print(f"input_pos={input_pos}, input_pos={input_pos.shape}, inputs_embeds={inputs_embeds.shape if inputs_embeds is not None else 'None'}")
         print(f"kwargs={kwargs}")
         # 调用父类的forward方法获取基本功能

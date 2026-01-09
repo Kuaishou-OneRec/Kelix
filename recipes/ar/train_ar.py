@@ -426,6 +426,7 @@ def train() -> None:
             f"labels: {labels.shape}, "
             f"cu_seqlens: {cu_seqlens}, "
             f"pixel_values: {pixel_values.shape}"
+            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}"
         )
 
         # forward
@@ -436,6 +437,7 @@ def train() -> None:
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 cu_seqlens=cu_seqlens,
+
             )
 
         loss = loss_fn(logits, labels)
