@@ -137,6 +137,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prefetch-params-in-forward", action="store_true", help="Prefetch parameters in forward pass") 
     parser.add_argument("--fp32-weight", action="store_true", help="Use fp32 for model weight updating")
     parser.add_argument("--fp32-reduce", action="store_true", help="Use fp32 for model gradient reduction")
+    parser.add_argument("--allow-random-init-params", type=str, default="",
+                        help="Parameter names to allow random initialization")
+    parser.add_argument("--skip-load-params", type=str, default="",
+                        help="Parameter name patterns to skip loading from checkpoint (comma-separated)")
+
 
     # distributed init
     parser.add_argument("--backend", type=str, default="nccl")
