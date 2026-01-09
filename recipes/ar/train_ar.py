@@ -258,6 +258,7 @@ def _load_state_dict(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
         # Train from scratch: no weights to load
         state_dict = None
         dist.barrier()
+    return state_dict
 
 
 
