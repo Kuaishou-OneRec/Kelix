@@ -1017,7 +1017,7 @@ def train():
         model = model.float()
 
     # Shard model for distributed training
-    recipes/sana/train_sana_ar_dit.py(
+    shard_model(
         model=model,
         cpu_offload=args.cpu_offload,
         reshard_after_forward=args.reshard_after_forward,

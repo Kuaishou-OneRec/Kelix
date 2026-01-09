@@ -1,0 +1,20 @@
+{
+  "reportUnusedCallResult": false,
+  "reportImplicitStringConcatenation": false,
+  "reportAny": false,
+  "reportUnknownParameterType": false,
+    "reportUnknownMemberType": "none",
+    "reportUnknownArgumentType": "none",
+    "reportUnknownVariableType": "none",
+    "reportUnknownParameterType": "none",
+    "reportMissingImports": "none",
+    "reportMissingModuleSource": "none",
+    "reportMissingTypeStubs": "none",
+    "reportOptionalMemberAccess": "none",
+    "reportOptionalCall": "none",
+    "reportOptionalIterable": "none",
+    "reportOptionalContextManager": "none",
+    "reportOptionalOperand": "none",
+"reportArgumentType": "none",
+"reportMissingParameterType": "none"
+}

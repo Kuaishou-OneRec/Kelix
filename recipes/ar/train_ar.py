@@ -132,9 +132,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freeze-vision", action="store_true", help="Legacy alias -> freeze-params=vision")
 
     # FSDP options (对齐 sana)
-    parser.add_argument("--cpu-offload", action="store_true", help="Offload to CPU")
+    parser.add_argument("--cpu-offload", action="store_true", help="Offload to CPU") 
     parser.add_argument("--reshard-after-forward", action="store_true", help="Reshard after forward (Zero3)")
-    parser.add_argument("--prefetch-params-in-forward", action="store_true", help="Prefetch parameters in forward pass")
+    parser.add_argument("--prefetch-params-in-forward", action="store_true", help="Prefetch parameters in forward pass") 
     parser.add_argument("--fp32-weight", action="store_true", help="Use fp32 for model weight updating")
     parser.add_argument("--fp32-reduce", action="store_true", help="Use fp32 for model gradient reduction")
 
@@ -184,7 +184,7 @@ def _load_dataset_config(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _build_dataloader(args: argparse.Namespace) -> DataLoader:
+def _build_dataloader(args: argparse.Namespace) -> DataLoader:  # pyright: ignore[reportUnknownParameterType]
     ds_cfg = _load_dataset_config(args.dataset_config)
 
     # 传递 max_length 到 dataset config（对齐 train_keye_tok_end2end_video）
@@ -237,7 +237,7 @@ def train() -> None:
     # dtype & seed (对齐 sana：使用 rank-specific seed)
     # 注意：get_torch_dtype 需要完整名称 "bfloat16"/"float16"/"float32"
     dtype_map = {"bf16": "bfloat16", "fp16": "float16", "fp32": "float32"}
-    torch_dtype = get_torch_dtype(dtype_map.get(args.dtype, args.dtype))
+    torch_dtype = get_torch_dtype(dtype_str=dtype_map.get(args.dtype, args.dtype))
     set_default_dtype(torch_dtype)
     
     training_seed = args.seed + rank
@@ -253,7 +253,7 @@ def train() -> None:
         model = model_cls.from_pretrained(args.model_dir)
     elif args.model_config:
         # train from scratch mode: build config from a json
-        cfg = load_config(args.model_config, config_class=KeyeARConfig)
+        cfg = load_config(args.model_config)
         model = model_cls(cfg)
     else:
         raise ValueError(
@@ -335,7 +335,7 @@ def train() -> None:
     elif args.model_dir:
         # 允许从 HF 目录加载（如果里面是 muse 兼容的权重）
         try:
-            load_hf_checkpoint(app_state, args.model_dir)
+            load_hf_checkpoint(args.model_dir)
             print_rank_0(f"Loaded HF checkpoint from {args.model_dir}")
         except Exception as e:
             print_rank_0(f"Skip HF checkpoint load: {e}")
