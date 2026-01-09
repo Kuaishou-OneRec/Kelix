@@ -154,6 +154,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     # metadata (对齐 sana 脚本)
     parser.add_argument("--comment", type=str, default="", help="Experiment comment/description")
     parser.add_argument("--commit-id", type=str, default="", help="Git commit hash")
+    parser.add_argument("--enable-gradient-checkpointing", action="store_true", help="Enable gradient checkpointing")
 
     return parser
 
