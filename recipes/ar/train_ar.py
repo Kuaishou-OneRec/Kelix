@@ -501,13 +501,13 @@ def train() -> None:
         if pixel_values.ndim == 5:
             pixel_values = pixel_values.squeeze(0)
         print(
-            f"input_ids: {input_ids.shape}, "
-            f"position_ids: {position_ids.shape}, "
-            f"loss_mask: {loss_mask.shape}, "
-            f"labels: {labels.shape}, "
-            f"cu_seqlens: {cu_seqlens}, "
-            f"pixel_values: {pixel_values.shape}"
-            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}"
+            f"input_ids: {input_ids.shape}\n"
+            f"position_ids: {position_ids.shape}\n"
+            f"loss_mask: {loss_mask.shape}\n"
+            f"labels: {labels.shape}\n"
+            f"cu_seqlens: {cu_seqlens}\n"
+            f"pixel_values: {pixel_values.shape}\n"
+            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n"
         )
 
         # forward
@@ -520,6 +520,7 @@ def train() -> None:
                 cu_seqlens=cu_seqlens,
 
             )
+        print(f"forward is done. logits: {logits.shape}")
 
         loss = loss_fn(logits, labels)
 
