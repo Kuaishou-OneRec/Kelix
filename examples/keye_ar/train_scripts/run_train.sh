@@ -148,6 +148,7 @@ nohup mpirun --allow-run-as-root \
                 --save-checkpoint-per-step 1000 \
                 --seed 19260817 \
                 --max-length 1600 \
+                --enable-gradient-checkpointing \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
