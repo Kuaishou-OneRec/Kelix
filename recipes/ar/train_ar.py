@@ -500,6 +500,9 @@ def train() -> None:
         labels = _prepare_labels(input_ids, loss_mask, ignore_index=loss_fn.ignore_index)
         if pixel_values.ndim == 5:
             pixel_values = pixel_values.squeeze(0)
+
+
+        
         print(
             f"input_ids: {input_ids.shape}\n"
             f"position_ids: {position_ids.shape}\n"
@@ -508,6 +511,12 @@ def train() -> None:
             f"cu_seqlens: {cu_seqlens}\n"
             f"pixel_values: {pixel_values.shape}\n"
             f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n"
+        )
+
+        torch.save(
+            {
+                
+            }
         )
 
         # forward
