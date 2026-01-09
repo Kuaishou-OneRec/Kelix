@@ -298,6 +298,7 @@ class DistributedDataset(IterableDataset):
     self.enable_checkpointing = enable_checkpointing
     self.packing = packing
     self.max_length = max_length
+    self.shuffle_window = shuffle_window
     if self.packing:
       assert self.max_length > 0, "max_length must be set when packing is enabled"
     self.padding = padding

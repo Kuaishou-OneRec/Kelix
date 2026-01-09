@@ -674,7 +674,7 @@ def visualize_reconstruction(
           )
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")
-    cond_embeds, cond_mask, max_seq_len = tokenize_images(
+    cond_embeds, cond_mask, max_seq_len = tokenize_images(  # pyright: ignore[reportAssignmentType]
         tokenizer=image_tokenizer,
         pixel_values=loaded.pixel_values.to(device=device),
         image_grid_thw=loaded.image_grid_thw.to(device=device),
