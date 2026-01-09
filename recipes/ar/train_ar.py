@@ -209,7 +209,7 @@ def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
             "(for train from scratch) must be provided.")
 
 
-def _build_dataloader(args: argparse.Namespace) -> DataLoader:  # pyright: ignore[reportUnknownParameterType]
+def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     ds_cfg = _load_dataset_config(args.dataset_config)
 
     # 传递 max_length 到 dataset config（对齐 train_keye_tok_end2end_video）
@@ -279,9 +279,7 @@ def train() -> None:
         with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w', encoding="utf-8") as f:
             f.write(args_str + "\n")
 
-    # dtype & seed (对齐 sana：使用 rank-specific seed)
-    # 注意：get_torch_dtype 需要完整名称 "bfloat16"/"float16"/"float32"
-    set_default_dtype(args.model_dtype)
+
     
     training_seed = args.seed + rank
     set_random_seed(training_seed)
@@ -289,21 +287,22 @@ def train() -> None:
 
     # model
     # KeyeARModel 需要 KeyeARConfig
-    model_cls = get_model_class(args.model_name)
+    with set_default_dtype(args.model_dtype), torch.device("meta"):
+        model_cls = get_model_class(args.model_name)
 
-    state_dict = _load_state_dict(args)
+        state_dict = _load_state_dict(args)
 
-    if args.model_dir:
-        # continue pretrain mode: model_dir should contain config.json & weights
-        model = model_cls.from_pretrained(args.model_dir)
-    elif args.model_config:
-        # train from scratch mode: build config from a json
-        cfg = load_config(args.model_config)
-        model = model_cls(cfg)
-    else:
-        raise ValueError(
-            "Either --model-dir (for continue pretrain) or --model-config (for train from scratch) must be provided."
-        )
+        if args.model_dir:
+            # continue pretrain mode: model_dir should contain config.json & weights
+            model = model_cls.from_pretrained(args.model_dir)
+        elif args.model_config:
+            # train from scratch mode: build config from a json
+            cfg = load_config(args.model_config)
+            model = model_cls(cfg)
+        else:
+            raise ValueError(
+                "Either --model-dir (for continue pretrain) or --model-config (for train from scratch) must be provided."
+            )
 
     # init/shard (对齐 sana)
     initialize_model_params(model)
@@ -386,18 +385,6 @@ def train() -> None:
 
     app_state = AppState(model=model, optimizer=optimizer)
     dist_checkpointer = DistributedCheckpointer()
-
-    if args.resume:
-        ckpt_path = get_checkpoint_path(str(output_dir), args.resume_step)
-        print_rank_0(f"Resuming from checkpoint: {ckpt_path}")
-        load_from_full_model_state_dict(app_state, dist_checkpointer.load(ckpt_path))
-    elif args.model_dir:
-        # 允许从 HF 目录加载（如果里面是 muse 兼容的权重）
-        try:
-            load_hf_checkpoint(args.model_dir)
-            print_rank_0(f"Loaded HF checkpoint from {args.model_dir}")
-        except Exception as e:
-            print_rank_0(f"Skip HF checkpoint load: {e}")
 
     # data
     dataloader = _build_dataloader(args)
