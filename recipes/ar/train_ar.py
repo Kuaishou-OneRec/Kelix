@@ -345,13 +345,14 @@ def train() -> None:
 
     dist.barrier()
 
-    print(f"state_dict")
-    for k, v in state_dict.items():
-        print(f"{k}: {v.shape}")
+    if rank == 0:
+        print(f"state_dict")
+        for k, v in state_dict.items():
+            print(f"{k}: {v.shape}")
 
-    print(f"\nmodel")
-    for name, param in model.named_parameters():
-        print(f"{name}: {param.shape}/{param.dtype}/{param.device}")
+        print(f"\nmodel")
+        for name, param in model.named_parameters():
+            print(f"{name}: {param.shape}/{param.dtype}/{param.device}")
 
 
     # 需要保证每个rank都执行了参数初始化或加载
