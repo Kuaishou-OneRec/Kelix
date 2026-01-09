@@ -243,6 +243,27 @@ def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], 
     return labels.to(torch.int64)
 
 
+def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
+    # Determine training mode and get model_class
+    if args.model_dir:
+        # Continue pretrain mode: get model_class from model_dir/config.json
+        model_config_path = Path(args.model_dir) / "config.json"
+        if not model_config_path.exists():
+            raise FileNotFoundError(
+                f"Config file not found: {model_config_path}. "
+                f"Cannot continue pretrain without config.json in {args.model_dir}"
+            )
+        model_config = load_config(model_config_path)
+    elif args.model_config:
+        # Train from scratch mode: get model_class from model_config
+        model_config = load_config(args.model_config)
+    else:
+        raise ValueError(
+            "Either --model-dir (for continue pretrain) or --model-config "
+            "(for train from scratch) must be provided.")
+    return model_config
+
+
 def _load_state_dict(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     # Load state dict and convert using model's converter (only for continue pretrain)
     state_dict = None
@@ -286,26 +307,8 @@ def train() -> None:
     set_random_seed(training_seed)
     print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
-    if args.model_dir:
-        # Continue pretrain mode: get model_class from model_dir/config.json
-        for conf_name in ["config.json", "muse_config.json"]:
-            model_config_path = Path(args.model_dir) / conf_name
-            if model_config_path.exists():
-                break
-        else:
-            raise FileNotFoundError(
-                f"Config file not found: {args.model_dir}. "
-                f"Cannot continue pretrain without config.json in {args.model_dir}"
-            )
-        model_config = load_config(model_config_path)
-    elif args.model_config:
-        # Train from scratch mode: get model_class from model_config
-        model_config = load_config(args.model_config)
-    else:
-        raise ValueError(
-            "Either --model-dir (for continue pretrain) or --model-config "
-            "(for train from scratch) must be provided."
-        )
+    model_config = _load_model_config(args)
+
         
     # model
     # KeyeARModel 需要 KeyeARConfig
