@@ -1480,6 +1480,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         messages.append({"role": "user", "content": [
             {"type": "text", "text": prompt},
         ]})
+        print(f"messages={messages}")
         text = self.processor.apply_chat_template(
             messages, 
             tokenize=False,
