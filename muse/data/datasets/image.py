@@ -1392,7 +1392,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  processor_path,
                  gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 
                  template='{}', 
-                 systemp_prompt="You are a helpful assistant.",
+                 system_prompt="You are a helpful assistant.",
                  infer_repeats=4,
                  prompt_key='question',
                  **kwargs
@@ -1400,7 +1400,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         self.gen_eval_csv_path = gen_eval_csv_path
         self.packing = False
         self.template = template
-        self.system_prompt = systemp_prompt
+        self.system_prompt = system_prompt
         self.all_data = self._load_all_data()
         self.processor_path = processor_path
         self.processor = AutoProcessor.from_pretrained(
