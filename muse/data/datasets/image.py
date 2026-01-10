@@ -1300,7 +1300,6 @@ class Chat2ImageDataset(Token2ImageDataset):
                     return None
 
             if height / width > self.max_hw_ratio or width / height > self.max_hw_ratio:
-                print(f"{sample} has invalid hw ratio, skip, h={h}, w={w}, max_hw_ratio={self.max_hw_ratio}")
                 return None
             
 
