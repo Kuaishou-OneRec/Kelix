@@ -147,16 +147,16 @@ nohup mpirun --allow-run-as-root \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp31_ar_dit_324tokens_1e-4_cond_special.json \
                 --resolution-budgets "1024:4" \
-                --learning-rate 2e-5 \
-                --min-lr 1e-7 \
+                --learning-rate 2e-4 \
+                --min-lr 1e-5 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
                 --batch-size 4 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 100 \
-                --num-training-steps 300000 \
+                --num-warmup-steps 1000 \
+                --num-training-steps 3000 \
                 --model-config-overrides model_max_length=658 \
                 --condition-on-special-tokens \
                 --save-checkpoint-per-step 5000 \
