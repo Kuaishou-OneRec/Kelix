@@ -118,7 +118,6 @@ class KeyeImageTokenizer(Model):
         image_grid_hws = []
         sample_indices = []
         cu_seqlens = [0]
-        print(f"image_grid_thw=",image_grid_thw)
         for idx, thw in enumerate(image_grid_thw):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
             numel = np.prod(thw_tuple)
