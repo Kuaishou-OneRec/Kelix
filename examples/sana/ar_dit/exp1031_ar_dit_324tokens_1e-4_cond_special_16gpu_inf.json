@@ -4,7 +4,7 @@
     "image_size": 1024,
     "max_condition_length": 324,
     "center_crop": true,
-    "system_prompt": "You are an expert at generating images with high quality.",
+    "system_prompt_": "You are an expert at generating images with high quality.",
     "packing": false,
     "template": "__GenUno1M/0.0.2__", 
     "infer_repeats": 4,
