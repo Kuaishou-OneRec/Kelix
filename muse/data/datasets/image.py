@@ -1318,6 +1318,16 @@ class Chat2ImageDataset(Token2ImageDataset):
         recursive_traverse(messages, call_back)
         
         pair["message"] = messages
+
+        sample = pair
+        image_data = sample.get("image")
+        if image_data is None:
+            return None
+        
+        image = load_image(image_data)
+        if image is None:
+            return None
+
         return pair
 
     def collate_fn(
@@ -1340,7 +1350,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         # Here is the real process of batch.
         result = {}
         batch = [self._process_pair(sample) for sample in batch]
-        print(f"batch none check", [x is None for x in batch])
+
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
