@@ -1472,6 +1472,12 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         question = "Generate a picture following the instruction: " + question
         return question
 
+    def _make_GenQwenImageMix_0_0_1_style_prompt(self, question):
+        if not question.endswith('.'):
+            question = question[:-1]
+        question = "Generate an image base on the description: " + question
+        return question
+
     def process(self, sample):
         messages = []
         if self.system_prompt:
@@ -1479,6 +1485,8 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         
         if self.template == '__GenUno1M/0.0.2__':
             prompt = self._make_GenUno1M_0_0_2_style_prompt(sample[self.prompt_key])
+        elif self.template == 'Gen_qwen_image_mix/0.0.1':
+            prompt = self._make_GenQwenImageMix_0_0_1_style_prompt(sample[self.prompt_key])
         else:
             prompt = self.template.format(sample[self.prompt_key])
         
