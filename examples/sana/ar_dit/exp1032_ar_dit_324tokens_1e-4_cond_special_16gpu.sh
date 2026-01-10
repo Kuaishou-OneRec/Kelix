@@ -23,7 +23,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
-VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
+VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet
 
 SCRIPT_ABS_PATH=$(readlink -f "$0")
 if [ $? -ne 0 ]; then
@@ -140,7 +140,7 @@ nohup mpirun --allow-run-as-root \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
-                --num-vis-images 14 \
+                --num-vis-images 32 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 658 \

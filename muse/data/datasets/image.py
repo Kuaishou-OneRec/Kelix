@@ -1150,12 +1150,13 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
         self.force_assistant_image_size = force_assistant_image_size
         self.system_prompt = system_prompt
+        self.max_hw_ratio = max_hw_ratio
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
@@ -1297,6 +1298,10 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if h < valid_hw_range[0] or w < valid_hw_range[0] or h > valid_hw_range[1] or w > valid_hw_range[1]:
                     # print(f"{sample} has invalid hw, skip, h={h}, w={w}, valid_hw_range={valid_hw_range}")
                     return None
+
+            if height / width > self.max_hw_ratio or width / height > self.max_hw_ratio:
+                print(f"{sample} has invalid hw ratio, skip, h={h}, w={w}, max_hw_ratio={self.max_hw_ratio}")
+                return None
             
 
         messages = json.loads(sample["messages"])
