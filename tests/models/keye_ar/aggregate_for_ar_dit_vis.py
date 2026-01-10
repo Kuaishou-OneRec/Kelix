@@ -9,15 +9,16 @@ logger = logging.getLogger(__name__)
 
 source_parquets = [
     "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/GenUno1M/0.0.2/rank0-0.parquet",
-    "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/datasets/Gen_text_image/2.0.1/rank0_0/rank0-0.parquet",
+    # "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/datasets/Gen_text_image/2.0.1/rank0_0/rank0-0.parquet",
     "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/Gen_BLIP3o-60k/2.0.0/rank0_0/rank0-0.parquet",
     "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/Gen_midjourney-niji-1m-llavanext/1.0.0/rank0_0/rank0-0.parquet",
     "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/moe_xtr_0812/base/models/2508/liziming/datasets/Gen_qwen_image_mix/0.0.0/rank0_0/rank0-0.parquet",
     "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/moe_xtr_0812/base/models/2508/liziming/datasets/Gen_qwen_image_position/0.0.0/rank0_0/rank0-0.parquet",
-    "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/datasets/Gen_TextAtlas5M_TextScenesHQ/1.1.0/rank0_0/rank0-0.parquet"
+    "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/datasets/Gen_TextAtlas5M_TextScenesHQ/1.1.0/rank0_0/rank0-0.parquet",
+    "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/moe_xtr_0812/base/models/2508/liziming/datasets/Gen_qwen_image_counting/0.0.0/rank0_0/rank0-0.parquet",
 ]
 
-target_parquet = "/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet"
+target_parquet = "/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet"
 
 def main():
     """

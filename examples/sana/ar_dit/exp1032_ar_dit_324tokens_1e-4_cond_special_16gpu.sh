@@ -138,7 +138,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 1000 \
+                --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
@@ -147,7 +147,7 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/sana/ar_dit/exp1032_ar_dit_324tokens_1e-4_cond_special_16gpu.json \
                 --resolution-budgets "1024:24" \
-                --learning-rate 4e-5 \
+                --learning-rate 1e-4 \
                 --min-lr 1e-6 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
