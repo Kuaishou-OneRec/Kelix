@@ -147,7 +147,7 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/sana/ar_dit/exp1031_ar_dit_324tokens_1e-4_cond_special_16gpu.json \
                 --resolution-budgets "1024:24" \
-                --learning-rate 2e-5 \
+                --learning-rate 1e-5 \
                 --min-lr 1e-6 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
