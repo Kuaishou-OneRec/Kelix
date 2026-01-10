@@ -513,8 +513,13 @@ def main():
         dataset_cfg['processor_path'] = args.keye_ar_dir
 
     dataset_cfg['image_size'] = args.image_size
-    dataset_cfg['max_condition_length'] = args.max_condition_length
-    # Pass rank/world_size so datasets expecting distributed info work in single-process mode
+
+    if 'max_condition_length' in dataset_cfg:
+        args.max_condition_length = dataset_cfg['max_condition_length']
+        print(f"Using max_condition_length={args.max_condition_length} from dataset config for args")
+    else:
+        dataset_cfg['max_condition_length'] = args.max_condition_length
+        print(f"Using max_condition_length={args.max_condition_length} from args for dataset config")
 
     benchmark_csv_path = BENCHNAME2CSV_MAP.get(args.benchname, None)
     if benchmark_csv_path is not None:

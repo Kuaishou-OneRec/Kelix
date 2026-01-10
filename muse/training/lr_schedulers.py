@@ -15,6 +15,7 @@ flexible training workflows.
 
 Functions:
     get_cosine_scheduler: Create cosine annealing with warmup scheduler
+    get_cosine_scheduler_v2: Create cosine annealing with warmup scheduler (version 2)
     get_scheduler: Factory function for creating schedulers by name
 
 Example:
@@ -82,6 +83,55 @@ def _get_cosine_schedule_with_warmup_lr_lambda(
             return min_lr_rate
         progress = float(current_step - num_warmup_steps) /\
             float(max(1, num_training_steps - num_warmup_steps))
+        factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        factor = factor * (1 - min_lr_rate) + min_lr_rate
+        return max(0, factor)
+
+def _get_cosine_schedule_with_warmup_lr_lambda_v2(
+        current_step: int, *, num_warmup_steps: int,
+        num_decay_steps: int,
+        num_training_steps: int,
+        num_cycles: float,
+        num_stop_steps: int = 0,
+        min_lr_rate: float = 0.0) -> float:
+    """
+    Compute learning rate multiplier for cosine schedule with warmup (version 2).
+    
+    This is an internal helper function that implements the learning rate
+    schedule logic. It returns a multiplier (0.0 to 1.0) that will be applied
+    to the base learning rate.
+    
+    Schedule phases:
+    1. Stop phase (0 to num_stop_steps): LR = 0
+    2. Warmup phase (num_stop_steps to num_warmup_steps): Linear increase
+    3. Cosine phase (num_warmup_steps to num_decay_steps): Cosine decay
+    4. Hold phase (num_decay_steps to num_training_steps): Hold at min_lr_rate
+    5. Post-training (after num_training_steps): min_lr_rate
+    
+    Args:
+        current_step (int): Current training step
+        num_warmup_steps (int): Number of warmup steps
+        num_decay_steps (int): Number of steps for the decay phase
+        num_training_steps (int): Total number of training steps
+        num_cycles (float): Number of cosine cycles (0.5 = half cosine)
+        num_stop_steps (int): Number of steps to keep LR at 0. Defaults to 0.
+        min_lr_rate (float): Minimum LR as fraction of base LR. Defaults to 0.0.
+        
+    Returns:
+        float: Learning rate multiplier in range [min_lr_rate, 1.0]
+    """
+        
+    if num_stop_steps > 0 and current_step < num_stop_steps:
+        return 0.0
+    else:
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        if current_step > num_training_steps:
+            return min_lr_rate
+        if current_step > num_decay_steps:
+            return min_lr_rate
+        progress = float(current_step - num_warmup_steps) /\
+            float(max(1, num_decay_steps - num_warmup_steps))
         factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
         factor = factor * (1 - min_lr_rate) + min_lr_rate
         return max(0, factor)
@@ -162,6 +212,58 @@ def get_cosine_scheduler(
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+def get_cosine_scheduler_v2(
+    optimizer: Optimizer,
+    num_warmup_steps: int,
+    num_decay_steps: int,
+    num_training_steps: int,
+    num_cycles: float = 0.5,
+    num_stop_steps: int = 0,
+    last_epoch: int = -1,
+    min_lr: float = None,
+    min_lr_rate: float = None,
+    **kwargs) -> LambdaLR:
+    """
+    Create a learning rate schedule that linearly increases the learning rate from
+    0.0 to lr over ``num_warmup_steps``, then decreases to min_lr on a cosine schedule over
+    ``num_decay_steps-num_warmup_steps`` steps, and holds at min_lr until ``num_training_steps``
+    (assuming ``num_cycles`` = 0.5).
+
+    Args:
+        optimizer (torch.optim.Optimizer): The optimizer for which to
+            schedule the learning rate.
+        num_warmup_steps (int): The number of steps for the warmup phase.
+        num_decay_steps (int): The number of steps for the decay phase.
+        num_training_steps (int): The total number of training steps.
+        num_cycles (float): The number of waves in the cosine schedule. Defaults to 0.5
+            (decrease from the max value to 0 following a half-cosine).
+        last_epoch (int): The index of the last epoch when resuming training. Defaults to -1
+
+    Returns:
+        torch.optim.lr_scheduler.LambdaLR with the appropriate schedule.
+    """
+
+    if min_lr is not None and min_lr_rate is not None:
+        raise ValueError("Only one of min_lr or min_lr_rate should be set")
+    elif min_lr is not None:
+        min_lr_rate = min_lr / optimizer.defaults["lr"]
+    elif min_lr_rate is None:
+        raise ValueError(
+            "One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`"
+        )
+
+    lr_lambda = partial(
+        _get_cosine_schedule_with_warmup_lr_lambda_v2,
+        num_warmup_steps=num_warmup_steps,
+        num_decay_steps=num_decay_steps,
+        num_training_steps=num_training_steps,
+        num_cycles=num_cycles,
+        min_lr_rate=min_lr_rate,
+        num_stop_steps=num_stop_steps,
+    )
+
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
 def get_constant_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: int = 0,
@@ -197,10 +299,11 @@ def get_scheduler(
     
     Currently supports:
     - "cosine": Cosine annealing with warmup
+    - "cosine_v2": Cosine annealing with warmup (version 2)
     - "constant": Constant learning rate with optional warmup
     
     Args:
-        name (str): Name of the scheduler ("cosine", "constant")
+        name (str): Name of the scheduler ("cosine", "cosine_v2", "constant")
         optimizer (Optimizer): PyTorch optimizer to schedule
         num_warmup_steps (int, optional): Number of warmup steps
         num_training_steps (int, optional): Total training steps
@@ -229,6 +332,13 @@ def get_scheduler(
             num_training_steps=num_training_steps,
             **kwargs
         )
+    elif name == "cosine_v2":
+        return get_cosine_scheduler_v2(
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps,
+            **kwargs
+        )
     elif name == "constant":
         return get_constant_scheduler(
             optimizer=optimizer,
@@ -237,4 +347,3 @@ def get_scheduler(
         )
     else:
         raise NotImplementedError(f"Unsupported LR schduler `{name}`")
-

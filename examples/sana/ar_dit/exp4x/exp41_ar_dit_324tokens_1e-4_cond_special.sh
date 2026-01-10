@@ -16,15 +16,12 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
-# MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp31_ar_dit_324tokens_1e-4_cond_special/./global_step58000/converted/
-
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-# /mmu_mllm_hdd_2/zhouyang12/models/onebase_1231_2wtoken/
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
-VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet
+VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet
 
 SCRIPT_ABS_PATH=$(readlink -f "$0")
 if [ $? -ne 0 ]; then
@@ -141,25 +138,26 @@ nohup mpirun --allow-run-as-root \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
-                --num-vis-images 32 \
+                --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --max-condition-length 454 \
+                --max-condition-length 720 \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/ar_dit/exp1032_ar_dit_324tokens_1e-4_cond_special_16gpu.json \
+                --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
+                --skip-load-params "y_embedder.y_embedding" \
+                --dataset-config examples/sana/ar_dit/exp4x/exp41_ar_dit_324tokens_1e-4_cond_special.json \
                 --resolution-budgets "1024:24" \
-                --learning-rate 4e-4 \
-                --min-lr 1e-4 \
+                --learning-rate 1e-4 \
+                --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
                 --batch-size 24 \
-                --lr-scheduler-type cosine_v2 \
-                --num-decay-steps 4000 \
-                --num-warmup-steps 1000 \
-                --num-training-steps 100000 \
-                --model-config-overrides model_max_length=454 \
+                --lr-scheduler-type cosine \
+                --num-warmup-steps 10000 \
+                --num-training-steps 300000 \
+                --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
                 --save-checkpoint-per-step 2000 \
                 --logging-per-step 20 \

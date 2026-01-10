@@ -251,6 +251,9 @@ def get_argument_parser():
     parser.add_argument("--num-training-steps", type=int, default=100000,
                         help="Total number of training steps")
 
+    parser.add_argument("--num-decay-steps", type=int, default=4000,
+                        help="Number of steps for learning rate decay")
+
     parser.add_argument("--min-lr", type=float, default=1e-6,
                         help="Minimum learning rate")
 
@@ -538,6 +541,7 @@ def tokenize_images(tokenizer,
     max_seq_len = max_condition_length
     if cond_embeds_op is not None:
         processed_embeddings = cond_embeds_op(processed_embeddings)
+    
     return processed_embeddings, attention_mask, max_seq_len
 
 def load_visualization_images(
@@ -725,6 +729,18 @@ def visualize_reconstruction(
     cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
     mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
     
+    pos_args = compute_pos_args(
+        latent_hw=(loaded.latent_size, loaded.latent_size), 
+        image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
+        max_seq_len=args.max_condition_length, 
+        device=device, 
+        cond_pos_scale=args.cond_pos_scale)
+    
+    model_kwargs={
+        **pos_args,
+        "is_y_connected": True,
+    }
+
     # Euler sampling loop
     for i, t in enumerate(scheduler.timesteps):
         # Expand latents for CFG
@@ -733,7 +749,7 @@ def visualize_reconstruction(
         
         # Model prediction
         noise_pred = model.forward_with_dpmsolver(
-            latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, is_y_connected=True
+            latent_input, timestep, cond_embeds_cfg, mask=mask_cfg, **model_kwargs
         )
         
         # CFG combination
@@ -1138,6 +1154,7 @@ def train():
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.num_training_steps,
+        num_decay_steps=args.num_decay_steps,
         min_lr=args.min_lr
     )
 
