@@ -159,8 +159,8 @@ nohup mpirun --allow-run-as-root \
                 --num-training-steps 2500 \
                 --model-config-overrides model_max_length=658 \
                 --condition-on-special-tokens \
-                --save-checkpoint-per-step 5000 \
-                --logging-per-step 100 \
+                --save-checkpoint-per-step 2000 \
+                --logging-per-step 20 \
                 --clip-range 9999999 \
                 --fp32-weight \
                 --fp32-reduce \
