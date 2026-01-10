@@ -1150,11 +1150,12 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
         self.force_assistant_image_size = force_assistant_image_size
+        self.system_prompt = system_prompt
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
@@ -1196,6 +1197,12 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         # Get message from sample for chat template processing
         messages = sample["message"]
+
+        if self.system_prompt is not None:
+            messages = [x for x in messages if x["role"] != "system"]
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+            ] + messages
 
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
@@ -1439,12 +1446,29 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     def extract_image_text(self, sample):
         return sample
 
+    def _make_GenUno1M_0_0_2_style_prompt(self, question):
+        """
+        1. 首字母大写
+        2. 句尾添加句号
+        """
+        question = question.capitalize()
+        if not question.endswith('.'):
+            question += '.'
+        question = "Generate a picture following the instruction: " + question
+        return question
+
     def process(self, sample):
         messages = []
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
+        
+        if self.template == '__GenUno1M/0.0.2__':
+            prompt = self._make_GenUno1M_0_0_2_style_prompt(sample[self.prompt_key])
+        else:
+            prompt = self.template.format(sample[self.prompt_key])
+        
         messages.append({"role": "user", "content": [
-            {"type": "text", "text": self.template.format(sample[self.prompt_key])},
+            {"type": "text", "text": prompt},
         ]})
         text = self.processor.apply_chat_template(
             messages, 
