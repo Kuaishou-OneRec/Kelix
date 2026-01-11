@@ -1150,7 +1150,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
@@ -1158,6 +1158,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         self.system_prompt = system_prompt
         self.max_hw_ratio = max_hw_ratio
         self.assistant_resize_method = assistant_resize_method
+        self.max_sample_length = max_sample_length
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
@@ -1227,6 +1228,9 @@ class Chat2ImageDataset(Token2ImageDataset):
             input_ids = inputs["input_ids"].squeeze(0)
             print(f"text: {text}")
             print(f"input_ids: {input_ids.shape}/{input_ids.flatten().cpu().tolist()[:1000]}")
+
+        if inputs["input_ids"].shape[-1] > self.max_sample_length:
+            return None
 
         # Include all processor output fields in result
         for key, value in inputs.items():
