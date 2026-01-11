@@ -226,7 +226,6 @@ mpirun --allow-run-as-root \
 --eval-id ${EVAL_ID} \
 --num-sampling-steps 50 \
 --condition-on-special-tokens \
---overwrite-output \
       --n_infer_items ${N_INFER_ITEMS} \
       ${MODEL_CONFIG_OVERRIDES_FLAG} \
       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log
