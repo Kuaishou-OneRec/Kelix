@@ -150,7 +150,7 @@ nohup mpirun --allow-run-as-root \
                 --dataset-config examples/sana/ar_dit/exp4x/exp47_ar_dit_324tokens_1e-4_cond_special.json \
                 --resolution-budgets "1024:24" \
                 --learning-rate 3e-4 \
-                --min-lr 1.5e-4 \
+                --min-lr 2e-4 \
                 --num-decay-steps 10000 \
                 --weight-decay 0 \
                 --image-size 1024 \
