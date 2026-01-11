@@ -37,6 +37,7 @@ import json
 import torch
 import easydict
 import pickle
+import time
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -162,7 +163,7 @@ def setup_distributed_environment() -> bool:
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
         rank=rank, world_size=world_size,
-        timeout=datetime.timedelta(seconds=3600)
+        timeout=datetime.timedelta(seconds=7200)
     )
     initialize_model_parallel()
     return True
@@ -415,6 +416,38 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
     return z
 
 
+def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
+    """Wait until the device has sufficient memory available."""
+    if not device.type == 'cuda':
+        # 如果不是CUDA设备，直接返回True
+        return True
+    
+    min_memory_bytes = min_memory_gb * 1024**3
+    wait_time = 30  # 每次检查间隔5秒
+    
+    while True:
+        # 获取当前设备的内存统计
+        torch.cuda.empty_cache()  # 清空缓存以获取更准确的内存信息
+        memory_stats = torch.cuda.memory_stats(device)
+        free_memory = memory_stats['free_bytes']
+        total_memory = torch.cuda.get_device_properties(device).total_memory
+        
+        free_memory_gb = free_memory / 1024**3
+        total_memory_gb = total_memory / 1024**3
+        
+        print(f"Device {device.index} memory status: {free_memory_gb:.2f} GB free / {total_memory_gb:.2f} GB total")
+        
+        if free_memory >= min_memory_bytes:
+            print(f"✓ Device {device.index} has sufficient memory ({free_memory_gb:.2f} GB >= {min_memory_gb:.2f} GB). Proceeding.")
+            break
+        else:
+            print(f"⌛ Device {device.index} has insufficient memory. Waiting {wait_time} seconds...")
+            time.sleep(wait_time)
+    
+    torch.distributed.barrier()
+    return True
+
+
 def main():
     args = parse_args()
     agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
@@ -425,6 +458,10 @@ def main():
         return
 
     device = torch.device(args.device if torch.cuda.is_available() and args.device.startswith("cuda") else "cpu")
+    
+    wait_for_device_memory(device, min_memory_gb=64)
+    
+    
     dtype = train_rec.get_torch_dtype(args.dtype) if hasattr(train_rec, 'get_torch_dtype') else torch.float32
 
     os.makedirs(args.output_dir, exist_ok=True)
