@@ -572,25 +572,26 @@ def main():
 
             cache_key = ','.join([str(x) for x in samples.input_ids.flatten().tolist()])
             if cached.get(cache_key) is not None:
-                print(f"Using cached tokenization for i_sample={i_sample}")
+                
                 cond_embeds, cond_mask = cached[cache_key]
                 cond_embeds = cond_embeds.to(device=device)
                 cond_mask = cond_mask.to(device=device)
+                print(f"Using cached tokenization for i_sample={i_sample}, cache_key={cache_key}, cond_embeds.shape={cond_embeds.shape}, cond_mask.shape={cond_mask.shape}")
             else:
                 print(f"Computing tokenization for i_sample={i_sample}")
-
-            # Tokenize images to condition embeddings
-            cond_embeds, cond_mask = tokenize_images(
-                ar_model=image_tokenizer,
-                batch_size=batch_size,
-                max_condition_length=args.max_condition_length,
-                input_ids=samples.input_ids.to(device=device),
-                teacher_forcing=args.teacher_forcing,
-                ar_processor=ar_processor,
-                keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
-                condition_on_special_tokens=args.condition_on_special_tokens,
-            )
-            cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu())
+                # Tokenize images to condition embeddings
+                cond_embeds, cond_mask = tokenize_images(
+                    ar_model=image_tokenizer,
+                    batch_size=batch_size,
+                    max_condition_length=args.max_condition_length,
+                    input_ids=samples.input_ids.to(device=device),
+                    teacher_forcing=args.teacher_forcing,
+                    ar_processor=ar_processor,
+                    keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
+                    condition_on_special_tokens=args.condition_on_special_tokens,
+                )
+                cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu())
+                print(f"Caching tokenization for i_sample={i_sample}, cache_key={cache_key}, cond_embeds.shape={cond_embeds.shape}, cond_mask.shape={cond_mask.shape}")
 
 
             cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
