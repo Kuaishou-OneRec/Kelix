@@ -548,7 +548,7 @@ def main():
     images_dict = {}  # Key: sample index, Value: list of lists of PIL images
     samples_dict = {}  # Key: sample index, Value: original sample data
 
-    token_cache_dir = os.path.join(args.output_dir, 'token_cache')
+    token_cache_dir = os.path.join(args.dcp_ckpt_dir, 'token_cache')
     token_cache_rank = os.path.join(token_cache_dir, f'rank_{torch.distributed.get_rank()}.pkl')
 
     if torch.distributed.get_rank() == 0:
