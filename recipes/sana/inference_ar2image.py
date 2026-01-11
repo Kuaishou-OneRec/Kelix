@@ -449,7 +449,7 @@ def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
         return True
     
     device_index = device.index
-    wait_time = 30  # 检查间隔30秒
+    wait_time = 60  # 检查间隔30秒
     
     while True:
         # 通过nvidia-smi获取实际剩余显存
@@ -479,7 +479,6 @@ def main():
         print(f"{output_pkl} already exists, skipping")
         return
 
-    device = torch.device(args.device if torch.cuda.is_available() and args.device.startswith("cuda") else "cpu")    
     
     dtype = train_rec.get_torch_dtype(args.dtype) if hasattr(train_rec, 'get_torch_dtype') else torch.float32
 
@@ -487,6 +486,9 @@ def main():
 
     # Optionally initialize a local single-process distributed group for dataset compatibility
     setup_distributed_environment()
+
+    torch.set_default_device(torch.device(torch.distributed.get_rank() % 8))
+    device = torch.device(torch.cuda.current_device())    
 
     wait_for_device_memory(device, min_memory_gb=64)
 
