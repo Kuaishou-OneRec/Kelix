@@ -416,35 +416,58 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
     return z
 
 
-def wait_for_device_memory(device, min_memory_gb: float = 80.5) -> bool:
+import torch
+import time
+import subprocess
+import re
+import torch.distributed as dist
+
+def get_gpu_free_memory(device_index: int) -> float:
+    """通过nvidia-smi获取GPU的实际剩余显存（单位：GB）"""
+    try:
+        # 调用nvidia-smi，获取指定GPU的显存信息
+        result = subprocess.check_output(
+            [
+                "nvidia-smi",
+                f"--id={device_index}",
+                "--query-gpu=memory.free",
+                "--format=csv,nounits,noheader"
+            ],
+            encoding="utf-8"
+        )
+        # 解析输出（提取剩余显存数值，单位是MiB）
+        free_memory_mib = int(re.search(r"\d+", result.strip()).group())
+        # 转换为GB
+        return free_memory_mib / 1024
+    except Exception as e:
+        print(f"获取GPU {device_index} 显存失败: {e}")
+        return 0.0
+
+def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
     """Wait until the device has sufficient memory available."""
     if not device.type == 'cuda':
-        # 如果不是CUDA设备，直接返回True
         return True
     
-    min_memory_bytes = min_memory_gb * 1024**3
-    wait_time = 30  # 每次检查间隔5秒
+    device_index = device.index
+    wait_time = 30  # 检查间隔30秒
     
     while True:
-        # 获取当前设备的内存统计
-        torch.cuda.empty_cache()  # 清空缓存以获取更准确的内存信息
-        total_memory = torch.cuda.get_device_properties(device).total_memory
-        memory_allocated = torch.cuda.memory_allocated(device)
-        free_memory = total_memory - memory_allocated
+        # 通过nvidia-smi获取实际剩余显存
+        free_memory_gb = get_gpu_free_memory(device_index)
+        total_memory_gb = 81559 / 1024  # H800的总显存是81559MiB≈80GB（也可以通过nvidia-smi动态获取）
         
-        free_memory_gb = free_memory / 1024**3
-        total_memory_gb = total_memory / 1024**3
+        print(f"Device {device_index} memory status: {free_memory_gb:.2f} GB free / {total_memory_gb:.2f} GB total")
         
-        print(f"Device {device.index} memory status: {free_memory_gb:.2f} GB free / {total_memory_gb:.2f} GB total")
-        
-        if free_memory >= min_memory_bytes:
-            print(f"✓ Device {device.index} has sufficient memory ({free_memory_gb:.2f} GB >= {min_memory_gb:.2f} GB). Proceeding.")
+        if free_memory_gb >= min_memory_gb:
+            print(f"✓ Device {device_index} has sufficient memory ({free_memory_gb:.2f} GB >= {min_memory_gb:.2f} GB). Proceeding.")
             break
         else:
-            print(f"⌛ Device {device.index} has insufficient memory. Waiting {wait_time} seconds...")
+            print(f"⌛ Device {device_index} has insufficient memory. Waiting {wait_time} seconds...")
             time.sleep(wait_time)
     
-    torch.distributed.barrier()
+    # 分布式环境检查
+    if dist.is_available() and dist.is_initialized():
+        torch.distributed.barrier()
     return True
 
 def main():
