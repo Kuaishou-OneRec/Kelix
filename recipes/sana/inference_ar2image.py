@@ -124,7 +124,8 @@ def parse_args():
     parser.add_argument("--condition-on-special-tokens", action="store_true", help="Condition on special tokens like pos_start")
     parser.add_argument("--overwrite-output", action="store_true",
                         help="Overwrite existing output files")
-        
+    parser.add_argument("--owerwrite-token-cache", action="store_true",
+                        help="Overwrite existing token cache files")
     return parser.parse_args()
 
 
@@ -255,6 +256,7 @@ def tokenize_images(ar_processor : AutoProcessor,
     import IPython
     assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
     assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant\n") # [151644, 77091]
+
     # input_ids: [batch_size, total_seq_len]
     
     if not teacher_forcing:
@@ -544,6 +546,16 @@ def main():
     images_dict = {}  # Key: sample index, Value: list of lists of PIL images
     samples_dict = {}  # Key: sample index, Value: original sample data
 
+    token_cache_dir = os.path.join(args.output_dir, 'token_cache')
+    token_cache_rank = os.path.join(token_cache_dir, f'rank_{torch.distributed.get_rank()}.pkl')
+    os.makedirs(token_cache_dir, exist_ok=True)
+
+    if os.path.exists(token_cache_rank):
+        cached = torch.load(token_cache_rank, weights_only=False)
+    else:
+        cached = {}
+
+
     for i_sample, samples in tqdm.tqdm(enumerate(dataset)):
         if i_sample >= args.n_infer_items:
             break
@@ -554,6 +566,16 @@ def main():
 
         with torch.no_grad():
             batch_size = samples.input_ids.shape[0]
+
+            cache_key = ','.join([str(x) for x in samples.input_ids.flatten().tolist()])
+            if cached.get(cache_key) is not None:
+                print(f"Using cached tokenization for i_sample={i_sample}")
+                cond_embeds, cond_mask = cached[cache_key]
+                cond_embeds = cond_embeds.to(device=device)
+                cond_mask = cond_mask.to(device=device)
+            else:
+                print(f"Computing tokenization for i_sample={i_sample}")
+
             # Tokenize images to condition embeddings
             cond_embeds, cond_mask = tokenize_images(
                 ar_model=image_tokenizer,
@@ -563,8 +585,11 @@ def main():
                 teacher_forcing=args.teacher_forcing,
                 ar_processor=ar_processor,
                 keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
-                condition_on_special_tokens=args.condition_on_special_tokens
+                condition_on_special_tokens=args.condition_on_special_tokens,
             )
+            cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu())
+
+
             cond_embeds = model_for_vis.diffusion_connector(cond_embeds)
             # Prepare unconditional embeddings for CFG
             null_embed = model_for_vis.y_embedder.y_embedding
@@ -659,6 +684,13 @@ def main():
                 }
                 samples_dict[sample_index] = sample_data
 
+    world_size = torch.distributed.get_world_size()
+    rank = torch.distributed.get_rank()
+
+    print(f"Caching token embeddings for rank {rank} to {token_cache_rank}...")
+    torch.save(cached, token_cache_rank)
+    print(f"Cached token embeddings for rank {rank} to {token_cache_rank} saved")
+
     # Save results in the required format after all inference is done
     print(f"Saving {args.benchname} results...")
     ulmeval_dir = os.path.join(args.output_dir, 'ulmeval', "subresults")
@@ -666,9 +698,6 @@ def main():
     os.makedirs(ulmeval_dir, exist_ok=True)
     os.makedirs(ulmeval_agg_dir, exist_ok=True)
     
-    world_size = torch.distributed.get_world_size()
-    rank = torch.distributed.get_rank()
-
     # Save images as pickle file
     images_filename = f"{rank}{world_size}_{args.benchname}.pkl"
     images_filepath = os.path.join(ulmeval_dir, images_filename)
