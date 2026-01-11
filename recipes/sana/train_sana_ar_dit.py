@@ -171,6 +171,9 @@ def get_argument_parser():
     parser.add_argument("--resolution-budgets", type=str, default=None,
                         help="Resolution budgets as 'size:batch_size,...' "
                              "Example: '512:32,768:16,1024:8'")
+    
+    parser.add_argument("--max-seq-length", type=int, default=32000,
+                        help="Maximum sequence length for training")
 
     ############ Diffusion args ############
     parser.add_argument("--num-timesteps", type=int, default=1000,
@@ -316,6 +319,7 @@ def get_argument_parser():
                         help="Number of batches to cache for overfitting (debug mode)")
     
     parser.add_argument("--run_data_iter", action="store_true", help="Run data iterator")
+
     return parser
 
 
@@ -1362,6 +1366,10 @@ def train():
                 except StopIteration:
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
+
+            if batch["input_ids"].numel() > args.max_seq_length:
+                print_rank_0(f"rank={dist.get_rank()}, Skipping batch with input_ids.numel()={batch['input_ids'].numel()} > args.max_seq_length={args.max_seq_length}")
+                continue
 
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
