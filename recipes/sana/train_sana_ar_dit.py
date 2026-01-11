@@ -172,7 +172,7 @@ def get_argument_parser():
                         help="Resolution budgets as 'size:batch_size,...' "
                              "Example: '512:32,768:16,1024:8'")
     
-    parser.add_argument("--max-seq-length", type=int, default=32000,
+    parser.add_argument("--max-seq-length", type=int, default=24000,
                         help="Maximum sequence length for training")
 
     ############ Diffusion args ############

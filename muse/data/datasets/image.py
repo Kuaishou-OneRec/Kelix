@@ -1229,9 +1229,6 @@ class Chat2ImageDataset(Token2ImageDataset):
             print(f"text: {text}")
             print(f"input_ids: {input_ids.shape}/{input_ids.flatten().cpu().tolist()[:1000]}")
 
-        if inputs["input_ids"].shape[-1] > self.max_sample_length:
-            return None
-
         # Include all processor output fields in result
         for key, value in inputs.items():
             result[key] = value
