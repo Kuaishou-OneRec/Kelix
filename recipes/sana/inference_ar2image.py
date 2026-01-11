@@ -352,6 +352,8 @@ def tokenize_images(ar_processor : AutoProcessor,
                 # embeddings shape is [1, total_seq_len, embed_dim] in packing case
                 vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
                 vision_embeddings = vision_embeddings[is_image_id[start_pos:end_pos+1], :]  # [valid_len, embed_dim]
+                
+                print(f"Find vision embeddings with shape {vision_embeddings.shape}")
                 vision_embeddings_list.append(vision_embeddings)
                 vision_seq_lens.append(vision_embeddings.shape[0])
         
