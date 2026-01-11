@@ -475,7 +475,7 @@ def main():
     agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
     output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
 
-    if os.path.exists(output_pkl) and args.overwrite_output:
+    if os.path.exists(output_pkl) and not args.overwrite_output:
         print(f"{output_pkl} already exists, skipping")
         return
 
