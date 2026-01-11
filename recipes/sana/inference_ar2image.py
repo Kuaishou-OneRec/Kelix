@@ -548,7 +548,10 @@ def main():
 
     token_cache_dir = os.path.join(args.output_dir, 'token_cache')
     token_cache_rank = os.path.join(token_cache_dir, f'rank_{torch.distributed.get_rank()}.pkl')
-    os.makedirs(token_cache_dir, exist_ok=True)
+
+    if torch.distributed.get_rank() == 0:
+        os.makedirs(token_cache_dir, exist_ok=True)
+    torch.distributed.barrier()
 
     if os.path.exists(token_cache_rank):
         cached = torch.load(token_cache_rank, weights_only=False)
