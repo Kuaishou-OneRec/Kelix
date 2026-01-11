@@ -180,11 +180,11 @@ def monitor():
         for step_name in new_steps:
             # if int(step_name.split('step')[-1]) % 4000 != 0: continue
             log(f"Found new step: {step_name}")
-            processed_steps.add(step_name)
             
             if run_inference(step_name):
                 if run_evaluation(step_name):
                     collect_scores(step_name)
+                    processed_steps.add(step_name)
             else:
                 log(f"Failed to process {step_name}, skipping further steps")
             break
