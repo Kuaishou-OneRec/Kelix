@@ -94,7 +94,47 @@ TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
 
 MASTER_ADDR=$MY_NODE_IP
-MASTER_PORT=8499
+# MASTER_PORT=8499
+
+# 检查端口是否可用的函数
+check_port_available() {
+    local port=$1
+    nc -z localhost $port > /dev/null 2>&1
+    return $?  # 如果端口可用返回0，否则返回1
+}
+
+# 生成随机可用端口的函数
+get_random_available_port() {
+    local max_attempts=50
+    local attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        # 生成4000-65535之间的随机端口
+        local random_port=$((4000 + $RANDOM % 61535))
+        
+        if check_port_available $random_port; then
+            echo $random_port
+            return 0
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    echo "Error: Could not find an available port after $max_attempts attempts" >&2
+    exit 1
+}
+
+hostfile=/etc/mpi/hostfile_seq
+Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
+np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
+
+
+MASTER_ADDR=$MY_NODE_IP
+# 随机寻找可用端口
+MASTER_PORT=$(get_random_available_port)
+echo "Selected random available MASTER_PORT: $MASTER_PORT"
+
 
 echo "Going to output dir: "$OUTPUT_DIR
 PYTHONPATH=. \
