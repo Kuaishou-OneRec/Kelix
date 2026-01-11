@@ -3,7 +3,7 @@
     "sources": "/llm_reco/vlm/datahub/datasets/Stage3_blended/0.9.3/index/parquet.json",
     "image_size": 1024,
     "max_condition_length": 720,
-    "center_crop": true,
+    "center_crop": false,
     "packing": false,
     "valid_hw_range": [512, 2560],
     "multi_scale": false,
