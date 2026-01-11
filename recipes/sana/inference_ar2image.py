@@ -490,7 +490,7 @@ def main():
     torch.set_default_device(torch.device(torch.distributed.get_rank() % 8))
     device = torch.device(torch.cuda.current_device())    
 
-    wait_for_device_memory(device, min_memory_gb=79)
+    wait_for_device_memory(device, min_memory_gb=60)
 
     # Convert DCP checkpoint if needed
     model_dir = args.model_dir
