@@ -100,18 +100,25 @@ MASTER_ADDR=$MY_NODE_IP
 check_port_available() {
     local port=$1
     nc -z localhost $port > /dev/null 2>&1
-    return $?  # 如果端口可用返回0，否则返回1
+    local result=$?
+    if [ $result -eq 0 ]; then
+        # 端口被占用，返回1表示不可用
+        return 1
+    else
+        # 端口可用，返回0表示可用
+        return 0
+    fi
 }
 
 # 生成随机可用端口的函数
 get_random_available_port() {
-    local max_attempts=50
+    local max_attempts=50000
     local attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
         # 生成4000-65535之间的随机端口
         local random_port=$((4000 + $RANDOM % 61535))
-        
+        sleep 1
         if check_port_available $random_port; then
             echo $random_port
             return 0
