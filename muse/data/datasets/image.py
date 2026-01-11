@@ -1150,13 +1150,14 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
         self.force_assistant_image_size = force_assistant_image_size
         self.system_prompt = system_prompt
         self.max_hw_ratio = max_hw_ratio
+        self.assistant_resize_method = assistant_resize_method
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
@@ -1236,6 +1237,46 @@ class Chat2ImageDataset(Token2ImageDataset):
         
         return result
 
+    def resize_and_center_crop(self, image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+        """
+        对PIL图像进行等比例缩放后居中裁剪至目标尺寸
+        
+        参数:
+            image: 输入的PIL Image对象
+            target_width: 目标宽度（像素）
+            target_height: 目标高度（像素）
+        
+        返回:
+            处理后的PIL Image对象
+        """
+        # 获取原始图像尺寸
+        original_width, original_height = image.size
+        
+        # 计算缩放比例（保证图像能覆盖目标尺寸，取较大的缩放比例）
+        scale_width = target_width / original_width
+        scale_height = target_height / original_height
+        scale = max(scale_width, scale_height)
+        
+        # 计算等比例缩放后的尺寸
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+        
+        # 等比例缩放图像（兼容PIL不同版本）
+        try:
+            resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        except AttributeError:
+            resized_image = image.resize((new_width, new_height), Image.LANCZOS)
+        
+        # 计算居中裁剪的坐标（四舍五入避免浮点误差）
+        left = round((new_width - target_width) / 2)
+        top = round((new_height - target_height) / 2)
+        right = left + target_width
+        bottom = top + target_height
+        
+        # 执行居中裁剪
+        cropped_image = resized_image.crop((left, top, right, bottom))
+        
+        return cropped_image
 
     def process(self, sample: Dict[str, Any], valid_hw_range: Optional[List[int]] = None) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single sample with message-based chat processing.
@@ -1314,8 +1355,13 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if self.force_assistant_image_size is not None:
                     if isinstance(x["image"], str):
                         x["image"] = Image.open(x["image"])
-                    x["image"] = x["image"].resize((self.force_assistant_image_size, self.force_assistant_image_size))
-
+                    
+                    if self.assistant_resize_method == 'resize':
+                        x["image"] = x["image"].resize((self.force_assistant_image_size, self.force_assistant_image_size))
+                    elif self.assistant_resize_method == 'center_crop':
+                        x["image"] = self.resize_and_center_crop(x["image"], self.force_assistant_image_size, self.force_assistant_image_size)
+                    else:
+                        raise ValueError(f"Invalid assistant_resize_method: {self.assistant_resize_method}")
                 x["max_pixels"] = self.max_pixels
 
         # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
