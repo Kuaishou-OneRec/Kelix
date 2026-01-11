@@ -428,9 +428,9 @@ def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
     while True:
         # 获取当前设备的内存统计
         torch.cuda.empty_cache()  # 清空缓存以获取更准确的内存信息
-        memory_stats = torch.cuda.memory_stats(device)
-        free_memory = memory_stats['free_bytes']
         total_memory = torch.cuda.get_device_properties(device).total_memory
+        memory_allocated = torch.cuda.memory_allocated(device)
+        free_memory = total_memory - memory_allocated
         
         free_memory_gb = free_memory / 1024**3
         total_memory_gb = total_memory / 1024**3
@@ -446,7 +446,6 @@ def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
     
     torch.distributed.barrier()
     return True
-
 
 def main():
     args = parse_args()
