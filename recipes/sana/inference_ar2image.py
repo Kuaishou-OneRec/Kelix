@@ -416,7 +416,7 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
     return z
 
 
-def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
+def wait_for_device_memory(device, min_memory_gb: float = 80.5) -> bool:
     """Wait until the device has sufficient memory available."""
     if not device.type == 'cuda':
         # 如果不是CUDA设备，直接返回True
