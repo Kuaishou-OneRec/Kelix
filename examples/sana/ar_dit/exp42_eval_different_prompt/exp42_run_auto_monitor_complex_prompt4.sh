@@ -16,7 +16,7 @@ DATASET_CONFIG="examples/sana/ar_dit/exp42_eval_different_prompt/exp42_ar_dit_32
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
-log_file=${DCP_CKPT_DIR}/auto_monitor3.log
+log_file=${DCP_CKPT_DIR}/auto_monitor4.log
 echo "log_file=${log_file}"
 
 # Run the Python script with all parameters
@@ -32,6 +32,6 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dataset-config "$DATASET_CONFIG" \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
-    --eval-id "prompt3" \
+    --eval-id "prompt4" \
     --good-steps "20000" \
     > ${log_file} &
