@@ -205,7 +205,7 @@ class ShuffledParquetReaderV2(Reader):
             sample = self._parser(row.to_dict(), fn, idx, len(df))
             if sample is not None:
               if self.local_shuffle_buffer.add(sample, fn, log_info=f"rank{rank}-{fn}", index=idx): continue
-                sample = self.local_shuffle_buffer.get()
+              sample = self.local_shuffle_buffer.get()
               yield sample
 
           except Exception as e:
