@@ -394,6 +394,7 @@ class DistributedDataset(IterableDataset):
     # 根据配置返回对应的 Reader
     if self.reader == "parquet":
       if self.shuffle_window > 1:
+        print(f"Shuffle window: {self.shuffle_window}")
         # 返回一个构造函数，支持传入 window_size
         return lambda sources: ShuffledParquetReaderV2(sources) #, window_size=self.shuffle_window)
       return ParquetReader
