@@ -885,8 +885,10 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         "cond_input_pos": cond_input_pos,
         "H_y": h_cond,
         "W_y": w_cond,
-        "H_x": image_size,
-        "W_x": image_size,
+
+        "H_x": image_size // 28,
+        "W_x": image_size // 28,
+        
     }
 
 
