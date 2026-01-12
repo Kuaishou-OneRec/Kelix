@@ -696,7 +696,9 @@ def main():
                 image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
                 max_seq_len=args.max_condition_length, 
                 device=device, 
-                cond_pos_scale=args.cond_pos_scale)
+                cond_pos_scale=args.cond_pos_scale,
+                image_size=args.image_size
+                )
             
             model_kwargs={
                 **pos_args,

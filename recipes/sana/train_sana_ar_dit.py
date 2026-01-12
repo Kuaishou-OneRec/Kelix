@@ -858,6 +858,9 @@ def resize_hw(hw, max_tokens):
 
 
 def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024):
+    print(f"  Computing position args for DiT...")
+
+    
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
     # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
@@ -880,7 +883,8 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
             "height": F.pad(cond_input_pos["height"], (0, pad_len), value=0),
             "width": F.pad(cond_input_pos["width"], (0, pad_len), value=0),
         }
-    return {
+    
+    args = {
         "x_input_pos": x_input_pos,
         "cond_input_pos": cond_input_pos,
         "H_y": h_cond,
@@ -890,6 +894,11 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         "W_x": image_size // 28,
         
     }
+    print(f"compute pos args")
+    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}")
+    print(f"args={args}")
+
+    return args
 
 
 
