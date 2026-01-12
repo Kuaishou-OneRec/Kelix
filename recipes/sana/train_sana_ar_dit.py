@@ -1475,7 +1475,6 @@ def train():
             pos_args = compute_pos_args(
                 latent_hw=(latents.shape[2], latents.shape[3]),
                 image_grid_thw=batch["image_grid_thw"],
-                token_embed_lengths=token_embeds.shape,
                 max_seq_len=max_seq_len,
                 device=latents.device,
                 cond_pos_scale=args.cond_pos_scale,
