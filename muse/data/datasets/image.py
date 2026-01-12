@@ -1400,6 +1400,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         """
         # Here is the real process of batch.
         result = {}
+        batch = [sample for sample in batch if sample is not None]
         batch = [self._process_pair(sample) for sample in batch]
 
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
