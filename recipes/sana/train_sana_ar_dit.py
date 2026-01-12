@@ -919,7 +919,11 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
     h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) ).tolist()
-    redundant_tokens = token_embed_lengths[0] - (h_cond * w_cond)
+
+    if token_embed_lengths is not None:
+        redundant_tokens = token_embed_lengths[0] - (h_cond * w_cond)
+    else:
+        redundant_tokens = 0
 
     w_cond_correction = w_cond + math.ceil(redundant_tokens / h_cond)
 
