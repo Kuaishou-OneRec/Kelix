@@ -145,18 +145,18 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/exp4x/exp41_ar_dit_324tokens_1e-4_cond_special.json \
+                --dataset-config examples/sana/ar_dit/exp4x/exp47_ar_dit_324tokens_1e-4_cond_special.json \
                 --resolution-budgets "1024:24" \
-                --learning-rate 4e-4 \
+                --learning-rate 2e-4 \
                 --min-lr 1e-4 \
-                --num-decay-steps 4000 \
+                --num-decay-steps 8000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
                 --batch-size 24 \
                 --lr-scheduler-type cosine_v2 \
-                --num-warmup-steps 1000 \
+                --num-warmup-steps 100 \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=720 use_cross_attn_rope=True use_position_scale=True \
                 --condition-on-special-tokens \
