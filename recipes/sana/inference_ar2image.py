@@ -127,6 +127,8 @@ def parse_args():
                         help="Overwrite existing output files")
     parser.add_argument("--owerwrite-token-cache", action="store_true",
                         help="Overwrite existing token cache files")
+    parser.add_argument("--im-token-generation-length", type=int, default=None,
+                        help="Generation length for image tokens, if None, use max_condition_length")
     return parser.parse_args()
 
 
@@ -475,6 +477,11 @@ def wait_for_device_memory(device, min_memory_gb: float = 64) -> bool:
 
 def main():
     args = parse_args()
+
+    if args.im_token_generation_length is None or args.im_token_generation_length <= 0:
+        args.im_token_generation_length = args.max_condition_length
+        print(f"Using max_condition_length={args.max_condition_length} for image token generation")
+
     agg_output_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
     output_pkl = os.path.join(agg_output_dir, f"{args.model_tag}_{args.benchname}.pkl")
 
@@ -696,7 +703,7 @@ def main():
 
             pos_args = train_rec.compute_pos_args(
                 latent_hw=(latent_size, latent_size), 
-                image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
+                image_grid_thw=torch.tensor([1, 2 * args.im_token_generation_length**0.5, 2*args.im_token_generation_length**0.5])[None], 
                 max_seq_len=args.max_condition_length, 
                 device=device, 
                 cond_pos_scale=args.cond_pos_scale,

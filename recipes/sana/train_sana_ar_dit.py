@@ -293,6 +293,7 @@ def get_argument_parser():
 
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
+                        
     parser.add_argument("--im-token-generation-length", type=int, default=None,
                         help="Generation length for image tokens, if None, use max_condition_length")
 
