@@ -383,6 +383,10 @@ class SanaModel(Model):
                 for k,v in x_input_pos.items():
                     print(f"x_input_posx_input_pos {k}: {v.cpu().tolist()}")
 
+                for k,v in raw_cond_input_pos.items():
+                    print(f"raw_cond_input_posraw_cond_input_pos {k}: {v.cpu().tolist()}")
+
+
                 for k,v in cond_input_pos.items():
                     print(f"cond_input_poscond_input_pos {k}: {v.cpu().tolist()}")
 
