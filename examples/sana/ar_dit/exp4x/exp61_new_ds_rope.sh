@@ -170,5 +170,6 @@ nohup mpirun --allow-run-as-root \
                 --prefetch-params-in-forward \
                 --enable-profile \
                 --condition-on-special-tokens \
+                --im-token-generation-length 324 \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
