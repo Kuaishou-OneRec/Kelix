@@ -740,6 +740,7 @@ def visualize_reconstruction(
         device=device, 
         cond_pos_scale=args.cond_pos_scale,
         image_size=args.image_size,
+        token_embed_shape=cond_embeds.shape,
         )
     
     model_kwargs={
