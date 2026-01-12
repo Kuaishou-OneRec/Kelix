@@ -170,7 +170,7 @@ class ShuffledParquetReaderV2(Reader):
     """
     IterableDataset for parquet files, consuming files in order.
     """
-    def __init__(self, sources: Union[List[str], str], local_shuffle_buffer_size=16384, local_shuffle_random_fetch=0.01):
+    def __init__(self, sources: Union[List[str], str], local_shuffle_buffer_size=4096, local_shuffle_random_fetch=0.01):
       super().__init__(sources)
       from .local_shuffle_buffer import LocalShuffleBuffer
       self.local_shuffle_buffer = LocalShuffleBuffer(
