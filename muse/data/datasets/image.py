@@ -1329,12 +1329,13 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         if metadata is None:
             print(f"{sample} has None metadata")
+            images_info = {}
             for k,v in sample["images"]:
                 image_path = sample["images"][k]
                 image = Image.open(image_path)
                 images_info[k] = {"height": image.height, "width": image.width}
             metadata["images_info"] = images_info
-{}
+
         images_info = metadata.get("images_info", {})
         image_info = images_info.get(image, {})
         height = image_info.get("height", None)
