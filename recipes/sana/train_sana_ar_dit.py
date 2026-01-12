@@ -906,7 +906,7 @@ args={'x_input_pos': {'height': tensor([ 0,  0,  0,  ..., 31, 31, 31], device='c
 
 def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024, token_embed_lengths=None):
     print(f"  Computing position args for DiT...")
-
+    import math
     
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
@@ -920,9 +920,10 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     ## divide by 2 because the token embeddings is merged by 2x2 patches
     h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) ).tolist()
     redundant_tokens = token_embed_lengths[0] - (h_cond * w_cond)
-    w_cond_correction = w_cond + redundant_tokens // h_cond
 
-    cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
+    w_cond_correction = w_cond + math.ceil(redundant_tokens / h_cond)
+
+    cond_input_pos = compute_input_pos(h_cond, w_cond_correction, device=device)
     cond_input_pos = {k: (v * cond_pos_scale).long() for k, v in cond_input_pos.items()}
 
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
