@@ -16,7 +16,7 @@ DATASET_CONFIG="examples/sana/ar_dit/exp42_eval_different_prompt/exp43_ar_dit_32
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
-log_file=${DCP_CKPT_DIR}/auto_monitor.log
+log_file=${DCP_CKPT_DIR}/auto_monitor1.log
 echo "log_file=${log_file}"
 
 # Run the Python script with all parameters
