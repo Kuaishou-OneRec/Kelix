@@ -35,7 +35,7 @@ IMAGE_SIZE="${IMAGE_SIZE:-1024}"
 SEED="${SEED:-42}"
 INITIALIZE_DIST="${INITIALIZE_DIST:-true}"  # initialize a local single-process dist group
 MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=324}"
-
+EVAL_ID="${EVAL_ID:-default}"
 # DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
 # DCP_TAG="${DCP_TAG:-global_step12000}"
 
@@ -223,6 +223,7 @@ mpirun --allow-run-as-root \
       --teacher-forcing ${TEACHER_FORCING} \
       --cfg-scale 2.0 \
       --linspace-sigmas \
+--eval-id ${EVAL_ID} \
 --num-sampling-steps 50 \
 --condition-on-special-tokens \
       --n_infer_items ${N_INFER_ITEMS} \

@@ -33,6 +33,8 @@ def parse_args():
     parser.add_argument('--inference-script',
                        default="examples/sana/ar_dit/inference/mpi_infer_custom.sh",
                        help='Path to inference script (default: examples/sana/ar_dit/inference/mpi_infer_custom.sh)')
+    parser.add_argument('--eval-id', default="default",
+                       help='Evaluation ID (default: default)')
     return parser.parse_args()
 
 # Set environment variables for subprocesses
@@ -78,7 +80,7 @@ def run_command(cmd: List[str], env: Dict = None, log_output: bool = True) -> bo
         return False
 
 
-def run_inference(step_name: str) -> bool:
+def run_inference(step_name: str, args) -> bool:
     """Run inference for a step"""
     log(f"Starting inference for {step_name}")
     
@@ -86,7 +88,8 @@ def run_inference(step_name: str) -> bool:
     env_vars.update({
         "DCP_CKPT_DIR": DCP_CKPT_DIR,
         "DCP_TAG": step_name,
-        "OUTPUT_DIR": f"{DCP_CKPT_DIR}/{step_name}/inference/GenEval/outputs"
+        "OUTPUT_DIR": f"{DCP_CKPT_DIR}/{step_name}/inference/GenEval/outputs",
+        "EVAL_ID": args.eval_id
     })
     
     # Create output directory
@@ -99,7 +102,7 @@ def run_inference(step_name: str) -> bool:
     return run_command(cmd, env_vars)
 
 
-def run_evaluation(step_name: str) -> bool:
+def run_evaluation(step_name: str, args) -> bool:
     """Run evaluation for a step"""
     log(f"Starting evaluation for {step_name}")
     
@@ -109,7 +112,7 @@ def run_evaluation(step_name: str) -> bool:
     eval_cmd = [
         "torchrun", "--nproc_per_node=8", "run_eval_only.py",
         "--config", "config/blip3o_sft_step800.json",
-        "--eval-id", "default",
+        "--eval-id", args.eval_id,
         "--work-dir", work_dir
     ]
     
@@ -166,7 +169,7 @@ def find_available_steps() -> List[str]:
     return [step_name for _, step_name in steps]
 
 
-def monitor():
+def monitor(args):
     """Main monitoring loop"""
     log(f"Starting monitoring for {DCP_CKPT_DIR}")
     processed_steps: Set[str] = set()
@@ -181,8 +184,8 @@ def monitor():
             # if int(step_name.split('step')[-1]) % 4000 != 0: continue
             log(f"Found new step: {step_name}")
             
-            if run_inference(step_name):
-                if run_evaluation(step_name):
+            if run_inference(step_name, args):
+                if run_evaluation(step_name, args):
                     collect_scores(step_name)
                     processed_steps.add(step_name)
             else:
@@ -224,7 +227,7 @@ def main():
     log("Script started")
     
     try:
-        monitor()
+        monitor(args=args)
     except KeyboardInterrupt:
         log("Monitoring interrupted by user")
     except Exception as e:
