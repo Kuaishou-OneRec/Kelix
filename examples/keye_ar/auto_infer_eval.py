@@ -35,6 +35,8 @@ def parse_args():
                        help='Path to inference script (default: examples/sana/ar_dit/inference/mpi_infer_custom.sh)')
     parser.add_argument('--eval-id', default="default",
                        help='Evaluation ID (default: default)')
+    parser.add_argument('--good_steps', default='',
+                       help='List of good steps to monitor, split by comma')
     return parser.parse_args()
 
 # Set environment variables for subprocesses
@@ -150,9 +152,11 @@ def collect_scores(step_name: str) -> bool:
     return run_command(cmd)
 
 
-def find_available_steps() -> List[str]:
+def find_available_steps(args: argparse.Namespace) -> List[str]:
     """Find and sort all available global_step directories"""
     steps = []
+    good_steps = args.good_steps.split(',')
+    good_steps = [int(step) for step in good_steps if step != '']
     
     for item in Path(DCP_CKPT_DIR).iterdir():
         if item.is_dir() and item.name.startswith("global_step"):
@@ -160,6 +164,8 @@ def find_available_steps() -> List[str]:
             match = re.match(r"global_step(\d+)", item.name)
             if match:
                 step_number = int(match.group(1))
+                if good_steps and step_number not in good_steps:
+                    continue
                 metadata_file = item / ".metadata"
                 if metadata_file.exists():
                     steps.append((step_number, item.name))
@@ -177,7 +183,8 @@ def monitor(args):
     while True:
         log("Checking for new global_step directories...")
         
-        available_steps = find_available_steps()
+        available_steps = find_available_steps(args)
+        
         new_steps = [step for step in available_steps if step not in processed_steps]
         
         for step_name in new_steps:
