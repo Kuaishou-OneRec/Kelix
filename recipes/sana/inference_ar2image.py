@@ -644,10 +644,12 @@ def main():
 
             cache_key = ','.join([str(x) for x in samples.input_ids.flatten().tolist()])
             if cached.get(cache_key) is not None:
-                
-                cond_embeds, cond_mask = cached[cache_key]
+                conds = cached[cache_key]
+                cond_embeds, cond_mask = conds[:2]
                 cond_embeds = cond_embeds.to(device=device)
                 cond_mask = cond_mask.to(device=device)
+                if len(conds) == 3: token_embed_lengths = conds[2]
+                else: token_embed_lengths = None
                 print(f"Using cached tokenization for i_sample={i_sample}, cache_key={cache_key}, cond_embeds.shape={cond_embeds.shape}, cond_mask.shape={cond_mask.shape}")
             else:
                 print(f"Computing tokenization for i_sample={i_sample}")
@@ -662,7 +664,7 @@ def main():
                     keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
                     condition_on_special_tokens=args.condition_on_special_tokens,
                 )
-                cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu())
+                cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu(), token_embed_lengths)
                 print(f"Caching tokenization for i_sample={i_sample}, cache_key={cache_key}, cond_embeds.shape={cond_embeds.shape}, cond_mask.shape={cond_mask.shape}")
 
 
