@@ -380,8 +380,11 @@ class SanaModel(Model):
             cond_input_pos["width"] = (y_pos_w * max(1, W_x / W_y)).to(y_pos_w.dtype)
 
             if torch.distributed.get_rank() == 0:
-                print(f"x_input_pos={x_input_pos.cpu().tolist()}")
-                print(f"cond_input_pos={cond_input_pos.cpu().tolist()}")
+                for k,v in x_input_pos.items():
+                    print(f"x_input_posx_input_pos {k}: {v.cpu().tolist()}")
+
+                for k,v in cond_input_pos.items():
+                    print(f"cond_input_poscond_input_pos {k}: {v.cpu().tolist()}")
 
         if not cond_input_pos:
             cond_input_pos = raw_cond_input_pos
