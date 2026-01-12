@@ -738,7 +738,9 @@ def visualize_reconstruction(
         image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
         max_seq_len=args.max_condition_length, 
         device=device, 
-        cond_pos_scale=args.cond_pos_scale)
+        cond_pos_scale=args.cond_pos_scale,
+        image_size=args.image_size,
+        )
     
     model_kwargs={
         **pos_args,
@@ -855,7 +857,7 @@ def resize_hw(hw, max_tokens):
     return torch.tensor(keye_vl_utils.smart_resize(*hw.tolist(), factor=1, min_pixels=1, max_pixels=max_tokens))
 
 
-def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1):
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024):
     # Compute 2D position ids for RoPE
     # x_input_pos: for diffusion model's latent patches
     # latents shape: [N, C, H_latent, W_latent], grid size = H_latent x W_latent (with patch_size=1)
@@ -881,6 +883,10 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     return {
         "x_input_pos": x_input_pos,
         "cond_input_pos": cond_input_pos,
+        "H_y": h_cond,
+        "W_y": w_cond,
+        "H_x": image_size,
+        "W_x": image_size,
     }
 
 
@@ -1410,6 +1416,7 @@ def train():
                 max_seq_len=max_seq_len,
                 device=latents.device,
                 cond_pos_scale=args.cond_pos_scale,
+                image_size=args.image_size,
             )
 
             if np.random.rand() < 0.0001:
