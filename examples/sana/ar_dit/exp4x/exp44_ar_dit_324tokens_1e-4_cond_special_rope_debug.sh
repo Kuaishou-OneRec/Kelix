@@ -165,6 +165,7 @@ nohup mpirun --allow-run-as-root \
                 --fp32-weight \
                 --fp32-reduce \
                 --seed 19260817 \
+                --im-token-generation-length 324 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --enable-profile \
