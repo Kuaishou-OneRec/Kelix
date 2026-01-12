@@ -379,6 +379,9 @@ class SanaModel(Model):
             cond_input_pos["height"] = (y_pos_h * max(1, H_x / H_y)).to(y_pos_h.dtype)
             cond_input_pos["width"] = (y_pos_w * max(1, W_x / W_y)).to(y_pos_w.dtype)
 
+            print(f"x_input_pos={x_input_pos.cpu().tolist()}")
+            print(f"cond_input_pos={cond_input_pos.cpu().tolist()}")
+            
         if not cond_input_pos:
             cond_input_pos = raw_cond_input_pos
 
