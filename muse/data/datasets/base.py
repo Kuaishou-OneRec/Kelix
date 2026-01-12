@@ -166,6 +166,53 @@ class ParquetReader(Reader):
             continue
 
 
+class ShuffledParquetReaderV2(Reader):
+    """
+    IterableDataset for parquet files, consuming files in order.
+    """
+    def __init__(self, sources: Union[List[str], str], local_shuffle_buffer_size=16384, local_shuffle_random_fetch=0.01):
+      super().__init__(sources)
+      from .local_shuffle_buffer import LocalShuffleBuffer
+      self.local_shuffle_buffer = LocalShuffleBuffer(
+        local_shuffle_buffer_size, local_shuffle_random_fetch)
+
+
+    def _parser(self,
+                row: Dict[str, Any],
+                filename: str,
+                index: int,
+                size: int) -> Dict[str, Any]:
+      row["__file__"] = filename
+      row["__index__"] = index
+      row["__total__"] = size
+      return row
+
+    def __iter__(self,):
+      rank = get_data_parallel_rank()
+      worker_id, _  = get_worker_info()
+      for fn_index, fn in tqdm(enumerate(self.sources)):
+        try:
+          parquet_file = load_parquet(fn)
+        except Exception as e:
+          print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
+          continue
+        df = parquet_file.to_pandas()
+        df = self.local_shuffle_buffer.preprocess_df(df, epoch_idx=0, fn_index=fn_index, fn=fn)
+        for idx, row in tqdm(
+            df.iterrows(), total=len(df),
+            desc=f"[rank={rank}, worker={worker_id}] {fn}"):
+          try:
+            sample = self._parser(row.to_dict(), fn, idx, len(df))
+            if sample is not None:
+              if self.local_shuffle_buffer.add(sample, fn, log_info=f"rank{rank}-{fn}", index=idx): continue
+                sample = self.local_shuffle_buffer.get()
+              yield sample
+
+          except Exception as e:
+            print(f"Error processing row {idx} in {fn}: {str(e)}")
+            continue
+
+
 class ShuffledParquetReader(ParquetReader):
     """
     带局部窗口打乱的 Parquet 读取器。
@@ -348,7 +395,7 @@ class DistributedDataset(IterableDataset):
     if self.reader == "parquet":
       if self.shuffle_window > 1:
         # 返回一个构造函数，支持传入 window_size
-        return lambda sources: ShuffledParquetReader(sources, window_size=self.shuffle_window)
+        return lambda sources: ShuffledParquetReaderV2(sources) #, window_size=self.shuffle_window)
       return ParquetReader
     else:
       raise ValueError(f"Unsupported reader: {self.reader}")
