@@ -525,7 +525,7 @@ def tokenize_images(tokenizer,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
-        token_embed_lengths = [x.shape[1] for x in vision_embeddings_list]
+        token_embed_lengths = [x.shape[0] for x in vision_embeddings_list]
 
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
