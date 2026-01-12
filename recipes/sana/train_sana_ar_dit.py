@@ -898,7 +898,7 @@ args={'x_input_pos': {'height': tensor([ 0,  0,  0,  ..., 31, 31, 31], device='c
        device='cuda:0')}, 'H_y': 18, 'W_y': 18, 'H_x': 36, 'W_x': 36}
 '''
 
-def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024):
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024, token_embed_shape=None):
     print(f"  Computing position args for DiT...")
 
     
@@ -936,7 +936,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         
     }
     print(f"compute pos args")
-    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}")
+    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_shape={token_embed_shape}")
     print(f"args={args}")
 
     return args
@@ -1465,6 +1465,7 @@ def train():
             pos_args = compute_pos_args(
                 latent_hw=(latents.shape[2], latents.shape[3]),
                 image_grid_thw=batch["image_grid_thw"],
+                token_embed_shape=token_embeds.shape,
                 max_seq_len=max_seq_len,
                 device=latents.device,
                 cond_pos_scale=args.cond_pos_scale,
