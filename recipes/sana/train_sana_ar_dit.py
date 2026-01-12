@@ -293,6 +293,8 @@ def get_argument_parser():
 
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
+    parser.add_argument("--im-token-generation-length", type=int, default=None,
+                        help="Generation length for image tokens, if None, use max_condition_length")
 
     ############ Visualization Args ############
     
@@ -472,6 +474,7 @@ def tokenize_images(tokenizer,
         # We need to find all vision_start_id and vision_end_id pairs in the sequence
         vision_embeddings_list = []
         vision_seq_lens = []
+        token_embed_lengths = []
         
         # Get the flat input_ids (remove batch dimension for packing case)
         flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
@@ -522,6 +525,8 @@ def tokenize_images(tokenizer,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
+        token_embed_lengths = [x.shape[1] for x in vision_embeddings_list]
+
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
@@ -683,7 +688,7 @@ def visualize_reconstruction(
           )
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")
-    cond_embeds, cond_mask, max_seq_len = tokenize_images(  # pyright: ignore[reportAssignmentType]
+    cond_embeds, cond_mask, max_seq_len, token_embed_lengths = tokenize_images(  # pyright: ignore[reportAssignmentType]
         tokenizer=image_tokenizer,
         pixel_values=loaded.pixel_values.to(device=device),
         image_grid_thw=loaded.image_grid_thw.to(device=device),
@@ -735,12 +740,12 @@ def visualize_reconstruction(
     
     pos_args = compute_pos_args(
         latent_hw=(loaded.latent_size, loaded.latent_size), 
-        image_grid_thw=torch.tensor([1, 2 * args.max_condition_length**0.5, 2*args.max_condition_length**0.5])[None], 
+        image_grid_thw=torch.tensor([1, 2 * args.im_token_generation_length**0.5, 2*args.im_token_generation_length**0.5])[None], 
         max_seq_len=args.max_condition_length, 
         device=device, 
         cond_pos_scale=args.cond_pos_scale,
         image_size=args.image_size,
-        token_embed_shape=cond_embeds.shape,
+        token_embed_lengths=token_embed_lengths,
         )
     
     model_kwargs={
@@ -899,7 +904,7 @@ args={'x_input_pos': {'height': tensor([ 0,  0,  0,  ..., 31, 31, 31], device='c
        device='cuda:0')}, 'H_y': 18, 'W_y': 18, 'H_x': 36, 'W_x': 36}
 '''
 
-def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024, token_embed_shape=None):
+def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024, token_embed_lengths=None):
     print(f"  Computing position args for DiT...")
 
     
@@ -937,7 +942,7 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         
     }
     print(f"compute pos args")
-    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_shape={token_embed_shape}")
+    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}")
     print(f"args={args}")
 
     return args
@@ -947,6 +952,10 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
 def train():
     arg_parser = get_argument_parser()
     args = arg_parser.parse_args()
+
+    if args.im_token_generation_length is None:
+        args.im_token_generation_length = args.max_condition_length
+        print_rank_0(f"im_token_generation_length: {args.im_token_generation_length}")
 
     assert all([args.commit_id, args.seed, args.comment]), \
         "Git commit, seed, and comment is required for reproducibility"
@@ -1452,7 +1461,7 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                token_embeds, attention_mask, max_seq_len = tokenize_images(
+                token_embeds, attention_mask, max_seq_len, token_embed_lengths = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
@@ -1466,11 +1475,12 @@ def train():
             pos_args = compute_pos_args(
                 latent_hw=(latents.shape[2], latents.shape[3]),
                 image_grid_thw=batch["image_grid_thw"],
-                token_embed_shape=token_embeds.shape,
+                token_embed_lengths=token_embeds.shape,
                 max_seq_len=max_seq_len,
                 device=latents.device,
                 cond_pos_scale=args.cond_pos_scale,
                 image_size=args.image_size,
+                token_embed_lengths=token_embed_lengths,
             )
 
             if np.random.rand() < 0.0001:

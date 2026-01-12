@@ -160,6 +160,7 @@ nohup mpirun --allow-run-as-root \
                 --model-config-overrides model_max_length=324 use_cross_attn_rope=True use_position_scale=True \
                 --save-checkpoint-per-step 2000 \
                 --logging-per-step 20 \
+                --im-token-generation-length 324 \
                 --clip-range 9999999 \
                 --fp32-weight \
                 --fp32-reduce \
