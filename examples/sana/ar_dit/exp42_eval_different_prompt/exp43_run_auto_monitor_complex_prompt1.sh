@@ -33,4 +33,5 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
     --eval-id "prompt1" \
+    --good-steps "20000" \
     > ${log_file} &

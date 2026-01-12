@@ -35,7 +35,7 @@ def parse_args():
                        help='Path to inference script (default: examples/sana/ar_dit/inference/mpi_infer_custom.sh)')
     parser.add_argument('--eval-id', default="default",
                        help='Evaluation ID (default: default)')
-    parser.add_argument('--good_steps', default='',
+    parser.add_argument('--good-steps', default='',
                        help='List of good steps to monitor, split by comma')
     return parser.parse_args()
 
