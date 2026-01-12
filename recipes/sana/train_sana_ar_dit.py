@@ -919,11 +919,14 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
     # Use the first sample's grid (assuming same grid for all samples in batch)
     ## divide by 2 because the token embeddings is merged by 2x2 patches
     h_cond, w_cond = (resize_hw(image_grid_thw[0][1:] // 2, max_seq_len) ).tolist()
+    redundant_tokens = token_embed_lengths[0] - (h_cond * w_cond)
+    w_cond_correction = w_cond + redundant_tokens // h_cond
+
     cond_input_pos = compute_input_pos(h_cond, w_cond, device=device)
     cond_input_pos = {k: (v * cond_pos_scale).long() for k, v in cond_input_pos.items()}
 
     # Pad cond_input_pos to max_seq_len (matching tokenize_images dynamic padding)
-    cond_seq_len = h_cond * w_cond
+    cond_seq_len = h_cond * w_cond_correction
     pad_len = max_seq_len - cond_seq_len
     if pad_len > 0:
         cond_input_pos = {
@@ -935,14 +938,14 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         "x_input_pos": x_input_pos,
         "cond_input_pos": cond_input_pos,
         "H_y": h_cond,
-        "W_y": w_cond,
+        "W_y": w_cond_correction,
 
         "H_x": image_size // 28,
         "W_x": image_size // 28,
         
     }
     print(f"compute pos args")
-    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}")
+    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}, h_cond={h_cond}, w_cond={w_cond}, h_cond_correction={w_cond_correction}, redundant_tokens={redundant_tokens}")
     print(f"args={args}")
 
     return args
