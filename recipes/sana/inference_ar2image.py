@@ -317,6 +317,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         # We need to find all vision_start_id and vision_end_id pairs in the sequence
         vision_embeddings_list = []
         vision_seq_lens = []
+        token_embed_lengths = []
         
         # Get the flat input_ids (remove batch dimension for packing case)
         flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
@@ -380,6 +381,8 @@ def tokenize_images(ar_processor : AutoProcessor,
             processed_embeddings[i, :seq_len, :] = emb
             attention_mask[i, :seq_len] = 1
         
+        token_embed_lengths = [vision_embeddings.shape[0] for vision_embeddings in vision_embeddings_list]
+
         # Handle padding to max_condition_length
         current_seq_len = processed_embeddings.shape[1]
         if current_seq_len < max_condition_length:
@@ -400,7 +403,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         # Reshape attention_mask to [B, 1, 1, max_condition_length]
         attention_mask = attention_mask[:, None, None, :]
 
-    return processed_embeddings, attention_mask
+    return processed_embeddings, attention_mask, token_embed_lengths
 
 
 def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
@@ -642,7 +645,7 @@ def main():
             else:
                 print(f"Computing tokenization for i_sample={i_sample}")
                 # Tokenize images to condition embeddings
-                cond_embeds, cond_mask = tokenize_images(
+                cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
                     ar_model=image_tokenizer,
                     batch_size=batch_size,
                     max_condition_length=args.max_condition_length,
@@ -697,7 +700,8 @@ def main():
                 max_seq_len=args.max_condition_length, 
                 device=device, 
                 cond_pos_scale=args.cond_pos_scale,
-                image_size=args.image_size
+                image_size=args.image_size,
+                token_embed_lengths=token_embed_lengths,
                 )
             
             model_kwargs={

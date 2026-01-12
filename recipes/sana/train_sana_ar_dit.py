@@ -905,7 +905,6 @@ args={'x_input_pos': {'height': tensor([ 0,  0,  0,  ..., 31, 31, 31], device='c
 '''
 
 def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_scale=1, image_size=1024, token_embed_lengths=None):
-    print(f"  Computing position args for DiT...")
     import math
     
     # Compute 2D position ids for RoPE
@@ -949,9 +948,6 @@ def compute_pos_args(latent_hw, image_grid_thw, max_seq_len, device, cond_pos_sc
         "W_x": image_size // 28,
         
     }
-    print(f"compute pos args")
-    print(f"latent_hw={latent_hw}, image_grid_thw={image_grid_thw}, maxseq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}, h_cond={h_cond}, w_cond={w_cond}, h_cond_correction={w_cond_correction}, redundant_tokens={redundant_tokens}")
-    print(f"args={args}")
 
     return args
 
