@@ -11,12 +11,12 @@ MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
 
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp4x/exp43_ar_dit_324tokens_1e-4_cond_special"
-DATASET_CONFIG="examples/sana/ar_dit/exp42_eval_different_prompt/exp43_ar_dit_324tokens_1e-4_cond_special_prompt2.json"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp4x/exp42_ar_dit_324tokens_1e-4_cond_special"
+DATASET_CONFIG="examples/sana/ar_dit/exp42_eval_different_prompt/exp42_ar_dit_324tokens_1e-4_cond_special_prompt1.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
-log_file=${DCP_CKPT_DIR}/auto_monitor.log
+log_file=${DCP_CKPT_DIR}/auto_monitor1.log
 echo "log_file=${log_file}"
 
 # Run the Python script with all parameters
@@ -32,6 +32,6 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dataset-config "$DATASET_CONFIG" \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
-    --eval-id "prompt2" \
+    --eval-id "prompt1" \
     --good-steps "20000" \
     > ${log_file} &
