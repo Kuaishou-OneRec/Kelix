@@ -551,7 +551,7 @@ def tokenize_images(tokenizer,
     if cond_embeds_op is not None:
         processed_embeddings = cond_embeds_op(processed_embeddings)
     
-    return processed_embeddings, attention_mask, max_seq_len
+    return processed_embeddings, attention_mask, max_seq_len, token_embed_lengths
 
 def load_visualization_images(
     parquet_path: str,  # 改为接收parquet_path参数
