@@ -1150,7 +1150,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, with_ori_sample=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
@@ -1159,6 +1159,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         self.max_hw_ratio = max_hw_ratio
         self.assistant_resize_method = assistant_resize_method
         self.max_sample_length = max_sample_length
+        self.with_ori_sample = with_ori_sample
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \

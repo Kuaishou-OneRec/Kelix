@@ -414,6 +414,7 @@ def tokenize_images(tokenizer,
                     cond_embeds_op = None,
                     condition_on_special_tokens: bool = False,
                     ar_processor = None,
+                    generated_saving_buffer = None
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     from recipes.sana.inference_ar2image import tokenize_images as tokenize_images_ar2image
     cond_embeds = []
@@ -421,12 +422,10 @@ def tokenize_images(tokenizer,
     token_embed_lengths = []
     batch_size = input_ids.shape[0]
 
-    print("input_idsinput_ids", cu_seqlens, input_ids.shape, image_grid_thw, " batch_size", batch_size)
     if cu_seqlens is None: cu_seqlens = [0, input_ids.shape[1]]
     
     for i in range(len(cu_seqlens) - 1):
         input_ids_sample = input_ids[:, cu_seqlens[i]:cu_seqlens[i + 1]]
-        print(f"input_ids_sample={input_ids_sample.shape}")
         per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
             ar_model=tokenizer,
             ar_processor=ar_processor,
@@ -442,7 +441,7 @@ def tokenize_images(tokenizer,
 
     cond_embeds = torch.cat(cond_embeds, dim=0)
     cond_mask = torch.cat(cond_mask, dim=0)
-    print(f"cond_mask000={cond_mask.shape}")
+
     token_embed_lengths = sum(token_embed_lengths, [])
     embed_dim = cond_embeds.shape[2]
 
@@ -470,7 +469,10 @@ def tokenize_images(tokenizer,
         cond_embeds = cond_embeds_op(cond_embeds)
 
     max_seq_len = max_condition_length
-    print(f"after tokenizetion: cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}, max_seq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}")
+
+    if generated_saving_buffer is not None:
+        tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
+
     return cond_embeds, cond_mask, max_seq_len, token_embed_lengths
     
 def load_visualization_images(
@@ -895,6 +897,8 @@ def train():
     rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
     local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+    generated_saving_dir = os.path.join(args.output_dir, "generated", f"rank{local_rank}_of_{world_size}")
+    generated_token_pairs = {}
 
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
