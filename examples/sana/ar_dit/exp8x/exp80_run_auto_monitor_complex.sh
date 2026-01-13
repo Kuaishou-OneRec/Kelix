@@ -10,6 +10,7 @@ MONITOR_INTERVAL=30
 MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
 
+MODEL_DIR="/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/"
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp8x/exp80_ar_dit_324tokens_1e-4_largedit"
 DATASET_CONFIG="examples/sana/ar_dit/exp8x/exp47_ar_dit_324tokens_1e-4_cond_special.json"
@@ -24,6 +25,7 @@ PYTHONPATH=. \
 INFERENCE_SCRIPT=${INFERENCE_SCRIPT} \
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES} \
 MAX_CONDITION_LENGTH=${MAX_CONDITION_LENGTH} \
+MODEL_DIR=${MODEL_DIR} \
 nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dcp-ckpt-dir "$DCP_CKPT_DIR" \
     --monitor-interval "$MONITOR_INTERVAL" \
