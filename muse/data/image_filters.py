@@ -182,10 +182,10 @@ class ImageQualityFilter(BaseFilter):
     REASON_LOW_COLORFULNESS = "low_colorfulness"
     
     def __init__(self, 
-                 brightness_threshold: Tuple[float, float] = (0.15, 0.85),
-                 saturation_threshold: Tuple[float, float] = (0.05, 0.9),
-                 contrast_threshold: Tuple[float, float] = (0.1, 0.9),
-                 colorfulness_threshold: float = 0.05,
+                 brightness_threshold: Tuple[float, float] = (0.03, 0.97),
+                 saturation_threshold: Tuple[float, float] = (0.03, 0.97),
+                 contrast_threshold: Tuple[float, float] = (0.03, 0.97),
+                 colorfulness_threshold: float = 0.03,
                  filtered_cases_dir: Optional[str] = None,
                  max_cases_per_reason: int = 20):
         """
