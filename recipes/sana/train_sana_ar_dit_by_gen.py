@@ -415,7 +415,7 @@ def tokenize_images(tokenizer,
                     cond_embeds_op = None,
                     condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
-    from .inference_ar2image import tokenize_images as tokenize_images_ar2image
+    from recipes.sana.inference_ar2image import tokenize_images as tokenize_images_ar2image
     cond_embeds = []
     cond_mask = []
     token_embed_lengths = []
