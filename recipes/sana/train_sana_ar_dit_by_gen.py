@@ -426,7 +426,7 @@ def tokenize_images(tokenizer,
     
     for i in range(len(cu_seqlens) - 1):
         input_ids_sample = input_ids[:, cu_seqlens[i]:cu_seqlens[i + 1]]
-        per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
+        per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths, im_tokens = tokenize_images_ar2image(
             ar_model=tokenizer,
             ar_processor=ar_processor,
             batch_size=batch_size,
@@ -434,6 +434,7 @@ def tokenize_images(tokenizer,
             input_ids=input_ids_sample,
             condition_on_special_tokens=condition_on_special_tokens,
             teacher_forcing=False,
+            output_im_tokens=True
         )
         cond_embeds.append(per_sample_cond_embeds)
         cond_mask.append(per_sample_cond_mask)
@@ -441,10 +442,12 @@ def tokenize_images(tokenizer,
 
         if generated_saving_buffer is not None:
             muse_aligned_indices = tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
+            print(f"im_tokensim_tokens", [x.shape for x in im_tokens])
             generated_saving_buffer.append(
                 {
                     "ground_truth_image_ids": muse_aligned_indices,
-                    "generated_image_ids": muse_aligned_indices,
+                    "generated_image_ids": im_tokens[0][im_tokens[0,:,0] >= 151936, :],
+                    "raw_generated_image_ids": im_tokens[0],
                     "input_ids": input_ids_sample,
                 }
             )

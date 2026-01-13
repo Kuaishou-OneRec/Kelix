@@ -230,7 +230,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
                     condition_on_special_tokens: bool = False,
-                    output_tokens: bool = False,
+                    output_im_tokens: bool = False,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -339,12 +339,16 @@ def tokenize_images(ar_processor : AutoProcessor,
         default_vision_embeddings = embeddings[0, start_positions[0]:start_positions[0]+max_condition_length:, :]
 
         default_vision_embeddings = default_vision_embeddings[is_image_id[-default_vision_embeddings.shape[0]:], :]  # [valid_len, embed_dim]
-        
+
+        print(f"is_image_idis_image_id", is_image_id.shape, flat_input_ids.shape)
+        default_image_tokens = flat_input_ids[is_image_id[-default_vision_embeddings.shape[0]:]]
+
         # Check if we have matching number of start and end positions
         if len(start_positions) != len(end_positions):
             print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens\ninput_ids:{input_ids}")
             vision_embeddings_list.append(default_vision_embeddings)
             vision_seq_lens.append(default_vision_embeddings.shape[1])
+            generated_im_tokens.append(default_image_tokens)
 
         else:
             # Extract embeddings for each vision segment
@@ -408,7 +412,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         attention_mask = attention_mask[:, None, None, :]
 
     results = [processed_embeddings, attention_mask, token_embed_lengths]
-    if output_tokens:
+    if output_im_tokens:
         results.append(generated_im_tokens)
     return results
 
