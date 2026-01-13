@@ -905,6 +905,7 @@ def train():
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
     local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
     generated_saving_dir = os.path.join(args.output_dir, "generated", f"rank{local_rank}_of_{world_size}")
+    os.makedirs(generated_saving_dir, exist_ok=True)
 
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
