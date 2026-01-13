@@ -423,7 +423,7 @@ def tokenize_images(tokenizer,
     for i in range(batch_size):
         input_ids_sample = input_ids[i:i + 1]
         per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
-            tokenizer=tokenizer,
+            ar_model=tokenizer,
             batch_size=batch_size,
             max_condition_length=max_condition_length,
             input_ids=input_ids_sample,
