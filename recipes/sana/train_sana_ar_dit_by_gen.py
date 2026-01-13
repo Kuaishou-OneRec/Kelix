@@ -427,7 +427,6 @@ def tokenize_images(tokenizer,
             batch_size=batch_size,
             max_condition_length=max_condition_length,
             input_ids=input_ids_sample,
-            cond_embeds_op=cond_embeds_op,
             condition_on_special_tokens=condition_on_special_tokens,
             teacher_forcing=False,
         )
@@ -438,6 +437,8 @@ def tokenize_images(tokenizer,
     cond_embeds = torch.cat(cond_embeds, dim=0)
     cond_mask = torch.cat(cond_mask, dim=0)
     token_embed_lengths = sum(token_embed_lengths, [])
+    if cond_embeds_op is not None:
+        cond_embeds = cond_embeds_op(cond_embeds)
     return cond_embeds, cond_mask, token_embed_lengths
     
 def load_visualization_images(
