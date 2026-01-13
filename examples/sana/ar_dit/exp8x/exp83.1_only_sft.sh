@@ -145,7 +145,7 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/exp8x/exp81_324_token.json \
+                --dataset-config examples/sana/ar_dit/exp8x/exp83_324_token_sft.json \
                 --resolution-budgets "1024:20" \
                 --learning-rate 2e-4 \
                 --min-lr 1e-4 \
