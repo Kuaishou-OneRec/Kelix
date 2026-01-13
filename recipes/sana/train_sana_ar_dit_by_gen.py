@@ -464,7 +464,7 @@ def tokenize_images(tokenizer,
         cond_mask = cond_mask[:, :max_condition_length]
 
     # Reshape attention_mask to [B, 1, 1, max_condition_length]
-    cond_mask = cond_mask[:, None, None, :]
+    # cond_mask = cond_mask[:, None, None, :]
     
     if cond_embeds_op is not None:
         cond_embeds = cond_embeds_op(cond_embeds)
