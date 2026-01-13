@@ -587,7 +587,7 @@ def visualize_reconstruction(
         input_ids=loaded.input_ids.to(device=device),
         cond_embeds_op=model.diffusion_connector,
         condition_on_special_tokens=args.condition_on_special_tokens,
-        ar_processor=dataset.ar_processor,
+        ar_processor=dataset.processor,
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG

@@ -1,0 +1,1 @@
+python3 examples/sana/convert_hf_checkpoint.py 
