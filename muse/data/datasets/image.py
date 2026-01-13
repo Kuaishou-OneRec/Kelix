@@ -1311,17 +1311,18 @@ class Chat2ImageDataset(Token2ImageDataset):
                 call_back_function: 回调函数，接收当前遍历的对象作为参数
             """
             # 第一步：调用回调函数处理当前对象
-            call_back_function(obj)
+            res = call_back_function(obj)
             
             # 判断类型并递归遍历内部成员
             if isinstance(obj, list):
                 # 遍历列表的每个元素
                 for item in obj:
-                    recursive_traverse(item, call_back_function)
+                    res = res if res is not None else recursive_traverse(item, call_back_function)
             elif isinstance(obj, dict):
                 # 遍历字典的每个值（key一般为不可变类型，无需递归）
                 for value in obj.values():
-                    recursive_traverse(value, call_back_function)
+                    res = res if res is not None else recursive_traverse(value, call_back_function)
+            return res
 
         pair = self.extract_image_text(sample)
         
@@ -1378,7 +1379,8 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if self.image_quality_filter is not None:
                     passed, reason = self.image_quality_filter.filter(x["image"])
                     if not passed:
-                        raise ValueError(f"Image quality filter failed for {x['image']}, reason: {reason}")
+                        print(f"Image quality filter failed for {x['image']}, reason: {reason}")
+                        return "image_quality_filter_failed"
                 
                 if self.force_assistant_image_size is not None:
                     if self.assistant_resize_method == 'resize':
@@ -1394,7 +1396,9 @@ class Chat2ImageDataset(Token2ImageDataset):
             self.image_quality_filter.print_statistics()
 
         # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
-        recursive_traverse(messages, call_back)
+        if recursive_traverse(messages, call_back) == "image_quality_filter_failed":
+            print(f"image quality filter failed for {sample}")
+            return None
         
         pair["message"] = messages
 
