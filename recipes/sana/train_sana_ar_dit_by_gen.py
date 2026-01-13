@@ -905,7 +905,6 @@ def train():
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
     local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
     generated_saving_dir = os.path.join(args.output_dir, "generated", f"rank{local_rank}_of_{world_size}")
-    generated_token_pairs = {}
 
     torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(
@@ -1416,7 +1415,7 @@ def train():
                 )
 
                 if scheduler.global_step % args.save_checkpoint_per_step == 0:
-                    save_pt = os.path.join(args.output_dir, f"checkpoint_{scheduler.global_step}.pt")
+                    save_pt = os.path.join(generated_saving_dir, f"checkpoint_{scheduler.global_step}.pt")
                     torch.save(
                         generated_saving_buffer,
                         save_pt
