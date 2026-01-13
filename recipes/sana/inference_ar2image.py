@@ -229,7 +229,6 @@ def tokenize_images(ar_processor : AutoProcessor,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
-                    keep_image_token_id_thresh: int = 999999999,
                     condition_on_special_tokens: bool = False
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
@@ -661,7 +660,6 @@ def main():
                     input_ids=samples.input_ids.to(device=device),
                     teacher_forcing=args.teacher_forcing,
                     ar_processor=ar_processor,
-                    keep_image_token_id_thresh=image_tokenizer.config.qwen_config.vocab_size,
                     condition_on_special_tokens=args.condition_on_special_tokens,
                 )
                 cached[cache_key] = (cond_embeds.cpu(), cond_mask.cpu(), token_embed_lengths)
