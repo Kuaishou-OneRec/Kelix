@@ -1092,7 +1092,8 @@ def train():
     image_tokenizer = load_keye_ar(
         tokenizer_dir=args.keye_ar_dir,
         device=torch.cuda.current_device(),
-        dtype=args.model_dtype
+        dtype=args.model_dtype,
+        output_last_hidden_states_only=False
     )
 
     # Setup visualization model (for FSDP mode)
