@@ -421,7 +421,7 @@ def tokenize_images(tokenizer,
     cond_mask = []
     token_embed_lengths = []
     batch_size = input_ids.shape[0]
-    print("input_idsinput_ids", cu_seqlens, input_ids.shape, image_grid_thw)
+    print("input_idsinput_ids", cu_seqlens, input_ids.shape, image_grid_thw, " batch_size", batch_size)
     if cu_seqlens is None: cu_seqlens = [0, input_ids.shape[1]]
     
     for i in range(len(cu_seqlens) - 1):
@@ -618,6 +618,7 @@ def visualize_reconstruction(
         cond_embeds_op=model.diffusion_connector,
         condition_on_special_tokens=args.condition_on_special_tokens,
         ar_processor=dataset.processor,
+
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
