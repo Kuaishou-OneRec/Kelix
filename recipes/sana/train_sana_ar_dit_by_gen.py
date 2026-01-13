@@ -438,6 +438,7 @@ def tokenize_images(tokenizer,
 
     cond_embeds = torch.cat(cond_embeds, dim=0)
     cond_mask = torch.cat(cond_mask, dim=0)
+    print(f"cond_mask000={cond_mask.shape}")
     token_embed_lengths = sum(token_embed_lengths, [])
     embed_dim = cond_embeds.shape[2]
 
