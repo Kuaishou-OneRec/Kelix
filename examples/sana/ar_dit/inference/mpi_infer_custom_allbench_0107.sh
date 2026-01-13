@@ -18,7 +18,7 @@ export PYTHONPATH="${PYTHONPATH:-.}"
 MODEL_DIR="${MODEL_DIR:-/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105}"
 VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/}"
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted/}"
-KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
+# KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
 
 
 DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs_inf.json}"
