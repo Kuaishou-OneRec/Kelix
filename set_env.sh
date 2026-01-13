@@ -31,8 +31,8 @@ echo "Loaded environment variables from ${ENV_FILE}:"
 cat "${ENV_FILE}"
 
 nohup rm -rf hs_err_pid*.log &
-#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "cp -r /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
-#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "/opt/conda/envs/py312/bin/pip3 install keye_vl_utils"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "cp -r /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "/opt/conda/envs/py312/bin/pip3 install keye_vl_utils"
 # sortedcontainers
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "/opt/conda/envs/py312/bin/pip3 install sortedcontainers"
 # registry.corp.kuaishou.com/kml-supercomputing-project/v1.6_vllm0.7.3_ray_torch2.5.1_cuda11.8.0_python3.10.12_hadoop_xray:v1
