@@ -441,7 +441,9 @@ def tokenize_images(tokenizer,
     token_embed_lengths = sum(token_embed_lengths, [])
     if cond_embeds_op is not None:
         cond_embeds = cond_embeds_op(cond_embeds)
-    return cond_embeds, cond_mask, token_embed_lengths
+
+    max_seq_len = max_condition_length
+    return cond_embeds, cond_mask, max_seq_len, token_embed_lengths
     
 def load_visualization_images(
     parquet_path: str,  # 改为接收parquet_path参数
