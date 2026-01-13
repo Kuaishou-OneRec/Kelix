@@ -782,8 +782,8 @@ def main():
 
     # Save results in the required format after all inference is done
     print(f"Saving {args.benchname} results...")
-    ulmeval_dir = os.path.join(args.output_dir, 'ulmeval', "subresults")
-    ulmeval_agg_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults")
+    ulmeval_dir: str = os.path.join(args.output_dir, 'ulmeval', "subresults", args.model_tag, args.eval_id)
+    ulmeval_agg_dir = os.path.join(args.output_dir, 'ulmeval', "aggresults", args.model_tag, args.eval_id)
     os.makedirs(ulmeval_dir, exist_ok=True)
     os.makedirs(ulmeval_agg_dir, exist_ok=True)
     
