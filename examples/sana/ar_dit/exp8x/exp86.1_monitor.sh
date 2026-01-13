@@ -11,14 +11,15 @@ MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
 
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp8x/exp82_small_baseline"
-DATASET_CONFIG="examples/sana/ar_dit/exp8x/exp81_324_token.json"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp8x/exp86.1_small_ori_ds"
+DATASET_CONFIG="examples/sana/ar_dit/exp8x/exp86_small_ori_ds.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
 log_file=${DCP_CKPT_DIR}/auto_monitor.log
 echo "log_file=${log_file}"
 ln -s /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp4x/exp42_ar_dit_324tokens_1e-4_cond_special/token_cache/ $DCP_CKPT_DIR
+
 # Run the Python script with all parameters
 PYTHONPATH=. \
 INFERENCE_SCRIPT=${INFERENCE_SCRIPT} \

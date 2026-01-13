@@ -11,7 +11,7 @@ MODEL_TAG="BLIP3OTransformersSFT"
 TB_LOG_NAME="auto_eval"
 
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp8x/exp82_small_baseline"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp8x/exp83.1_only_sft"
 DATASET_CONFIG="examples/sana/ar_dit/exp8x/exp81_324_token.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
