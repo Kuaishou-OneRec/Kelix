@@ -422,6 +422,8 @@ def tokenize_images(tokenizer,
     token_embed_lengths = []
     batch_size = input_ids.shape[0]
     print("input_idsinput_ids", cu_seqlens, input_ids.shape)
+    if cu_seqlens is None: cu_seqlens = [0, input_ids.shape[1]]
+    
     for i in range(len(cu_seqlens) - 1):
         input_ids_sample = input_ids[i:i + 1]
         print(f"input_ids_sample={input_ids_sample.shape}")
