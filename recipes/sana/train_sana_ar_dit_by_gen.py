@@ -446,7 +446,7 @@ def tokenize_images(tokenizer,
             generated_saving_buffer.append(
                 {
                     "ground_truth_image_ids": muse_aligned_indices,
-                    "generated_image_ids": im_tokens[0][im_tokens[0,:,0] >= 151936, :],
+                    "generated_image_ids": im_tokens[0][im_tokens[0][:,0] >= 151936, :],
                     "raw_generated_image_ids": im_tokens[0],
                     "input_ids": input_ids_sample,
                 }
