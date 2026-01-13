@@ -439,6 +439,16 @@ def tokenize_images(tokenizer,
         cond_mask.append(per_sample_cond_mask)
         token_embed_lengths.append(per_sample_token_embed_lengths)
 
+        if generated_saving_buffer is not None:
+            muse_aligned_indices = tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
+            generated_saving_buffer.append(
+                {
+                    "ground_truth_image_ids": muse_aligned_indices,
+                    "generated_image_ids": muse_aligned_indices,
+                    "input_ids": input_ids_sample,
+                }
+            )
+
     cond_embeds = torch.cat(cond_embeds, dim=0)
     cond_mask = torch.cat(cond_mask, dim=0)
 
@@ -470,14 +480,6 @@ def tokenize_images(tokenizer,
 
     max_seq_len = max_condition_length
 
-    if generated_saving_buffer is not None:
-        muse_aligned_indices = tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
-        generated_saving_buffer.append(
-            {
-                "ground_truth_image_ids": muse_aligned_indices,
-                "generated_image_ids": muse_aligned_indices,
-            }
-        )
     return cond_embeds, cond_mask, max_seq_len, token_embed_lengths
     
 def load_visualization_images(
@@ -1359,6 +1361,8 @@ def train():
         # Sync all ranks after step 0 visualization
         dist.barrier()
 
+    generated_saving_buffer = []
+
     while scheduler.global_step < args.num_training_steps:
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
@@ -1408,7 +1412,17 @@ def train():
                     cu_seqlens=batch.get("cu_seqlens"),
                     condition_on_special_tokens=args.condition_on_special_tokens,
                     ar_processor=ar_processor,
+                    generated_saving_buffer=generated_saving_buffer,
                 )
+
+                if scheduler.global_step % args.save_checkpoint_per_step == 0:
+                    save_pt = os.path.join(args.output_dir, f"checkpoint_{scheduler.global_step}.pt")
+                    torch.save(
+                        generated_saving_buffer,
+                        save_pt
+                    )
+                    print(f"Saved generated buffer at step {scheduler.global_step} at {save_pt}")
+                    generated_saving_buffer = []
             
             pos_args = compute_pos_args(
                 latent_hw=(latents.shape[2], latents.shape[3]),
