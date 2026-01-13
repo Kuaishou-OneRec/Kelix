@@ -12,7 +12,7 @@ TB_LOG_NAME="auto_eval"
 
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp4x/exp67_ar_dit_324tokens_1e-4_sft"
-DATASET_CONFIG="examples/sana/ar_dit/exp4x/exp41_ar_dit_324tokens_1e-4_cond_special.json"
+DATASET_CONFIG="examples/sana/ar_dit/exp42_eval_different_prompt/exp67_run_auto_monitor_complex_500.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
