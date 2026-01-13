@@ -413,7 +413,8 @@ def tokenize_images(tokenizer,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     cond_embeds_op = None,
-                    condition_on_special_tokens: bool = False
+                    condition_on_special_tokens: bool = False,
+                    ar_processor = None,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     from recipes.sana.inference_ar2image import tokenize_images as tokenize_images_ar2image
     cond_embeds = []
@@ -424,6 +425,7 @@ def tokenize_images(tokenizer,
         input_ids_sample = input_ids[i:i + 1]
         per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
             ar_model=tokenizer,
+            ar_processor=ar_processor,
             batch_size=batch_size,
             max_condition_length=max_condition_length,
             input_ids=input_ids_sample,
@@ -584,7 +586,8 @@ def visualize_reconstruction(
         max_condition_length=max_condition_length,
         input_ids=loaded.input_ids.to(device=device),
         cond_embeds_op=model.diffusion_connector,
-        condition_on_special_tokens=args.condition_on_special_tokens
+        condition_on_special_tokens=args.condition_on_special_tokens,
+        ar_processor=dataset.ar_processor,
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
@@ -1178,7 +1181,7 @@ def train():
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Chat2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
-    
+    ar_processor = dataset.processor
     if args.multi_scale:
         # Parse resolution budget config or create single-resolution default
         if args.resolution_budgets:
@@ -1362,6 +1365,7 @@ def train():
                     input_ids=batch.get("input_ids"),
                     cu_seqlens=batch.get("cu_seqlens"),
                     condition_on_special_tokens=args.condition_on_special_tokens,
+                    ar_processor=ar_processor,
                 )
             
             pos_args = compute_pos_args(
