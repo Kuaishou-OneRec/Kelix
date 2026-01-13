@@ -421,8 +421,10 @@ def tokenize_images(tokenizer,
     cond_mask = []
     token_embed_lengths = []
     batch_size = input_ids.shape[0]
-    for i in range(batch_size):
+    print("input_idsinput_ids", cu_seqlens, input_ids.shape)
+    for i in range(len(cu_seqlens) - 1):
         input_ids_sample = input_ids[i:i + 1]
+        print(f"input_ids_sample={input_ids_sample.shape}")
         per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
             ar_model=tokenizer,
             ar_processor=ar_processor,
