@@ -649,7 +649,7 @@ def visualize_reconstruction(
         device=device,
         dtype=dtype,
     )
-    
+    print(f"uncond_mask={uncond_mask.shape}, cond_mask={cond_mask.shape}")
     # Prepare CFG inputs
     cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
     mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
