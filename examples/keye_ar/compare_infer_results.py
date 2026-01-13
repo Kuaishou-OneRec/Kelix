@@ -33,7 +33,10 @@ def plot_geneval_from_csvs(csv_file_paths):
             
             # 3. 数据预处理：去重（解决重复行问题）+ 按Step排序
             df_clean = df[required_columns].drop_duplicates(subset='Step').sort_values(by='Step')
-            
+            df_clean = df_clean[df_clean['Step'] >= 6000]
+
+            print(df_clean)
+
             # 4. 提取绘图数据
             steps = df_clean['Step'].values
             geneval_scores = df_clean['GenEval'].values
