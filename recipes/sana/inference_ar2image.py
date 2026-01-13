@@ -229,7 +229,8 @@ def tokenize_images(ar_processor : AutoProcessor,
                     input_ids: Optional[torch.Tensor] = None,
                     cu_seqlens: Optional[torch.Tensor] = None,
                     teacher_forcing: bool = False,
-                    condition_on_special_tokens: bool = False
+                    condition_on_special_tokens: bool = False,
+                    output_tokens: bool = False,
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -319,6 +320,7 @@ def tokenize_images(ar_processor : AutoProcessor,
         vision_embeddings_list = []
         vision_seq_lens = []
         token_embed_lengths = []
+        generated_im_tokens = []
         
         # Get the flat input_ids (remove batch dimension for packing case)
         flat_input_ids = input_ids.squeeze(0)  # [total_seq_len]
@@ -359,6 +361,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                 print(f"Find vision embeddings with shape {vision_embeddings.shape}")
                 vision_embeddings_list.append(vision_embeddings)
                 vision_seq_lens.append(vision_embeddings.shape[0])
+                generated_im_tokens.append(flat_input_ids[start_pos:end_pos+1])
         
         vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
         # Check if we extracted the correct number of segments
@@ -404,7 +407,10 @@ def tokenize_images(ar_processor : AutoProcessor,
         # Reshape attention_mask to [B, 1, 1, max_condition_length]
         attention_mask = attention_mask[:, None, None, :]
 
-    return processed_embeddings, attention_mask, token_embed_lengths
+    results = [processed_embeddings, attention_mask, token_embed_lengths]
+    if output_tokens:
+        results.append(generated_im_tokens)
+    return results
 
 
 def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:

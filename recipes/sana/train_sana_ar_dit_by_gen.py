@@ -471,8 +471,13 @@ def tokenize_images(tokenizer,
     max_seq_len = max_condition_length
 
     if generated_saving_buffer is not None:
-        tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
-
+        muse_aligned_indices = tokenizer.forward_image_tokens(pixel_values=pixel_values,image_grid_thw=image_grid_thw)
+        generated_saving_buffer.append(
+            {
+                "ground_truth_image_ids": muse_aligned_indices,
+                "generated_image_ids": muse_aligned_indices,
+            }
+        )
     return cond_embeds, cond_mask, max_seq_len, token_embed_lengths
     
 def load_visualization_images(
