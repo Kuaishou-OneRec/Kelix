@@ -146,7 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp4x/exp47_ar_dit_324tokens_1e-4_cond_special.json \
-                --resolution-budgets "1024:24" \
+                --resolution-budgets "1024:12" \
                 --learning-rate 2e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 8000 \
@@ -154,7 +154,7 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 24 \
+                --batch-size 12 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 300000 \
