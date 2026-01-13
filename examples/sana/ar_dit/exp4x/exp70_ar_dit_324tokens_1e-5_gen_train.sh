@@ -147,8 +147,8 @@ nohup mpirun --allow-run-as-root \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp4x/exp41_ar_dit_324tokens_1e-4_cond_special.json \
                 --resolution-budgets "1024:1" \
-                --learning-rate 2e-5 \
-                --min-lr 2e-5 \
+                --learning-rate 1e-4 \
+                --min-lr 1e-4 \
                 --num-decay-steps 4000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
