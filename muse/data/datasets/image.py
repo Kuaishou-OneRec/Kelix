@@ -1171,7 +1171,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         
         from muse.data.image_filters import ImageQualityFilter
         if image_filters_args is not None:
-            self.image_quality_filter = ImageQualityFilter(**image_filters_args)
+            self.image_quality_filter = ImageQualityFilter(**image_filters_args, filtered_cases_dir=os.path.join(self.cache_dir, "filtered_cases_dir"), max_cases_per_reason=20)
         else:
             self.image_quality_filter = None
 
@@ -1379,7 +1379,7 @@ class Chat2ImageDataset(Token2ImageDataset):
                 if self.image_quality_filter is not None:
                     passed, reason = self.image_quality_filter.filter(x["image"])
                     if not passed:
-                        print(f"Image quality filter failed for {x['image']}, reason: {reason}")
+                        # print(f"Image quality filter failed for {x['image']}, reason: {reason}")
                         return "image_quality_filter_failed"
                 
                 if self.force_assistant_image_size is not None:
@@ -1397,7 +1397,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
         if recursive_traverse(messages, call_back) == "image_quality_filter_failed":
-            print(f"image quality filter failed for {sample}")
+            # print(f"image quality filter failed for {sample}")
             return None
         
         pair["message"] = messages
