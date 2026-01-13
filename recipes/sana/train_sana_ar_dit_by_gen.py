@@ -387,8 +387,6 @@ class VisReconstructionLoader:
             latent_channels=latent_channels,
             latent_size=latent_size,
             vae_recon_images=vae_recon_images,
-
-
         )
         return cls.loaded
 
@@ -538,6 +536,7 @@ def load_visualization_images(
     
     pixel_values = batch["pixel_values"].to(device=device, dtype=dtype)
     image_grid_thw = batch["image_grid_thw"].to(device=device)
+    print(f"cu seqssss", batch["cu_seqlens"])
     
     # Prepare images for VAE (normalize to [-1, 1]) - BASELINE LOGIC
     vae_transform = transforms.Compose([
