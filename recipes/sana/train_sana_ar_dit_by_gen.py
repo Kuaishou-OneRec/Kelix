@@ -425,7 +425,7 @@ def tokenize_images(tokenizer,
     if cu_seqlens is None: cu_seqlens = [0, input_ids.shape[1]]
     
     for i in range(len(cu_seqlens) - 1):
-        input_ids_sample = input_ids[:, i:i + 1]
+        input_ids_sample = input_ids[:, cu_seqlens[i]:cu_seqlens[i + 1]]
         print(f"input_ids_sample={input_ids_sample.shape}")
         per_sample_cond_embeds, per_sample_cond_mask, per_sample_token_embed_lengths = tokenize_images_ar2image(
             ar_model=tokenizer,
