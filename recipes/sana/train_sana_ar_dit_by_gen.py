@@ -353,7 +353,7 @@ class VisReconstructionLoader:
             num_images=num_images,
         )
         
-        texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
+        texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids, cu_seqlens = result
         batch_size = len(original_images)
         print_rank_0(f"Loaded {len(original_images)} images for visualization, pixel_values shape: {pixel_values.shape}")
         # Add text information to TensorBoard
@@ -387,6 +387,7 @@ class VisReconstructionLoader:
             latent_channels=latent_channels,
             latent_size=latent_size,
             vae_recon_images=vae_recon_images,
+            cu_seqlens=cu_seqlens,
         )
         return cls.loaded
 
@@ -536,7 +537,6 @@ def load_visualization_images(
     
     pixel_values = batch["pixel_values"].to(device=device, dtype=dtype)
     image_grid_thw = batch["image_grid_thw"].to(device=device)
-    print(f"cu seqssss", batch["cu_seqlens"])
     
     # Prepare images for VAE (normalize to [-1, 1]) - BASELINE LOGIC
     vae_transform = transforms.Compose([
@@ -545,7 +545,7 @@ def load_visualization_images(
     ])
     vae_input_images = torch.stack([vae_transform(img) for img in original_images])
     vae_input_images = vae_input_images.to(device=device, dtype=dtype)
-    return texts, original_images, pixel_values, image_grid_thw, vae_input_images, batch["input_ids"]
+    return texts, original_images, pixel_values, image_grid_thw, vae_input_images, batch["input_ids"], batch["cu_seqlens"]
 
 
 @torch.no_grad()
@@ -595,7 +595,7 @@ def visualize_reconstruction(
     from diffusers import FlowMatchEulerDiscreteScheduler
     import time
     
-    t0 = time.time()
+    t0: float = time.time()
     loaded = VisReconstructionLoader()(
                parquet_path,
                dataset,
@@ -619,6 +619,7 @@ def visualize_reconstruction(
         cond_embeds_op=model.diffusion_connector,
         condition_on_special_tokens=args.condition_on_special_tokens,
         ar_processor=dataset.processor,
+        cu_seqlens=loaded.cu_seqlens.to(device=device)
     )
     
     # Prepare unconditional embeddings using model's null embedding for CFG
