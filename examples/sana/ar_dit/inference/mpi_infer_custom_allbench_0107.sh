@@ -78,118 +78,118 @@ fi
 
 
 
-# Determine OUTPUT_DIR based on DCP parameters
-if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
-    OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/WISE_all/outputs}"
-else
-    OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/WISE_all/outputs}"      
-fi
+# # Determine OUTPUT_DIR based on DCP parameters
+# if [ -n "$DCP_CKPT_DIR" ] && [ -n "$DCP_TAG" ]; then
+#     OUTPUT_DIR="${OUTPUT_DIR:-$DCP_CKPT_DIR/$DCP_TAG/inference/WISE_all/outputs}"
+# else
+#     OUTPUT_DIR="${OUTPUT_DIR:-${MODEL_DIR}/inference/WISE_all/outputs}"      
+# fi
 
-echo "  OUTPUT_DIR: $OUTPUT_DIR"
-mkdir -p "${OUTPUT_DIR}"
-mkdir -p "${RESULTS_DIR}"
+# echo "  OUTPUT_DIR: $OUTPUT_DIR"
+# mkdir -p "${OUTPUT_DIR}"
+# mkdir -p "${RESULTS_DIR}"
 
 
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+# export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-export PYTHONPATH=$PWD:$PYTHONPATH
+# export PYTHONPATH=$PWD:$PYTHONPATH
              
-source set_env.sh
+# source set_env.sh
 
-hostfile=/etc/mpi/hostfile_seq
-Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
-TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
+# hostfile=/etc/mpi/hostfile_seq
+# Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
+# np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+# TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
 
-MASTER_ADDR=$MY_NODE_IP
-MASTER_PORT=8499
+# MASTER_ADDR=$MY_NODE_IP
+# MASTER_PORT=8499
 
-echo "Going to output dir: "$OUTPUT_DIR
-PYTHONPATH=. \
-mpirun --allow-run-as-root \
-        -hostfile $hostfile \
-        -mca btl self,tcp -mca pml ob1 \
-        -mca plm_rsh_num_concurrent 600 \
-        -mca routed_radix 600 \
-        -mca btl_tcp_if_include $TCP_NIC \
-        -mca oob_tcp_if_include $TCP_NIC \
-        -mca btl_openib_allow_ib false \
-        -mca opal_set_max_sys_limits 1 \
-        -x OMPI_MCA_btl=self,tcp \
-        -x OMPI_MCA_pml=ob1 \
-        -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
-        -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
-        -x OMPI_MCA_btl_openib_allow_ib=false \
-        -x NCCL_IB_DISABLE=0 \
-        -x NCCL_IB_GID_INDEX=3 \
-        -x NCCL_SOCKET_IFNAME=$TCP_NIC \
-        -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_DEBUG=WARN \
-        -x NCCL_IB_QPS_PER_CONNECTION=4 \
-        -x NCCL_NET_OVERHEAD=1000 \
-        -x NCCL_IB_TIMEOUT=20 \
-        -x LD_PRELOAD=$LD_PRELOAD \
-        -x http_proxy="" \
-        -x https_proxy="" \
-        -x HOROVOD_MPI_THREADS_DISABLE=1 \
-        -x MPI_THREAD_SINGLE=1 \
-        -x NO_COLOR=1 \
-        -x TERM=dumb \
-        -x COLORTERM=0 \
-        -x PYTHONIOENCODING=utf-8 \
-        -x LD_LIBRARY_PATH=$LIBRARY_PATH \
-        -x PATH \
-        -x PYTHONPATH=$PYTHONPATH \
-        -x JAVA_HOME=$JAVA_HOME \
-        -x HIVE_HOME=$HIVE_HOME \
-        -x CLASSPATH=$CLASSPATH \
-        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-        -x HADOOP_HOME=$HADOOP_HOME \
-        -x SPARK_HOME=$SPARK_HOME \
-        -x KWS_SERVICE_REGION=$KWS_SERVICE_REGION \
-        -x KWS_SERVICE_DC=$KWS_SERVICE_DC \
-        -x KWS_SERVICE_CATALOG=$KWS_SERVICE_CATALOG \
-        -x KWS_SERVICE_NAME=$KWS_SERVICE_NAME \
-        -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
-        -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
-        -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        -x MASTER_ADDR=$MASTER_ADDR \
-        -x MASTER_PORT=$MASTER_PORT \
-        -x LD_PRELOAD=$LD_PRELOAD \
-        -x KAI_FLAG_FILE \
-        -x KML_ID \
-        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-        -x TOKENIZERS_PARALLELISM=false \
-        -x http_proxy=\
-        -x https_proxy=\
-        with_nccl_local_env \
-        bash -c "python recipes/sana/inference_ar2image.py \
-      --model-dir "${MODEL_DIR}" \
-      --vae-dir "${VAE_DIR}" \
-      --keye-ar-dir "${KEYE_AR_DIR}" \
-      --dataset-config "${DATASET_CONFIG}" \
-      --parquet-path "${PARQUET_PATH}" \
-      --output-dir "${OUTPUT_DIR}" \
-      --num-images ${NUM_IMAGES} \
-      --device ${DEVICE} \
-      --dtype ${DTYPE} \
-      --cond-pos-scale ${COND_POS_SCALE} \
-      --num-sampling-steps ${NUM_SAMPLING_STEPS} \
-      --flow-shift ${FLOW_SHIFT} \
-      --cfg-scale ${CFG_SCALE} \
-      --max-condition-length ${MAX_CONDITION_LENGTH} \
-      --image-size ${IMAGE_SIZE} \
-      --seed ${SEED} \
-      --results-dir "${RESULTS_DIR}" \
-      --teacher-forcing ${TEACHER_FORCING} \
-      --cfg-scale 2.0 \
-      --linspace-sigmas \
-    --num-sampling-steps 50 \
-    --benchname WISE_all \
-      --n_infer_items ${N_INFER_ITEMS} \
-      ${MODEL_CONFIG_OVERRIDES_FLAG} \
-      ${DCP_FLAGS}" > $OUTPUT_DIR/stdout_WISE_all.log 2>$OUTPUT_DIR/stderr_WISE_all.log
+# echo "Going to output dir: "$OUTPUT_DIR
+# PYTHONPATH=. \
+# mpirun --allow-run-as-root \
+#         -hostfile $hostfile \
+#         -mca btl self,tcp -mca pml ob1 \
+#         -mca plm_rsh_num_concurrent 600 \
+#         -mca routed_radix 600 \
+#         -mca btl_tcp_if_include $TCP_NIC \
+#         -mca oob_tcp_if_include $TCP_NIC \
+#         -mca btl_openib_allow_ib false \
+#         -mca opal_set_max_sys_limits 1 \
+#         -x OMPI_MCA_btl=self,tcp \
+#         -x OMPI_MCA_pml=ob1 \
+#         -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
+#         -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
+#         -x OMPI_MCA_btl_openib_allow_ib=false \
+#         -x NCCL_IB_DISABLE=0 \
+#         -x NCCL_IB_GID_INDEX=3 \
+#         -x NCCL_SOCKET_IFNAME=$TCP_NIC \
+#         -x NCCL_IB_HCA=mlx5 \
+#         -x NCCL_DEBUG=WARN \
+#         -x NCCL_IB_QPS_PER_CONNECTION=4 \
+#         -x NCCL_NET_OVERHEAD=1000 \
+#         -x NCCL_IB_TIMEOUT=20 \
+#         -x LD_PRELOAD=$LD_PRELOAD \
+#         -x http_proxy="" \
+#         -x https_proxy="" \
+#         -x HOROVOD_MPI_THREADS_DISABLE=1 \
+#         -x MPI_THREAD_SINGLE=1 \
+#         -x NO_COLOR=1 \
+#         -x TERM=dumb \
+#         -x COLORTERM=0 \
+#         -x PYTHONIOENCODING=utf-8 \
+#         -x LD_LIBRARY_PATH=$LIBRARY_PATH \
+#         -x PATH \
+#         -x PYTHONPATH=$PYTHONPATH \
+#         -x JAVA_HOME=$JAVA_HOME \
+#         -x HIVE_HOME=$HIVE_HOME \
+#         -x CLASSPATH=$CLASSPATH \
+#         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+#         -x HADOOP_HOME=$HADOOP_HOME \
+#         -x SPARK_HOME=$SPARK_HOME \
+#         -x KWS_SERVICE_REGION=$KWS_SERVICE_REGION \
+#         -x KWS_SERVICE_DC=$KWS_SERVICE_DC \
+#         -x KWS_SERVICE_CATALOG=$KWS_SERVICE_CATALOG \
+#         -x KWS_SERVICE_NAME=$KWS_SERVICE_NAME \
+#         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
+#         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
+#         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
+#         -x MASTER_ADDR=$MASTER_ADDR \
+#         -x MASTER_PORT=$MASTER_PORT \
+#         -x LD_PRELOAD=$LD_PRELOAD \
+#         -x KAI_FLAG_FILE \
+#         -x KML_ID \
+#         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+#         -x TOKENIZERS_PARALLELISM=false \
+#         -x http_proxy=\
+#         -x https_proxy=\
+#         with_nccl_local_env \
+#         bash -c "python recipes/sana/inference_ar2image.py \
+#       --model-dir "${MODEL_DIR}" \
+#       --vae-dir "${VAE_DIR}" \
+#       --keye-ar-dir "${KEYE_AR_DIR}" \
+#       --dataset-config "${DATASET_CONFIG}" \
+#       --parquet-path "${PARQUET_PATH}" \
+#       --output-dir "${OUTPUT_DIR}" \
+#       --num-images ${NUM_IMAGES} \
+#       --device ${DEVICE} \
+#       --dtype ${DTYPE} \
+#       --cond-pos-scale ${COND_POS_SCALE} \
+#       --num-sampling-steps ${NUM_SAMPLING_STEPS} \
+#       --flow-shift ${FLOW_SHIFT} \
+#       --cfg-scale ${CFG_SCALE} \
+#       --max-condition-length ${MAX_CONDITION_LENGTH} \
+#       --image-size ${IMAGE_SIZE} \
+#       --seed ${SEED} \
+#       --results-dir "${RESULTS_DIR}" \
+#       --teacher-forcing ${TEACHER_FORCING} \
+#       --cfg-scale 2.0 \
+#       --linspace-sigmas \
+#     --num-sampling-steps 50 \
+#     --benchname WISE_all \
+#       --n_infer_items ${N_INFER_ITEMS} \
+#       ${MODEL_CONFIG_OVERRIDES_FLAG} \
+#       ${DCP_FLAGS}" > $OUTPUT_DIR/stdout_WISE_all.log 2>$OUTPUT_DIR/stderr_WISE_all.log
 
 
 
