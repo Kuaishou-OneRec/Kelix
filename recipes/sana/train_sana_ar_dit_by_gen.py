@@ -439,10 +439,33 @@ def tokenize_images(tokenizer,
     cond_embeds = torch.cat(cond_embeds, dim=0)
     cond_mask = torch.cat(cond_mask, dim=0)
     token_embed_lengths = sum(token_embed_lengths, [])
+    embed_dim = cond_embeds.shape[2]
+
+    # Handle padding to max_condition_length
+    current_seq_len = cond_embeds.shape[1]
+    if current_seq_len < max_condition_length:
+        # Pad to max_condition_length
+        padding_embeddings = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
+                                        device=cond_embeds.device, dtype=cond_embeds.dtype)
+        cond_embeds = torch.cat([cond_embeds, padding_embeddings], dim=1)
+        
+        # Extend attention mask with zeros for padding
+        padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
+                                    device=cond_mask.device, dtype=cond_mask.dtype)
+        cond_mask = torch.cat([cond_mask, padding_mask], dim=1)
+    elif current_seq_len > max_condition_length:
+        # Truncate to max_condition_length
+        cond_embeds = cond_embeds[:, :max_condition_length, :]
+        cond_mask = cond_mask[:, :max_condition_length]
+
+    # Reshape attention_mask to [B, 1, 1, max_condition_length]
+    cond_mask = cond_mask[:, None, None, :]
+    
     if cond_embeds_op is not None:
         cond_embeds = cond_embeds_op(cond_embeds)
 
     max_seq_len = max_condition_length
+    print(f"after tokenizetion: cond_embeds={cond_embeds.shape}, cond_mask={cond_mask.shape}, max_seq_len={max_seq_len}, token_embed_lengths={token_embed_lengths}")
     return cond_embeds, cond_mask, max_seq_len, token_embed_lengths
     
 def load_visualization_images(
