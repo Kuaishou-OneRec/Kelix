@@ -1264,7 +1264,8 @@ def train():
         dataset_config = json.loads(f.read())
 
     dataset = dataset_config.pop("name")
-
+    dataset_config["cache_dir"] = os.path.join(args.output_dir, "dataset_buffer", f"rank={dist.get_rank()}")
+    
     model_class_name = model_config.model_class
     dataset_config["model_class"] = model_class_name
     

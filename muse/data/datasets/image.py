@@ -1150,7 +1150,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, with_ori_sample=False, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, with_ori_sample=False, cache_dir=None, image_filters_args=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
@@ -1160,11 +1160,21 @@ class Chat2ImageDataset(Token2ImageDataset):
         self.assistant_resize_method = assistant_resize_method
         self.max_sample_length = max_sample_length
         self.with_ori_sample = with_ori_sample
+        self.cache_dir = cache_dir
+        
+        os.makedirs(self.cache_dir, exist_ok=True)
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
                     (self.processor.image_processor.patch_size * self.processor.image_processor.merge_size) ** 2
         assert force_assistant_image_size <= self.max_pixels, f"force_assistant_image_size must be <= {self.max_pixels}, but got {force_assistant_image_size}"
+        
+        from muse.data.image_filters import ImageQualityFilter
+        if image_filters_args is not None:
+            self.image_quality_filter = ImageQualityFilter(**image_filters_args)
+        else:
+            self.image_quality_filter = None
+
 
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair using chat-style message processing.
@@ -1355,7 +1365,6 @@ class Chat2ImageDataset(Token2ImageDataset):
             if height / width > self.max_hw_ratio or width / height > self.max_hw_ratio:
                 return None
             
-
         messages = json.loads(sample["messages"])
         image_dict = json.loads(sample["images"])
 
@@ -1363,18 +1372,26 @@ class Chat2ImageDataset(Token2ImageDataset):
             if not isinstance(x, dict): return
             if x.get("type") in ("image_gen", "image"):
                 x["image"] = image_dict[x["image"]] if x["image"] in image_dict else x["image"]
+                if isinstance(x["image"], str):
+                    x["image"] = Image.open(x["image"])
 
+                if self.image_quality_filter is not None:
+                    passed, reason = self.image_quality_filter.filter(x["image"])
+                    if not passed:
+                        raise ValueError(f"Image quality filter failed for {x['image']}, reason: {reason}")
+                
                 if self.force_assistant_image_size is not None:
-                    if isinstance(x["image"], str):
-                        x["image"] = Image.open(x["image"])
-                    
                     if self.assistant_resize_method == 'resize':
                         x["image"] = x["image"].resize((self.force_assistant_image_size, self.force_assistant_image_size))
                     elif self.assistant_resize_method == 'center_crop':
                         x["image"] = self.resize_and_center_crop(x["image"], self.force_assistant_image_size, self.force_assistant_image_size)
                     else:
                         raise ValueError(f"Invalid assistant_resize_method: {self.assistant_resize_method}")
+
                 x["max_pixels"] = self.max_pixels
+
+        if np.random.rand() < 0.00002:
+            self.image_quality_filter.print_statistics()
 
         # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
         recursive_traverse(messages, call_back)
