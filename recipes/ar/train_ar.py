@@ -503,7 +503,7 @@ def train() -> None:
     chunked_loss_computer = ChunkedLossComputer(
         lm_head=model.lm_head,
         loss_fn=loss_fn,
-        minibatch_size=args.minibatch_size,
+        minibatch_size=args.chuncked_loss_compute_size,
         shift_labels=False
     )
 
