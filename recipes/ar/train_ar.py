@@ -288,12 +288,30 @@ def _load_state_dict(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     return state_dict
 
 
+def freeze_params(args, model) -> None:
+    # Freeze specified parameters (align with recipes/sana/train_sana_ar_dit.py)
+    freeze_patterns: list[str] = []
+    
+    if args.freeze_params:
+        freeze_patterns.extend([p.strip() for p in args.freeze_params.split(",") if p.strip()])
+
+    # Convert legacy flags into patterns
+    if getattr(args, "freeze_llm", False):
+        freeze_patterns.append("llm")
+    if getattr(args, "freeze_navit", False):
+        freeze_patterns.append("navit")
+    if getattr(args, "freeze_vision", False):
+        freeze_patterns.append("vision")
+
+    if freeze_patterns:
+        frozen_count = freeze_params_by_pattern(model, freeze_patterns)
+        print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+
 
 def train() -> None:
     args = _build_arg_parser().parse_args()
 
     rank, world_size, local_rank = _setup_distributed(args)
-    initialize_model_parallel()
 
     print_rank_0(f"rank/world_size/local_rank: {rank}/{world_size}/{local_rank}")
     print_rank_0(f"output_dir: {args.output_dir}")
@@ -306,6 +324,8 @@ def train() -> None:
         with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w', encoding="utf-8") as f:
             f.write(args_str + "\n")
 
+    device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
+    initialize_model_parallel()
 
     
     training_seed = args.seed + rank
@@ -335,8 +355,6 @@ def train() -> None:
         model = model.float()
     
     # Shard model for distributed training
-    device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-    
     shard_model(
         model=model,
         cpu_offload=args.cpu_offload,
@@ -347,16 +365,36 @@ def train() -> None:
         fp32_reduce=args.fp32_reduce,
     )
 
-    dist.barrier()
 
-    if rank == 0:
-        print(f"state_dict")
-        for k, v in state_dict.items():
-            print(f"{k}: {v.shape}")
+    # Load weights or initialize parameters
+    if args.model_dir:
+        # Filter out buffers that should be initialized by rope_init
+        # These buffers may exist in checkpoint but should not be loaded
+        # because they will be re-initialized dynamically
+        rope_buffer_patterns = [
+            "position_ids",
+            "inv_freq",
+        ]
+        if state_dict is not None and dist.get_rank() == 0:
+            keys_to_remove = []
+            for key in state_dict.keys():
+                for pattern in rope_buffer_patterns:
+                    if pattern in key:
+                        keys_to_remove.append(key)
+                        break
+            for key in keys_to_remove:
+                print_rank_0(f"Removing buffer from state_dict (will be initialized by rope_init): {key}")
+                del state_dict[key]
+        dist.barrier()
 
-        print(f"\nmodel")
-        for name, param in model.named_parameters():
-            print(f"{name}: {param.shape}/{param.dtype}/{param.device}")
+    # if rank == 0:
+    #     print(f"state_dict")
+    #     for k, v in state_dict.items():
+    #         print(f"{k}: {v.shape}")
+
+    #     print(f"\nmodel")
+    #     for name, param in model.named_parameters():
+    #         print(f"{name}: {param.shape}/{param.dtype}/{param.device}")
 
 
     # 需要保证每个rank都执行了参数初始化或加载
@@ -374,23 +412,43 @@ def train() -> None:
         with Timer("Initialize model parameters"):
             initialize_model_params(model)
 
-    # Freeze specified parameters (align with recipes/sana/train_sana_ar_dit.py)
-    freeze_patterns: list[str] = []
+    with torch.device(torch.cuda.current_device()):
+        # Initialize RoPE if needed
+        for m in model.modules():
+            if hasattr(m, "rope_init"):
+                print_rank_0("Initialize RoPE")
+                m.rope_init()
 
-    if args.freeze_params:
-        freeze_patterns.extend([p.strip() for p in args.freeze_params.split(",") if p.strip()])
 
-    # Convert legacy flags into patterns
-    if getattr(args, "freeze_llm", False):
-        freeze_patterns.append("llm")
-    if getattr(args, "freeze_navit", False):
-        freeze_patterns.append("navit")
-    if getattr(args, "freeze_vision", False):
-        freeze_patterns.append("vision")
+    # Fix: Materialize buffers that are still on meta device (e.g. position_ids)
+    # 修复：手动实例化那些不在 checkpoint 中且仍停留在 meta 设备上的 buffers
+    for name, module in model.named_modules():
+        for buffer_name, buffer in module.named_buffers(recurse=False):
+            if buffer.device.type == "meta":
+                print_rank_0(f"Materializing buffer '{name}.{buffer_name}' from meta to {torch.cuda.current_device()}")
+                
+                # 如果是 position_ids，通常需要初始化为 [0, 1, 2, ...]
+                if "position_ids" in buffer_name:
+                    # 获取序列长度 (通常是最后一个维度)
+                    seq_len = buffer.shape[-1]
+                    # 创建 [0, 1, ..., seq_len-1]
+                    new_buffer = torch.arange(seq_len, device=torch.cuda.current_device(), dtype=buffer.dtype)
+                    # 如果原始 shape 是 [1, seq_len]，需要 expand
+                    if buffer.ndim > 1:
+                        new_buffer = new_buffer.expand(buffer.shape)
+                else:
+                    # 其他 buffer 默认初始化为全 0
+                    new_buffer = torch.zeros_like(buffer, device=torch.cuda.current_device())
+                
+                # 将实例化的 buffer 注册回模块，替换掉 meta buffer
+                module.register_buffer(buffer_name, new_buffer)
 
-    if freeze_patterns:
-        frozen_count = freeze_params_by_pattern(model, freeze_patterns)
-        print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+    # Check if all parameters & buffers are initialized
+    for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+        assert tensor.device != torch.device("meta"), \
+            f"{name} not initialized, device={tensor.device}"
+
+    freeze_params(args, model)
 
     # optimizer
     optimizer = torch.optim.AdamW(
