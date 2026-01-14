@@ -11,12 +11,13 @@
 注：当前实现以 KeyeAR 模型的 forward 形参为准（tokens/cu_seqlens/input_pos/pixel_values/image_grid_thw）。
 
 """
+from __future__ import annotations
+
 import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "1"
 
 
-from __future__ import annotations
 
 import argparse
 import contextlib
