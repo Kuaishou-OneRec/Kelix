@@ -564,7 +564,16 @@ def train() -> None:
             pixel_values = pixel_values.squeeze(0)
 
 
-        
+        def squeeze0_if_dim_is_3(tensor: torch.Tensor) -> torch.Tensor:
+            if tensor.ndim == 3:
+                tensor = tensor.squeeze(0)
+            return tensor
+
+        input_ids = squeeze0_if_dim_is_3(input_ids)
+        position_ids = squeeze0_if_dim_is_3(position_ids)
+        loss_mask = squeeze0_if_dim_is_3(loss_mask)
+        labels = squeeze0_if_dim_is_3(labels)
+
         print(
             f"input_ids: {input_ids.shape}\n"
             f"position_ids: {position_ids.shape}\n"
