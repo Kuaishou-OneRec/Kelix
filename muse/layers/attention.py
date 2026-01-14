@@ -253,7 +253,15 @@ class MultiHeadAttention(nn.Module):
         if self.pos_embeddings is not None:
             print(self.pos_embeddings)
             print("pos_embeddings in attention", q.shape, {k:v.shape for k,v in input_pos.items()}, "\t", input_pos)
-            
+            if torch.distributed.is_is_initialized() and torch.distributed.get_rank() == 0:
+                torch.save({
+                    "input_pos": input_pos,
+                    "q": q
+                }, "q_pos_embeddings.pt")
+            else:
+                print("debugging")
+                import IPython
+                IPython.embed()
             q = self.pos_embeddings(q, input_pos=input_pos)
 
         # Normalize q
