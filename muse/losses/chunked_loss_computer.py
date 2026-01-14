@@ -131,7 +131,6 @@ class ChunkedLossComputer:
         请不要直接使用forward_and_backward返回的两个loss进行任何需要bp的操作，任何的需要bp的操作都是无效的!!!! 若有必要，请你把loss计算逻辑写到loss_fn中
         请不要直接使用forward_and_backward返回的两个loss进行任何需要bp的操作，任何的需要bp的操作都是无效的!!!! 若有必要，请你把loss计算逻辑写到loss_fn中
         """
-        self.ticker.tick("lm_head")
         params = list(self.lm_head.parameters())
         grad_accs = [torch.zeros_like(p) for p in params]
 
