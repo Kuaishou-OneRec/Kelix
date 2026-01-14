@@ -11,6 +11,9 @@
 注：当前实现以 KeyeAR 模型的 forward 形参为准（tokens/cu_seqlens/input_pos/pixel_values/image_grid_thw）。
 
 """
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "1"
 
 
 from __future__ import annotations
@@ -513,6 +516,9 @@ def train() -> None:
             f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n",
             f"image_tokens: {input_ids[input_ids == model.config.qwen_config.image_token_id].shape[0]}\n",
             f"video_tokens: {input_ids[input_ids == 151656].shape[0]}\n",
+
+            f"image_tokens2: {(input_ids == model.config.qwen_config.image_token_id).sum().item()}\n",
+            f"video_tokens2: {(input_ids == 151656).sum().item()}\n",
         )
         # forward
         with contextlib.nullcontext():
