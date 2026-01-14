@@ -239,14 +239,32 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     return dataloader
 
 
-def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], ignore_index: int) -> torch.Tensor:
-    print(f"input_ids: {input_ids.shape}, loss_mask: {loss_mask.shape}")
-    # input_ids: (bs, seq_len)
-    input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
-    if loss_mask is None:
-        return input_ids.clone().to(torch.int64)
+def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], ignore_index: int, model_config: KeyeARConfig) -> torch.Tensor:
+    assert input_ids.ndim == 3 and input_ids.shape[0] == 1 and input_ids.shape[2] == model_config.qwen_config.n_q_tokens + 1, \
+        f"input_ids shape must be (1, seq_len, {model_config.qwen_config.n_q_tokens + 1}), but got {input_ids.shape}"
+    assert loss_mask.ndim == 2 and loss_mask.shape[0] == 1 and loss_mask.shape[1] == input_ids.shape[1], \
+        f"loss_mask shape must be (1, seq_len), but got {loss_mask.shape}"
+    loss_mask = loss_mask[:,:,None].repeat(1, 1, model_config.qwen_config.n_q_tokens + 1)
+    q_eos_token = model_config.qwen_config.q_eos_token
+    is_q_eos_token = input_ids == q_eos_token
+    acc_q_eos_token = is_q_eos_token.cumsum(dim=2)
+    loss_mask = loss_mask * (acc_q_eos_token <= 1)
     labels = input_ids * loss_mask + ignore_index * (1 - loss_mask)
-    return labels.to(torch.int64)
+    assert labels.shape == input_ids.shape, f"labels shape must be {input_ids.shape}, but got {labels.shape}"
+
+    vocab_size = model_config.qwen_config.vocab_size
+
+    n_text_token_per_pos = 2
+    n_image_token_per_pos = model_config.qwen_config.n_q_tokens + 1
+    
+    text_weight = (n_text_token_per_pos + n_image_token_per_pos) / 2 / n_text_token_per_pos
+    image_weight = (n_text_token_per_pos + n_image_token_per_pos) / 2 / n_image_token_per_pos
+    is_text_token = (input_ids[:,:,:1] < vocab_size).repeat(1, 1, model_config.qwen_config.n_q_tokens + 1) & loss_mask
+    is_image_token = (input_ids[:,:,:1] >= vocab_size).repeat(1, 1, model_config.qwen_config.n_q_tokens + 1) & loss_mask
+    weights = text_weight * is_text_token + image_weight * is_image_token
+
+    assert weights.shape == input_ids.shape, f"weights shape must be {input_ids.shape}, but got {weights.shape}"
+    return labels.to(torch.int64), weights
 
 
 def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
@@ -560,7 +578,7 @@ def train() -> None:
                     position_ids = position_ids.expand_as(input_ids)
 
         # labels: 用loss_mask将非监督位置置为ignore_index
-        labels = _prepare_labels(input_ids, loss_mask, ignore_index=loss_fn.ignore_index)
+        # labels = _prepare_labels(input_ids, loss_mask, ignore_index=loss_fn.ignore_index)
         if pixel_values.ndim == 5:
             pixel_values = pixel_values.squeeze(0)
 
@@ -573,14 +591,14 @@ def train() -> None:
         input_ids = squeeze0_if_dim_is_3(input_ids)
         position_ids = squeeze0_if_dim_is_3(position_ids)
         loss_mask = squeeze0_if_dim_is_3(loss_mask)
-        labels = squeeze0_if_dim_is_3(labels)
+        # labels = squeeze0_if_dim_is_3(labels)
         cu_seqlens = cu_seqlens.flatten()
 
         print(
             f"input_ids: {input_ids.shape}\n"
             f"position_ids: {position_ids.shape}\n"
             f"loss_mask: {loss_mask.shape}\n"
-            f"labels: {labels.shape}\n"
+            # f"labels: {labels.shape}\n"
             f"cu_seqlens: {cu_seqlens}\n"
             f"pixel_values: {pixel_values.shape}\n"
             f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n",
@@ -604,6 +622,9 @@ def train() -> None:
 
         labels, weights = _prepare_labels(expanded_ids, loss_mask, ignore_index=loss_fn.ignore_index)
 
+        print(f"labels: {labels.shape}")
+        print(f"weights: {weights.shape}")
+        print(f"expanded_ids: {expanded_ids.shape}")
 
         loss = loss_fn(logits, labels)
 
