@@ -258,7 +258,7 @@ class MultiHeadAttention(nn.Module):
                     "input_pos": input_pos,
                     "q": q
                 }, "q_pos_embeddings.pt")
-            else:
+            elif not torch.distributed.is_initialized():
                 print("debugging")
                 import IPython
                 IPython.embed()
