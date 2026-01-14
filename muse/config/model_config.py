@@ -215,11 +215,8 @@ class Qwen3Config(ModelConfig):
             embed_dim = info.data["embed_dim"]
             num_heads = info.data["num_heads"]
             expected_embed_dim = num_heads * v
-            if embed_dim != expected_embed_dim:
-                raise ValueError(
-                    f"embed_dim ({embed_dim}) must equal "
-                    f"num_heads ({num_heads}) * head_dim ({v}) = {expected_embed_dim}"
-                )
+            # Some checkpoints (e.g., Keye) use head_dim overriding embed_dim/num_heads,
+            # allowing q_proj out_dim != embed_dim. Skip strict check here.
         return v
 
     @model_validator(mode="after")
@@ -231,16 +228,9 @@ class Qwen3Config(ModelConfig):
                 f"num_kv_heads ({values.num_kv_heads})"
             )
 
-
-        expected_embed_dim = values.num_heads * values.head_dim
-        if values.embed_dim != expected_embed_dim:
-            raise ValueError(
-                f"embed_dim ({values.embed_dim}) must equal "
-                f"num_heads ({values.num_heads}) * head_dim ({values.head_dim}) "
-                f"= {expected_embed_dim}"
-            )
+        # Relax embed_dim vs num_heads * head_dim to support checkpoints where head_dim is overridden
+        # and q_proj out_dim != embed_dim (e.g., Keye).
         return values
-
 
 class SiglipVisionConfig(ModelConfig):
     """Configuration for the SigLIP vision transformer encoder."""
@@ -526,3 +516,74 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
+
+class KeyeTokenizerEnd2EndImageConfig(ModelConfig):
+    """Configuration for KeyeTokenizerEnd2EndImage model."""
+    
+    model_class: str = Field(
+        default="KeyeTokenizerEnd2EndImage",
+        description="Model class name"
+    )
+    qwen_config: Qwen3Config = Field(
+        description="Configuration for LLM"
+    )
+    vision_config: KeyeVisionConfig = Field(
+        description="Configuration for vision encoder"
+    )
+    tokenizer_config: KeyeTokenizerConfig = Field(
+        description="Configuration for visual tokenizer"
+    )
+    image_token_id: int = Field(
+        default=-1,
+        description="Token ID for image placeholder"
+    )
+    pool: str = Field(
+        default="avg",
+        description="Pooling method for visual token projection"
+    )
+    amplifier: float = Field(
+        default=1.0,
+        description="Amplifier for visual token projection"
+    )
+
+
+class KeyeTokenizerEnd2EndVideoConfig(ModelConfig):
+    """Configuration for KeyeTokenizerEnd2EndVideo model."""
+
+    model_class: str = Field(
+        default="KeyeTokenizerEnd2EndVideo",
+        description="Model class name"
+    )
+    qwen_config: Qwen3Config = Field(
+        description="Configuration for LLM"
+    )
+    vision_config: KeyeVisionConfig = Field(
+        description="Configuration for vision encoder"
+    )
+    tokenizer_config: KeyeTokenizerConfig = Field(
+        description="Configuration for visual tokenizer"
+    )
+    image_token_id: int = Field(
+        default=-1,
+        description="Token ID for image placeholder"
+    )
+    video_token_id: int = Field(
+        default=-1,
+        description="Token ID for video placeholder"
+    )
+    pool: str = Field(
+        default="avg",
+        description="Pooling method for visual token projection"
+    )
+    amplifier: float = Field(
+        default=1.0,
+        description="Amplifier for visual token projection"
+    )
+    temporal_merge_position: str = Field(
+        default="before",
+        description="Temporal merge position"
+    )
+    temporal_merge_mode: str = Field(
+        default="avg",
+        description="Temporal merge mode"
+    )

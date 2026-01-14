@@ -28,6 +28,8 @@ from muse.config.model_config import (
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
+    KeyeTokenizerEnd2EndImageConfig,
+    KeyeTokenizerEnd2EndVideoConfig,
     SanaConfig
 )
 
@@ -59,6 +61,8 @@ __all__ = [
     "SiglipVisionConfig",
     "KeyeVisionConfig",
     "KeyeTokenizerConfig",
+    "KeyeTokenizerEnd2EndImageConfig",
+    "KeyeTokenizerEnd2EndVideoConfig",
     "SanaConfig",
     
     # Dataset config

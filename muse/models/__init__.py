@@ -79,6 +79,10 @@ def list_models() -> List[str]:
 # Import model modules to trigger registration
 from muse.models import qwen3  # noqa: E402, F401
 from muse.models import sana  # noqa: E402, F401
+from muse.models import keye_tokenizer_end2end_image  # noqa: E402, F401
+from muse.models import keye_tokenizer_end2end_video  # noqa: E402, F401
+from muse.models import keye_tokenizer  # noqa: E402, F401
+from muse.models import keye_vit  # noqa: E402, F401
 
 # Export public API
 __all__ = [
