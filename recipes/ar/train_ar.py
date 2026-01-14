@@ -512,13 +512,6 @@ def train() -> None:
             f"pixel_values: {pixel_values.shape}\n"
             f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n"
         )
-
-        torch.save(
-            {
-                
-            }
-        )
-
         # forward
         with contextlib.nullcontext():
             logits = model(
