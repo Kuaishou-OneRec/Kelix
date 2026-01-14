@@ -793,6 +793,7 @@ class KeyeARModel(Model):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         input_image_ids: Optional[torch.LongTensor] = None,
+        return_expanded_ids: Optional[bool] = False,
         **kwargs
     ):
         assert int(input_ids is not None) + int(tokens is not None) <= 1, "Only one of tokens or input_ids can be provided."
@@ -829,6 +830,12 @@ class KeyeARModel(Model):
             input_pos=input_pos,
             **kwargs
         )
+
+        if return_expanded_ids:
+            if isinstance(outputs, list):
+                outputs.append(tokens)
+            else:
+                outputs = [outputs, tokens]
         return outputs
     @torch.no_grad()
     def generate(

@@ -240,6 +240,7 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
 
 
 def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], ignore_index: int) -> torch.Tensor:
+    print(f"input_ids: {input_ids.shape}, loss_mask: {loss_mask.shape}")
     # input_ids: (bs, seq_len)
     input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
     if loss_mask is None:
@@ -591,15 +592,18 @@ def train() -> None:
         )
         # forward
         with contextlib.nullcontext():
-            logits = model(
+            logits, expanded_ids = model(
                 tokens=input_ids,
                 input_pos=position_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 cu_seqlens=cu_seqlens,
-
+                return_expanded_ids=True
             )
         print(f"forward is done. logits: {logits.shape}")
+
+        labels, weights = _prepare_labels(expanded_ids, loss_mask, ignore_index=loss_fn.ignore_index)
+
 
         loss = loss_fn(logits, labels)
 
