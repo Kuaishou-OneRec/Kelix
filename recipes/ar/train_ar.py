@@ -573,6 +573,7 @@ def train() -> None:
         position_ids = squeeze0_if_dim_is_3(position_ids)
         loss_mask = squeeze0_if_dim_is_3(loss_mask)
         labels = squeeze0_if_dim_is_3(labels)
+        cu_seqlens = cu_seqlens.flatten()
 
         print(
             f"input_ids: {input_ids.shape}\n"
