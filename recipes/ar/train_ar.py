@@ -510,7 +510,9 @@ def train() -> None:
             f"labels: {labels.shape}\n"
             f"cu_seqlens: {cu_seqlens}\n"
             f"pixel_values: {pixel_values.shape}\n"
-            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n"
+            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n",
+            f"image_tokens: {input_ids[input_ids == model.config.qwen_config.image_token_id].shape[0]}\n",
+            f"video_tokens: {input_ids[input_ids == 151656].shape[0]}\n",
         )
         # forward
         with contextlib.nullcontext():

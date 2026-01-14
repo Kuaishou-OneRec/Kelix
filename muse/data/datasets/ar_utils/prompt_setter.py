@@ -1,5 +1,7 @@
 import torch
+import random
 
+# predfined prompts for different tasks
 task2prompt_baseline = {
         "__default__": "You are a helpful assistant."
       }
@@ -18,7 +20,9 @@ task2prompt_fine = {
     "code": "You are a helpful assistant that can recognize and understand code in images.",
     "__default__": "You are a helpful assistant."
 }
-class SystemPromptByTaks:
+
+
+class SystemPromptByTask:
   def __init__(self, task2prompt=None):
     if task2prompt is None:
       task2prompt = {
@@ -44,7 +48,7 @@ class SystemPromptByTaks:
       return "ai2d"
     if "chart" in source:
       return "chart"
-    if "code" in source or "sql" in source:
+    if "code" in source or "sql" in source or "python" in source or "java" in source:
       return "code"
     return "others"
 
