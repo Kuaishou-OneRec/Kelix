@@ -499,7 +499,7 @@ def train() -> None:
     )
 
     # loss
-    loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=False)
+    loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=False, return_token_loss=True)
     chunked_loss_computer = ChunkedLossComputer(
         lm_head=model.lm_head,
         loss_fn=loss_fn,
