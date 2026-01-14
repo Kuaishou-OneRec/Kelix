@@ -251,6 +251,7 @@ class MultiHeadAttention(nn.Module):
 
         # Apply positional embeddings
         if self.pos_embeddings is not None:
+            print("pos_embeddings in attention", q.shape, input_pos.shape, input_pos)
             q = self.pos_embeddings(q, input_pos=input_pos)
 
         # Normalize q
