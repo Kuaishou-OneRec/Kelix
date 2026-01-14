@@ -33,8 +33,6 @@ import torch.distributed as dist
 
 import torch.nn.functional as F
 
-
-from einops import rearrange
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -156,7 +154,7 @@ except:
     def get_data_parallel_world_size():
         return dist.get_world_size(group=get_data_parallel_group())
 
-
+layer_outputs = []
 
 
 def all_to_all_4D(
@@ -782,7 +780,8 @@ class SiglipAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
 
-
+        queries_ = queries
+        keys_ = keys
         if self.q_norm is not None and self.k_norm is not None:
             queries = self.q_norm(queries)
             keys = self.k_norm(keys)
@@ -862,7 +861,22 @@ class SiglipAttention(nn.Module):
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
 
+        attn_output_before_out_proj = attn_output
         attn_output = self.out_proj(attn_output)
+
+        layer_outputs.append(
+            {
+                "input:hidden_states": hidden_states,
+                "input:rope_emb": rope_emb,
+                "attn_output_before_out_proj": attn_output_before_out_proj,
+                "attn_output_after_out_proj": attn_output,
+                "after_apply_rope_queries": queries,
+                "after_apply_rope_keys": keys,
+                "values": values,
+                "before_apply_rope_queries_": queries_,
+                "before_apply_rope_qkeys_": keys_,
+            }
+        )
 
         if not output_attentions:
             attn_weights = None
@@ -1584,6 +1598,10 @@ _DEBUG_ROPE_OUTPUTS = {
     "sin_before_chunk": None,
     "cos_after_chunk": None,
     "sin_after_chunk": None,
+    "maosiyang:q_before_rope": None,
+    "maosiyang:k_before_rope": None,
+    "maosiyang:q_after_rope": None,
+    "maosiyang:k_after_rope": None,
 }
 
 # Separate storage for VIT RoPE debugging (to avoid being overwritten by LLM RoPE)
@@ -1868,6 +1886,10 @@ class KeyeRotaryEmbedding(nn.Module):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
 
+        # Debug: store inv_freq and position_ids for comparison
+        _DEBUG_ROPE_OUTPUTS["inv_freq"] = self.inv_freq.detach()
+        _DEBUG_ROPE_OUTPUTS["position_ids"] = position_ids.detach()
+
         # Core RoPE block. In contrast to other models, Keye has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
@@ -1948,6 +1970,9 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     # Debug: store raw cos/sin before split
     _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+    _DEBUG_ROPE_OUTPUTS['mrope_section'] = torch.tensor(
+            mrope_section, device=q.device
+        )
 
     mrope_section = mrope_section * 2
     cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
@@ -1961,9 +1986,26 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
 
+    # maosiyang: store q/k before RoPE (only Layer 0, i.e., first call)
+    # Use a counter to track calls
+    if not hasattr(apply_multimodal_rotary_pos_emb, '_call_count'):
+        apply_multimodal_rotary_pos_emb._call_count = 0
+    
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
+    
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    # Debug: store outputs
+    
+    # maosiyang: store q/k after RoPE (only Layer 0)
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
+    
+    apply_multimodal_rotary_pos_emb._call_count += 1
+    
+    # Debug: store outputs (legacy)
     _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
     _DEBUG_ROPE_OUTPUTS["k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
@@ -1992,8 +2034,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
 
 
@@ -2224,14 +2271,11 @@ class KeyeFlashAttention2(KeyeAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         cos, sin = position_embeddings
-        # print("apply_multimodal_rotary_pos_embapply_multimodal_rotary_pos_emb111111")
-        # print(query_states, key_states, cos, sin)
 
         query_states, key_states = apply_multimodal_rotary_pos_emb(
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
-        # print("apply_multimodal_rotary_pos_embapply_multimodal_rotary_pos_emb22222")
-        # print(query_states, key_states)
+
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -2268,6 +2312,15 @@ class KeyeFlashAttention2(KeyeAttention):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
+
+        # Debug: store attention inputs for Layer 0 only
+        if not hasattr(KeyeFlashAttention2, "_debug_attn_call_count"):
+            KeyeFlashAttention2._debug_attn_call_count = 0
+        is_first_call = KeyeFlashAttention2._debug_attn_call_count == 0
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["q_before_attn"] = query_states.detach()
+            _DEBUG_ROPE_OUTPUTS["k_before_attn"] = key_states.detach()
+            _DEBUG_ROPE_OUTPUTS["v_before_attn"] = value_states.detach()
 
         if (
             sliding_window == -1
@@ -2308,6 +2361,12 @@ class KeyeFlashAttention2(KeyeAttention):
                     causal=self.is_causal
                 )
             else:
+                # Debug: print attention parameters
+                if is_first_call:
+                    print(f"[Origin] attn params: is_causal={self.is_causal}, dropout={dropout_rate}, sliding_window={sliding_window}")
+                    print(f"[Origin] q shape: {query_states.shape}, k shape: {key_states.shape}, v shape: {value_states.shape}")
+                    print(f"[Origin] attention_mask: {attention_mask}, use_top_left_mask: {self._flash_attn_uses_top_left_mask}")
+                
                 attn_output = _flash_attention_forward(
                     query_states,
                     key_states,
@@ -2320,9 +2379,23 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
+        # Debug: output after attention function (raw)
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_raw"] = attn_output.detach().clone()
+
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
+        # Debug: output after reshape
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_reshaped"] = attn_output.detach().clone()
+
         attn_output = self.o_proj(attn_output)
+        
+        # Debug: output after o_proj
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_proj"] = attn_output.detach().clone()
+        
+        KeyeFlashAttention2._debug_attn_call_count += 1
 
         if not output_attentions:
             attn_weights = None
@@ -2607,6 +2680,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        cos, sin = position_embeddings
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
@@ -2616,8 +2690,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
             position_embeddings = (sin[..., start:end, :], cos[..., start:end, :])
             hidden_states = hidden_states[:, start:end, :]
 
-        # print(f"inputs_embeds{inputs_embeds.shape}={inputs_embeds}")
-        # print(f"position_ids{position_ids.shape}: {position_ids}")
+        #print(f"inputs_embeds{inputs_embeds.shape}={inputs_embeds}")
+        #print(f"position_ids{position_ids.shape}: {position_ids}")
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -3418,6 +3492,18 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 )
             return position_ids, mrope_position_deltas
 
+    def forward_image_tokens(
+            self,
+            pixel_values,
+            image_grid_thw,
+            **kwargs
+            ):
+        vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
+        indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T 
+        aligned_indices = self.vocab_size + indices + torch.arange(self.config.vision_config.n_q_tokens).\
+            to(next(iter(self.parameters())).device)[None] * self.config.vision_config.codebook_size // self.config.vision_config.n_q_tokens
+        return aligned_indices
+    
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -3491,7 +3577,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         reconstruction_loss_dict = {}
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            from .investigations import compute_row_stats_str
             if pixel_values is not None:
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 

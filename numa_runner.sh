@@ -1,5 +1,9 @@
 #!/bin/bash 
 
+# NUMA binding script for MPI processes
+# This script binds each GPU process to its corresponding NUMA node
+# to reduce cross-node memory access latency
+
 local_rank=$OMPI_COMM_WORLD_LOCAL_RANK
 local_size=$OMPI_COMM_WORLD_LOCAL_SIZE
 global_rank=$OMPI_COMM_WORLD_RANK
@@ -8,9 +12,10 @@ num_cpus=$(nproc --all)
 num_numa=2
 ranks_per_numa=$(($local_size / $num_numa))
 numa_id=$(($local_rank / $ranks_per_numa))
+
+# Optional: Fine-grained CPU core binding (commented out)
 # rank_inside_numa=$(($local_rank % $ranks_per_numa))
 # cores_per_rank=$(($num_cpus / $local_size))
-# 
 # 
 # numa0_cores=($(numactl -H | grep "node 0 cpus" | awk -F "cpus: " '{print $2}'))
 # numa1_cores=($(numactl -H | grep "node 1 cpus" | awk -F "cpus: " '{print $2}'))
@@ -31,4 +36,5 @@ numa_id=$(($local_rank / $ranks_per_numa))
 # echo "rank $global_rank bind to numa $numa_id cores [$cores]"
 # 
 # numactl --all -m $numa_id -C $cores $@
+
 numactl --all -m $numa_id -N $numa_id $@
