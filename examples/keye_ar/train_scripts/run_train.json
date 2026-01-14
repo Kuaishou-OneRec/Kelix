@@ -7,7 +7,7 @@
     "max_visual_tokens_per_frame": 768,
     "video_fps": 4.0,
     "video_max_frames": 128,
-    "base_model_dir": "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2_video",
+    "base_model_dir": "/mmu_mllm_hdd_2/zhouyang12/models/onebase_1231_2wtoken/",
     "shrink_ratio": 0.35,
     "max_retry": 3,
     "multiple_of": 8,
