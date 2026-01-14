@@ -350,7 +350,7 @@ class Roraty2DPositionalEmbeddings(nn.Module):
         
         cos = cos.chunk(2, dim=-1)[0].contiguous()
         sin = sin.chunk(2, dim=-1)[0].contiguous()
-        print("rrrrr", x.shape, cos.shape, sin.shape)
+
         result = flash_apply_rotary_emb(
             x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)

@@ -135,12 +135,12 @@ nohup mpirun --allow-run-as-root \
                 --model-name KeyeARModel \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_ar/train_scripts/run_train.json \
-                --learning-rate 2e-4 \
-                --weight-decay 0.1 \
+                --learning-rate 1e-4 \
+                --weight-decay 0.0 \
                 --beta1 0.9 \
                 --beta2 0.95 \
                 --model-dtype bfloat16 \
-                --chuncked-loss-compute-size 64 \
+                --chuncked-loss-compute-size 4096 \
                 --warmup-steps 1000 \
                 --lr-scheduler cosine \
                 --min-lr 1e-6 \
@@ -149,7 +149,7 @@ nohup mpirun --allow-run-as-root \
                 --max-steps 2500000 \
                 --save-checkpoint-per-step 1000 \
                 --seed 19260817 \
-                --max-length 400 \
+                --max-length 16000 \
                 --enable-gradient-checkpointing \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

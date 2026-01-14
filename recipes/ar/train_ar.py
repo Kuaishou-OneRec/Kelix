@@ -336,6 +336,10 @@ def freeze_params(args, model) -> None:
         frozen_count = freeze_params_by_pattern(model, freeze_patterns)
         print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
 
+def squeeze0_if_dim_is_3(tensor: torch.Tensor) -> torch.Tensor:
+    if tensor.ndim == 3:
+        tensor = tensor.squeeze(0)
+    return tensor
 
 def train() -> None:
     args = _build_arg_parser().parse_args()
@@ -599,32 +603,12 @@ def train() -> None:
         if pixel_values.ndim == 5:
             pixel_values = pixel_values.squeeze(0)
 
-
-        def squeeze0_if_dim_is_3(tensor: torch.Tensor) -> torch.Tensor:
-            if tensor.ndim == 3:
-                tensor = tensor.squeeze(0)
-            return tensor
-
         input_ids = squeeze0_if_dim_is_3(input_ids)
         position_ids = squeeze0_if_dim_is_3(position_ids)
         loss_mask = squeeze0_if_dim_is_3(loss_mask)
         # labels = squeeze0_if_dim_is_3(labels)
         cu_seqlens = cu_seqlens.flatten()
 
-        print(
-            f"input_ids: {input_ids.shape}\n"
-            f"position_ids: {position_ids.shape}\n"
-            f"loss_mask: {loss_mask.shape}\n"
-            # f"labels: {labels.shape}\n"
-            f"cu_seqlens: {cu_seqlens}\n"
-            f"pixel_values: {pixel_values.shape}\n"
-            f"image_grid_thw: {image_grid_thw}/{image_grid_thw.shape}\n",
-            f"image_tokens: {input_ids[input_ids == model.config.qwen_config.image_token_id].shape[0]}\n",
-            f"video_tokens: {input_ids[input_ids == 151656].shape[0]}\n",
-
-            f"image_tokens2: {(input_ids == model.config.qwen_config.image_token_id).sum().item()}\n",
-            f"video_tokens2: {(input_ids == 151656).sum().item()}\n",
-        )
         # forward
         with contextlib.nullcontext():
             logits, expanded_ids = model(
@@ -637,10 +621,6 @@ def train() -> None:
             )
 
         logits, labels, weights, loss_mask = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
-        print(f"logits: {logits.shape}\n"
-              f"labels: {labels.shape}\n"
-              f"weights: {weights.shape}\n"
-              f"loss_mask: {loss_mask.shape}\n")
 
         logits = logits.flatten(0,1)
         labels = labels.flatten(0,1)
