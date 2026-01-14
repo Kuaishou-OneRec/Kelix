@@ -38,7 +38,8 @@ from muse.training.activations import set_activation_checkpointing
 # muse imports
 from muse.config import KeyeARConfig, load_config, model_config
 from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
-from muse.losses import CrossEntropyLoss
+from muse.losses import CrossEntropyLoss, ChunkedLossComputer
+
 from muse.models import get_model_class
 from muse.training.checkpoint import (
     AppState,
@@ -620,7 +621,7 @@ def train() -> None:
             )
         print(f"forward is done. logits: {logits.shape}")
 
-        labels, weights = _prepare_labels(expanded_ids, loss_mask, ignore_index=loss_fn.ignore_index)
+        labels, weights = _prepare_labels(expanded_ids, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
 
         print(f"labels: {labels.shape}")
         print(f"weights: {weights.shape}")
