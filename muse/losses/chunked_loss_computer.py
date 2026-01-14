@@ -1,9 +1,9 @@
+from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
 from easydict import EasyDict as edict
-from recovlm.utils.time_tracker import TimeTracker
 
 # = a================================================================
 # Block 1: Your High-Quality, Optimized Loss Function
@@ -111,7 +111,6 @@ class ChunkedLossComputer:
         self.minibatch_size = minibatch_size
         self.shift_labels = shift_labels
         self.loss_info = {}
-        self.ticker = TimeTracker()
 
     def forward_and_backward(self, input: torch.Tensor, labels: torch.Tensor, loss_fn_args: dict = {}, tokenwise_loss_weight=None):
         """
@@ -221,9 +220,7 @@ class ChunkedLossComputer:
             if p.requires_grad:
                 p.grad = grad_accs[j] / total_elements
 
-        self.ticker.tick("llm")        
         input.backward(gradient=grad_input_full / total_elements)
-        self.ticker.tick("done")
         # 计算最终的平均损失
         final_avg_loss = (total_loss_sum_for_reporting / total_elements).detach()
         per_token_loss = torch.cat(all_per_token_losses) if all_per_token_losses else None
