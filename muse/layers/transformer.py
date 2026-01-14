@@ -429,6 +429,7 @@ class TransformerDecoder(nn.Module):
         output: Union[nn.Linear, Callable],
         num_layers: Optional[int] = None,
         output_hidden_states: Optional[list[int]] = None,
+        skip_output_layer: bool = False,
     ) -> None:
         super().__init__()
         if isinstance(layers, nn.ModuleList):
@@ -452,7 +453,7 @@ class TransformerDecoder(nn.Module):
         self.head_dim = head_dim
         self.causal_mask = None
         self.num_output_chunks = 0
-        self.skip_output_layer = False
+        self.skip_output_layer = skip_output_layer
 
         # attributes for KV caches during inference
         self.encoder_max_cache_seq_len = None

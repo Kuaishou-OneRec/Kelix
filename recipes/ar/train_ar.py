@@ -112,6 +112,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--prefetch-factor", type=int, default=2)
     parser.add_argument("--pin-memory", action="store_true")
+    parser.add_argument("--chuncked_loss_compute_size", type=int, default=0, help="Chunk size for loss computation, 0 for not chunked")
 
     # logging/checkpoint
     parser.add_argument("--logging-per-step", type=int, default=10)
@@ -240,11 +241,13 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     return dataloader
 
 
-def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], ignore_index: int, model_config: KeyeARConfig) -> torch.Tensor:
+def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_mask: Optional[torch.Tensor], ignore_index: int, model_config: KeyeARConfig) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     assert input_ids.ndim == 3 and input_ids.shape[0] == 1 and input_ids.shape[2] == model_config.qwen_config.n_q_tokens + 1, \
         f"input_ids shape must be (1, seq_len, {model_config.qwen_config.n_q_tokens + 1}), but got {input_ids.shape}"
     assert loss_mask.ndim == 2 and loss_mask.shape[0] == 1 and loss_mask.shape[1] == input_ids.shape[1], \
         f"loss_mask shape must be (1, seq_len), but got {loss_mask.shape}"
+    assert logits.shape[:2] == input_ids.shape[:2], \
+        f"logits shape must be {input_ids.shape[:2] + (model_config.qwen_config.vocab_size,)}, but got {logits.shape}"
     loss_mask = loss_mask[:,:,None].repeat(1, 1, model_config.qwen_config.n_q_tokens + 1)
     q_eos_token = model_config.qwen_config.q_eos_token
     is_q_eos_token = input_ids == q_eos_token
@@ -265,7 +268,13 @@ def _prepare_labels(input_ids: torch.Tensor, loss_mask: Optional[torch.Tensor], 
     weights = text_weight * is_text_token + image_weight * is_image_token
 
     assert weights.shape == input_ids.shape, f"weights shape must be {input_ids.shape}, but got {weights.shape}"
-    return labels.to(torch.int64), weights
+
+    # shift for loss computation
+    labels = labels[:,1:]
+    weights = weights[:,1:]
+    loss_mask = loss_mask[:,1:]
+    logits = logits[:,:-1,:]
+    return logits, labels.to(torch.int64), weights, loss_mask
 
 
 def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
@@ -359,6 +368,7 @@ def train() -> None:
     # KeyeARModel 需要 KeyeARConfig
     with set_default_dtype(args.model_dtype), torch.device("meta"):
         model_cls = get_model_class(args.model_name)
+        model_config.qwen_config.skip_output_layer = bool(args.chuncked_loss_compute_size > 0)
         model = model_cls(model_config)
 
     state_dict: Dict[str, Any] | None = _load_state_dict(args)
@@ -489,7 +499,13 @@ def train() -> None:
     )
 
     # loss
-    loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=True)
+    loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=False)
+    chunked_loss_computer = ChunkedLossComputer(
+        lm_head=model.lm_head,
+        loss_fn=loss_fn,
+        minibatch_size=args.minibatch_size,
+        shift_labels=False
+    )
 
     # checkpoint
     output_dir = Path(args.output_dir)
@@ -619,22 +635,22 @@ def train() -> None:
                 cu_seqlens=cu_seqlens,
                 return_expanded_ids=True
             )
-        print(f"forward is done. logits: {logits.shape}")
 
-        labels, weights = _prepare_labels(expanded_ids, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
+        logits, labels, weights, loss_mask = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
+        print(f"logits: {logits.shape}\n"
+              f"labels: {labels.shape}\n"
+              f"weights: {weights.shape}\n"
+              f"loss_mask: {loss_mask.shape}\n")
 
-        print(f"labels: {labels.shape}")
-        print(f"weights: {weights.shape}")
-        print(f"expanded_ids: {expanded_ids.shape}")
-
-        loss = loss_fn(logits, labels)
+        logits = logits.flatten(0,1)
+        labels = labels.flatten(0,1)
+        weights = weights.flatten(0,1)
+        loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
 
-        # backward
-        loss.backward()
         clip_grad_by_value(model, args.clip_range)
 
         if step_scheduler.is_gradient_accumulation_boundary():

@@ -83,7 +83,7 @@ class CrossEntropyLoss(nn.Module):
         self.reduction = reduction
         self.shift_labels = shift_labels
 
-    def forward(self, logits: torch.Tensor, labels: torch.Tensor):
+    def forward(self, logits: torch.Tensor, labels: torch.Tensor, per_token_loss_weight=1):
         """
         Compute cross-entropy loss.
         
@@ -125,7 +125,7 @@ class CrossEntropyLoss(nn.Module):
         )
         
         # Step 2: Manually apply reduction to get the final loss.
-        loss = per_token_loss.sum()
+        loss = (per_token_loss * per_token_loss_weight).sum()
         if self.reduction == "mean":
             # Ensure we divide by the number of valid (non-ignored) tokens
             total_elements = (labels_flat != self.ignore_index).sum()

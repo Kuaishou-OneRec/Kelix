@@ -601,6 +601,10 @@ class UnifiedQwen3Config(Qwen3Config):
     # # Tokenizer configuration
     codebook_size: int = Field(default=8192, description="码本大小")
     n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
+    skip_output_layer: bool = Field(
+        default=False,
+        description="Whether to skip the output layer in the model."
+    )
 
     @model_validator(mode="after")
     def validate_pre_embedding_fields(cls, values: "UnifiedQwen3Config") -> "UnifiedQwen3Config":

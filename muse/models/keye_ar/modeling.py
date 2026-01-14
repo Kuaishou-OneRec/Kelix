@@ -367,7 +367,8 @@ class UnifiedQwen3Model(Qwen3Model):
             output=nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size + tokenizer_config.codebook_size, bias=False),
             token_head=token_head,
             token_decoder_with_teacher_forcing=qwen_config.token_decoder_with_teacher_forcing,
-            token_head_max_new_tokens=qwen_config.n_q_tokens+1
+            token_head_max_new_tokens=qwen_config.n_q_tokens+1,
+            skip_output_layer=qwen_config.skip_output_layer,
         )
 
 

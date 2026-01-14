@@ -112,7 +112,7 @@ class ChunkedLossComputer:
         self.shift_labels = shift_labels
         self.loss_info = {}
 
-    def forward_and_backward(self, input: torch.Tensor, labels: torch.Tensor, loss_fn_args: dict = {}, tokenwise_loss_weight=None):
+    def forward_and_backward(self, logits: torch.Tensor, labels: torch.Tensor, loss_fn_args: dict = {}, tokenwise_loss_weight=None):
         """
         执行两阶段的前向和反向传播过程
         
@@ -134,6 +134,8 @@ class ChunkedLossComputer:
         self.ticker.tick("lm_head")
         params = list(self.lm_head.parameters())
         grad_accs = [torch.zeros_like(p) for p in params]
+
+        input = logits
         grad_input_full = torch.zeros_like(input)
 
         total_loss_sum_for_reporting = torch.tensor(0.0, device=input.device)
@@ -182,7 +184,7 @@ class ChunkedLossComputer:
             labels_flat = labels_chunk.reshape(-1)            
 
             # === 核心改动: 一次调用获取avg_loss和per_token_loss ===
-            loss_chunk_avg, per_token_loss_chunk = self.loss_fn(logits_flat, labels_flat, loss_weight_chunk=loss_weight_chunk_flat, **loss_fn_args)
+            loss_chunk_avg, per_token_loss_chunk = self.loss_fn(logits_flat, labels_flat, per_token_loss_weight=loss_weight_chunk_flat, **loss_fn_args)
 
 
             # 为了反向传播，我们需要损失的和 (sum)，而不是平均值 (avg)
@@ -194,7 +196,7 @@ class ChunkedLossComputer:
                 continue # 如果当前块没有有效token，则跳过
             
 
-            loss_chunk_sum = loss_chunk_avg * valid_tokens_in_chunk
+            loss_chunk_sum = (per_token_loss_chunk * loss_weight_chunk_flat).sum()
 
             # 手动计算梯度
             # 只对requires_grad=True的参数计算梯度
