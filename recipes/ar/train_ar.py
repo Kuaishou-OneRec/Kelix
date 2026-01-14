@@ -112,7 +112,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--prefetch-factor", type=int, default=2)
     parser.add_argument("--pin-memory", action="store_true")
-    parser.add_argument("--chuncked_loss_compute_size", type=int, default=0, help="Chunk size for loss computation, 0 for not chunked")
+    parser.add_argument("--chuncked-loss-compute-size", type=int, default=0, help="Chunk size for loss computation, 0 for not chunked")
 
     # logging/checkpoint
     parser.add_argument("--logging-per-step", type=int, default=10)
