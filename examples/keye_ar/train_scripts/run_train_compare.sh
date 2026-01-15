@@ -150,7 +150,7 @@ nohup mpirun --allow-run-as-root \
                 --beta2 0.95 \
                 --model-dtype bfloat16 \
                 --chuncked-loss-compute-size 1024 \
-                --warmup-steps 1000 \
+                --warmup-steps 20 \
                 --lr-scheduler cosine \
                 --min-lr 1e-6 \
                 --freeze-params "visual_tokenizer." \
