@@ -62,6 +62,7 @@ from .tokenizer_dataset import \
   get_assistant_mask, \
   get_rope_index_qwen3
 
+
 class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slowfast):
   """
   Merged dataset class for keye vitrope slowfast image.
