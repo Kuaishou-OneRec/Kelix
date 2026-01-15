@@ -716,13 +716,15 @@ def train() -> None:
 
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
-        image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
+        last_image_loss = image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
 
         if is_image_token.sum().item() == 0: 
-            if len(metrics.image_loss) == 0:
+            if last_image_loss is None:
                 image_loss = torch.zeros_like(text_loss)
             else:
-                metrics.image_loss.append(metrics.image_loss[-1])
+                metrics.image_loss.append(last_image_loss)
+        
+        
 
         print(f"text_loss={text_loss}, image_loss={image_loss}")
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
