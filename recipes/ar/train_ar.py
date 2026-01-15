@@ -339,8 +339,8 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
 
     # Micro-step metrics
     metrics.new("loss", dtype="float", reduce="mean")
-    metrics.new("image_loss", dtype="float", reduce="mean")
-    metrics.new("text_loss", dtype="float", reduce="mean")
+    metrics.new("image_token_loss", dtype="float", reduce="mean")
+    metrics.new("text_token_loss", dtype="float", reduce="mean")
     metrics.new("eos_loss", dtype="float", reduce="mean")
     metrics.new("grad_norm", dtype="float", reduce="mean")
     metrics.new("learning_rate", dtype="float")
@@ -356,8 +356,8 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
  
     # Global-step metrics, skip the first step
     avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_image_loss = metrics.image_loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_text_loss = metrics.text_loss.avg(window=acc_steps)[::acc_steps][1:]
+    avg_image_loss = metrics.image_token_loss.avg(window=acc_steps)[::acc_steps][1:]
+    avg_text_loss = metrics.text_token_loss.avg(window=acc_steps)[::acc_steps][1:]
     avg_eos_loss = metrics.eos_loss.avg(window=acc_steps)[::acc_steps][1:]
 
     avg_grad_norm = metrics.grad_norm[::acc_steps][1:]
@@ -381,10 +381,10 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
         name="loss", group="training")
     metrics.logger.track(
         avg_image_loss.avg(window=logging_per_step)[::logging_per_step], 
-        name="image_loss", group="training")
+        name="image_token_loss", group="training")
     metrics.logger.track(
         avg_text_loss.avg(window=logging_per_step)[::logging_per_step], 
-        name="text_loss", group="training")
+        name="text_token_loss", group="training")
     metrics.logger.track(
         avg_eos_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="eos_loss", group="training")
@@ -725,8 +725,8 @@ def train() -> None:
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
-        metrics.text_loss.append(text_loss.detach())
-        metrics.image_loss.append(image_loss.detach())
+        metrics.text_token_loss.append(text_loss.detach())
+        metrics.image_token_loss.append(image_loss.detach())
         metrics.eos_loss.append(eos_loss.detach())
         
         clip_grad_by_value(model, args.clip_range)
