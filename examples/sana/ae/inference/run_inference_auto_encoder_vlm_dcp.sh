@@ -3,6 +3,7 @@
 
 
 
+
 mkdir -p  /mmu_mllm_hdd_2/zangdunju/code/dev/muse_v2/exp3.22/0.7.58/18000step/dit100000_512/greedy/GenEval
 PYTHONPATH=. torchrun --nproc_per_node=8 recipes/sana/inference_auto_encoder_vlm.py \
         --model-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
