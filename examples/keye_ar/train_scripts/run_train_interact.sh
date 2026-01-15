@@ -149,7 +149,7 @@ mpirun --allow-run-as-root \
                 --max-steps 2500000 \
                 --save-checkpoint-per-step 1000 \
                 --seed 19260817 \
-                --max-length 640 \
+                --max-length 12000 \
                 --enable-gradient-checkpointing \
                 --comment '$comment' \
                 --commit-id $git_hash" 
