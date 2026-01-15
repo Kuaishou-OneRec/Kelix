@@ -21,5 +21,9 @@
     "max_sample_length": 16000,
     "train_video": false,
     "shuffle_window": 2,
-    "get_rope_index_fn": "get_rope_index_qwen3"
+    "get_rope_index_fn": "get_rope_index_qwen3",
+    "aspect_ratio_threshold": 0.75,
+    "force_assistant_image_size": 504,
+    "enable_vision_loss": true,
+    "no_loss_mask": false
 }

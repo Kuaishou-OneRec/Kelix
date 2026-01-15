@@ -2,6 +2,7 @@ from .base import DistributedDataset
 from .text import TextDataset
 from .tokenizer_dataset import ChatCompletionVisionDataset_keye_vitrope_slowfast
 from .tokenizer_dataset_video import ChatCompletionVisionDataset_keye_vitrope_slowfast_video
+from .ar_dataset import ARChatCompletionVisionDataset
 from .image import (
     Text2ImageDataset, 
     Token2ImageDataset,
@@ -20,5 +21,6 @@ __all__ = [
     'MultiScaleDatasetWrapper',
     'Chat2ImageDataset',
     'GenEvalInferenceDataset'
-    'ChatCompletionVisionDataset_keye_vitrope_slowfast_video'
+    'ChatCompletionVisionDataset_keye_vitrope_slowfast_video',
+    'ARChatCompletionVisionDataset'
 ]

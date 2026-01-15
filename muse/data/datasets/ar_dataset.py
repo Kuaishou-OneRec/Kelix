@@ -50,27 +50,76 @@ from muse.data.datasets.base import DistributedDataset, load_image
 from torch.utils.data import IterableDataset
 
 from muse.utils.common import print_rank_0
-
+from .ar_utils.resolution_finder import ResolutionFinder
+from .ar_utils.prompt_setter import SystemPromptByTask
+from .ar_utils.pre_resize_ops import resize_with_aspect_ratio_check, resize_and_center_crop
 
 logger = logging.getLogger(__name__)
 
-def timeout_handler(signum, frame):
-  raise TimeoutError("Process excel 60 secs")
 
-_DATASET_SKIP_MM = os.environ.get("_DATASET_SKIP_MM", "")
-assert _DATASET_SKIP_MM in ["", "SKIP_MM", "SKIP_VI"]
-
-from .tokenizer_dataset_video import \
-  ChatCompletionVisionDataset_keye_vitrope_slowfast_video, \
+from .tokenizer_dataset import \
+  ChatCompletionVisionDataset_keye_vitrope_slowfast, \
   get_assistant_mask, \
   get_rope_index_qwen3
 
-class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slowfast_video):
+class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slowfast):
   """
   Merged dataset class for keye vitrope slowfast image.
   Directly inherits from DistributedDataset, combining functionality with slowfast-specific enhancements.
   """
   def __init__(self,
+               aspect_ratio_threshold=None,
+               force_assistant_image_size=None,
+               use_resolution_finder=False,
+               resolution_finder_kwargs={},
                **kwargs
                ):
       super().__init__(**kwargs)
+      self.aspect_ratio_threshold = aspect_ratio_threshold
+      self.reso_finder = ResolutionFinder(**resolution_finder_kwargs) if use_resolution_finder else None
+      task2prompt_coarse = {
+        "image_edit": self.reso_finder.get_system_prompt("edit"),
+        "image_generation": self.reso_finder.get_system_prompt("generation"),
+        "__default__": self.reso_finder.get_system_prompt("understanding")
+      }
+      self.system_prompt_setter = SystemPromptByTask(task2prompt_coarse)
+
+  def _fill_image_block(self, block: Dict[str, Any],
+                        sample_dict: Dict[str, Any],
+                        conf: Dict[str, Any]):
+
+    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
+    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
+    if isinstance(block["image"], str) and block["image"] in sample_dict:
+      image = sample_dict[block["image"]]
+    elif isinstance(block["image"], 
+    str) and os.path.exists(block["image"]) and os.path.isabs(block["image"]):
+      image = Image.open(block["image"])
+    else:
+      image = block["image"]
+
+    if self.force_assistant_image_size is not None:
+      if self.aspect_ratio_threshold:
+        image = resize_with_aspect_ratio_check(image, self.force_assistant_image_size, self.force_assistant_image_size, aspect_ratio_threshold=self.aspect_ratio_threshold)
+      else:
+        image = resize_and_center_crop(image, self.force_assistant_image_size, self.force_assistant_image_size)
+
+    if self.aspect_ratio_threshold is None and self.reso_finder is not None:
+      image = self.reso_finder.crop_and_resize_image(image)
+
+    if image.mode != "RGB":
+      image = image.convert("RGB")
+
+    image = self.auto_aug(image)
+    block["image"] = image
+    block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+    block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+
+    if 'min_visual_tokens_per_fast_image' in conf:
+      block["fast_min_pixels"] = conf["min_visual_tokens_per_fast_image"] * (self.kwargs["fast_patch_size"] ** 2) * \
+          (self.spatial_merge_size ** 2)
+    if 'max_visual_tokens_per_fast_image' in conf:
+      block["fast_max_pixels"] = conf["max_visual_tokens_per_fast_image"] * (self.kwargs["fast_patch_size"] ** 2) * \
+          (self.spatial_merge_size ** 2)

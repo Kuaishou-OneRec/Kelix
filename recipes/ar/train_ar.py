@@ -37,7 +37,7 @@ from muse.training.activations import set_activation_checkpointing
 
 # muse imports
 from muse.config import KeyeARConfig, load_config, model_config
-from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
+from muse.data.datasets import ARChatCompletionVisionDataset
 from muse.losses import CrossEntropyLoss, ChunkedLossComputer
 
 from muse.models import get_model_class
@@ -224,7 +224,7 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     if args.max_length:
         ds_cfg["max_length"] = args.max_length
 
-    dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast(**ds_cfg)
+    dataset = ARChatCompletionVisionDataset(**ds_cfg)
 
     # dataset 内部通常会提供 collate_fn（如果没有，就用默认）
     collate_fn = getattr(dataset, "collate_fn", None)
