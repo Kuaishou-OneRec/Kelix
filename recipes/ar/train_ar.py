@@ -721,6 +721,8 @@ def train() -> None:
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
+        metrics.text_loss.append(text_loss.detach())
+        metrics.image_loss.append(image_loss.detach())
 
         clip_grad_by_value(model, args.clip_range)
 
