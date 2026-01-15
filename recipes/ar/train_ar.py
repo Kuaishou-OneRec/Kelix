@@ -710,20 +710,21 @@ def train() -> None:
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
-        # 核心：仅在rank=0进程中启用IPython embed，其他进程无限等待（不阻塞集群）
-        if rank == 0:
-            print(f"进入进程 {rank} 的交互式调试...")
-            # 调试前可先同步一次，确保其他进程已完成前期初始化
-            dist.barrier()
-            from IPython import embed
-            embed()  # 仅rank=0进入交互式调试
-        else:
-            # 非调试进程：执行barrier同步后，进入无限休眠（不占用资源，不引发死锁）
-            dist.barrier()
-            while True:
-                import time
-                torch.cuda.empty_cache()
-                time.sleep(3600)  # 休眠1小时，可按需调整
+        if 0:
+            # 核心：仅在rank=0进程中启用IPython embed，其他进程无限等待（不阻塞集群）
+            if rank == 0:
+                print(f"进入进程 {rank} 的交互式调试...")
+                # 调试前可先同步一次，确保其他进程已完成前期初始化
+                dist.barrier()
+                from IPython import embed
+                embed()  # 仅rank=0进入交互式调试
+            else:
+                # 非调试进程：执行barrier同步后，进入无限休眠（不占用资源，不引发死锁）
+                dist.barrier()
+                while True:
+                    import time
+                    torch.cuda.empty_cache()
+                    time.sleep(3600)  # 休眠1小时，可按需调整
 
 
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
