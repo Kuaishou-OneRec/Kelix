@@ -164,7 +164,6 @@ class KeyeImageTokenizer(Model):
             pixel_values: 视觉patches，形状 [num_patches, C, H, W]（与原版一致）。
             image_grid_thw: 形状 [num_images, 3]，每张图的(t,h,w)。
         """
-        print(f"tokenizer input shape: {pixel_values.shape}, image_grid_thw: {image_grid_thw}")
         # 与原版一致：输入是 4D (num_patches, C, H, W)
         # get_image_embeds 内部会 unsqueeze(0) 变成 5D
         image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
