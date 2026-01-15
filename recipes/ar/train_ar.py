@@ -184,9 +184,6 @@ def _setup_distributed(args: argparse.Namespace) -> tuple[int, int, int]:
     return rank, world_size, local_rank
 
 
-
-
-
 def _load_dataset_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -271,6 +268,7 @@ def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_
     logits = logits[:,:-1,:]
     is_text_token = is_text_token[:,1:]
     is_image_token = is_image_token[:,1:]
+
     return logits, labels.to(torch.int64), weights, loss_mask, is_text_token, is_image_token
 
 
@@ -355,7 +353,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     # Micro-step metrics
     metrics.new("loss", dtype="float", reduce="mean")
     metrics.new("image_loss", dtype="float", reduce="mean")
-    metrics.new(    "text_loss", dtype="float", reduce="mean")
+    metrics.new("text_loss", dtype="float", reduce="mean")
     metrics.new("grad_norm", dtype="float", reduce="mean")
     metrics.new("learning_rate", dtype="float")
     metrics.new("step_time", dtype="timestamp", initial_value=lambda: time.time())

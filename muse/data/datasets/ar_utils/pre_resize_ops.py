@@ -6,6 +6,11 @@ total_images_processed = 0
 exception_images_count = 0
 
 
+class BadAspectRatioException(Exception):
+    """自定义异常类，用于处理图片长宽比超出阈值的情况"""
+    pass
+
+
 def resize_and_center_crop(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
     """
     对PIL图像进行等比例缩放后居中裁剪至目标尺寸
@@ -81,7 +86,7 @@ def resize_with_aspect_ratio_check(image: Image.Image, target_width: int, target
         and not (aspect_ratio_threshold < original_height / original_width <= 1.0):
         # 异常图片计数
         exception_images_count += 1
-        raise ValueError(f"图片长宽比超出阈值，请检查图片：{original_width}x{original_height}, exception_images_count/total_images_count={exception_images_count}/{total_images_processed}")
+        raise BadAspectRatioException(f"图片长宽比超出阈值，请检查图片：{original_width}x{original_height}, exception_images_count/total_images_count={exception_images_count}/{total_images_processed}")
     
     image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
     return image
