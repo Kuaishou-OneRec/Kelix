@@ -621,7 +621,7 @@ def train() -> None:
             )
 
         logits, labels, weights, loss_mask = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
-
+        print(f"00000 logits shape: {logits.shape}, labels shape: {labels.shape}, weights shape: {weights.shape}")
         logits = logits.flatten(0,1)
         labels = labels.flatten(0,1)
         weights = weights.flatten(0,1)
