@@ -14,10 +14,6 @@
 from __future__ import annotations
 
 import os
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["CUDA_DEVICE_MAX_CONNECTIONS"] = "1"
-
-
 
 import argparse
 import contextlib
@@ -55,7 +51,6 @@ from muse.training.common import (
     compute_fsdp_zero2_grad_norm,
     freeze_params_by_pattern,
     get_torch_dtype,
-    initialize_metrics,
     set_default_dtype,
     StepScheduler,
 )
@@ -274,7 +269,9 @@ def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_
     weights = weights[:,1:]
     loss_mask = loss_mask[:,1:]
     logits = logits[:,:-1,:]
-    return logits, labels.to(torch.int64), weights, loss_mask
+    is_text_token = is_text_token[:,1:]
+    is_image_token = is_image_token[:,1:]
+    return logits, labels.to(torch.int64), weights, loss_mask, is_text_token, is_image_token
 
 
 def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
@@ -340,6 +337,94 @@ def squeeze0_if_dim_is_3(tensor: torch.Tensor) -> torch.Tensor:
     if tensor.ndim == 3:
         tensor = tensor.squeeze(0)
     return tensor
+
+
+def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logger]):
+    """
+    Initialize metrics for training, define some basic metrics, you can add more metrics later.
+    
+    Args:
+        acc_steps: Number of gradient accumulation steps
+        logging_per_step: Frequency of logging (every N global steps)
+        loggers: List of loggers to use
+    """
+    from muse.training.common import Metrics
+    import time
+    metrics = Metrics()
+
+    # Micro-step metrics
+    metrics.new("loss", dtype="float", reduce="mean")
+    metrics.new("image_loss", dtype="float", reduce="mean")
+    metrics.new(    "text_loss", dtype="float", reduce="mean")
+    metrics.new("grad_norm", dtype="float", reduce="mean")
+    metrics.new("learning_rate", dtype="float")
+    metrics.new("step_time", dtype="timestamp", initial_value=lambda: time.time())
+    metrics.new("tokens", dtype="int", reduce="sum", initial_value=0)
+    metrics.new("samples", dtype="int", reduce="sum", initial_value=0)
+
+    # 增加哨兵节点，初始化部分序列
+    metrics.initialize()
+
+    total_tokens = metrics.tokens.cumsum()
+    total_samples = metrics.samples.cumsum()
+ 
+    # Global-step metrics, skip the first step
+    avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
+
+    avg_grad_norm = metrics.grad_norm[::acc_steps][1:]
+    
+    learning_rate = metrics.learning_rate[::acc_steps][1:]
+
+    # Fixed: Skip the first None from diff(), same pattern as other metrics
+    seconds_per_step = metrics.step_time[::acc_steps].diff()[1:]
+
+    tokens_per_sec_per_gpu = (total_tokens.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
+    samples_per_sec_per_gpu = (total_samples.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
+
+    tokens_per_day = tokens_per_sec_per_gpu * 86400 * metrics.get_world_size()
+
+    for logger in loggers:
+        metrics.add_logger(logger)
+
+    # Logging metrics, avg over the last logging_per_step steps
+    metrics.logger.track(
+        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
+        name="loss", group="training")
+    metrics.logger.track(
+        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
+        name="image_loss", group="training")
+    metrics.logger.track(
+        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
+        name="text_loss", group="training")
+    metrics.logger.track(
+        avg_grad_norm.avg(window=logging_per_step)[::logging_per_step], 
+        name="grad_norm", group="training")
+    metrics.logger.track(
+        learning_rate.avg(window=logging_per_step)[::logging_per_step], 
+        name="learning_rate", group="training")
+    # Skip first None value from seconds_per_step before final logging slice
+    metrics.logger.track(
+        seconds_per_step.avg(window=logging_per_step)[::logging_per_step], 
+        name="seconds_per_step", group="perf")
+    metrics.logger.track(
+        total_tokens[::acc_steps][::logging_per_step], 
+        name="total_tokens", group="perf")
+    metrics.logger.track(
+        total_samples[::acc_steps][::logging_per_step], 
+        name="total_samples", group="perf")
+    metrics.logger.track(
+        tokens_per_sec_per_gpu.avg(window=logging_per_step)[::logging_per_step], 
+        name="tokens_per_sec_per_gpu", group="perf")
+    metrics.logger.track(
+        samples_per_sec_per_gpu.avg(window=logging_per_step)[::logging_per_step], 
+        name="samples_per_sec_per_gpu", group="perf")
+    metrics.logger.track(
+        tokens_per_day.avg(window=logging_per_step)[::logging_per_step], 
+        name="tokens_per_day", group="perf")
+
+    return metrics
+
+
 
 def train() -> None:
     args = _build_arg_parser().parse_args()
@@ -620,14 +705,18 @@ def train() -> None:
                 return_expanded_ids=True
             )
 
-        logits, labels, weights, loss_mask = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
-        print(f"00000 logits shape: {logits.shape}, labels shape: {labels.shape}, weights shape: {weights.shape}")
+        logits, labels, weights, loss_mask, is_text_token, is_image_token = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
         logits = logits.flatten(1,2)
         labels = labels.flatten(1,2)
         weights = weights.flatten(1,2)
+        is_text_token = is_text_token.flatten(1,2)
+        is_image_token = is_image_token.flatten(1,2)
 
-        print(f"logits shape: {logits.shape}, labels shape: {labels.shape}, weights shape: {weights.shape}")
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
+
+        print(f"is_text_token={is_text_token.shape}, is_image_token={is_image_token.shape}, per_token_loss={per_token_loss.shape}")
+        text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
+        image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
 
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())

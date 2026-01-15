@@ -110,7 +110,6 @@ class CrossEntropyLoss(nn.Module):
           logits = logits[:, :-1, :]
           labels = labels[:, 1:]
 
-        print(f"logitslogitslogits", logits.shape)
         # Reshape for cross-entropy calculation
         logits_flat = logits.float().reshape(-1, vocab_size)
         labels_flat = labels.reshape(-1)
