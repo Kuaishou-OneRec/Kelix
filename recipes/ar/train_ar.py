@@ -721,8 +721,9 @@ def train() -> None:
             # 非调试进程：执行barrier同步后，进入无限休眠（不占用资源，不引发死锁）
             dist.barrier()
             while True:
+                import time
                 torch.cuda.empty_cache()
-                torch.sleep(3600)  # 休眠1小时，可按需调整
+                time.sleep(3600)  # 休眠1小时，可按需调整
 
 
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
