@@ -257,6 +257,7 @@ def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_
     image_weight = (n_text_token_per_pos + n_image_token_per_pos) / 2 / n_image_token_per_pos
     is_text_token = (input_ids[:,:,:1] < vocab_size).repeat(1, 1, model_config.qwen_config.n_q_tokens + 1) & loss_mask
     is_image_token = (input_ids[:,:,:1] >= vocab_size).repeat(1, 1, model_config.qwen_config.n_q_tokens + 1) & loss_mask
+    is_eos_token = (input_ids == q_eos_token) & loss_mask
     weights = text_weight * is_text_token + image_weight * is_image_token
 
     assert weights.shape == input_ids.shape, f"weights shape must be {input_ids.shape}, but got {weights.shape}"
@@ -266,10 +267,11 @@ def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_
     weights = weights[:,1:]
     loss_mask = loss_mask[:,1:]
     logits = logits[:,:-1,:]
-    is_text_token = is_text_token[:,1:] & (labels != ignore_index)
-    is_image_token = is_image_token[:,1:] & (labels != ignore_index)
+    is_text_token = is_text_token[:,1:] & (labels != ignore_index) & (labels != q_eos_token)
+    is_image_token = is_image_token[:,1:] & (labels != ignore_index) & (labels != q_eos_token)
+    is_eos_token = is_eos_token[:,1:] & (labels != ignore_index)
 
-    return logits, labels.to(torch.int64), weights, loss_mask, is_text_token, is_image_token
+    return logits, labels.to(torch.int64), weights, loss_mask, is_text_token, is_image_token, is_eos_token
 
 
 def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
@@ -354,6 +356,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     metrics.new("loss", dtype="float", reduce="mean")
     metrics.new("image_loss", dtype="float", reduce="mean")
     metrics.new("text_loss", dtype="float", reduce="mean")
+    metrics.new("eos_loss", dtype="float", reduce="mean")
     metrics.new("grad_norm", dtype="float", reduce="mean")
     metrics.new("learning_rate", dtype="float")
     metrics.new("step_time", dtype="timestamp", initial_value=lambda: time.time())
@@ -370,6 +373,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
     avg_image_loss = metrics.image_loss.avg(window=acc_steps)[::acc_steps][1:]
     avg_text_loss = metrics.text_loss.avg(window=acc_steps)[::acc_steps][1:]
+    avg_eos_loss = metrics.eos_loss.avg(window=acc_steps)[::acc_steps][1:]
 
     avg_grad_norm = metrics.grad_norm[::acc_steps][1:]
     
@@ -396,6 +400,9 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     metrics.logger.track(
         avg_text_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="text_loss", group="training")
+    metrics.logger.track(
+        avg_eos_loss.avg(window=logging_per_step)[::logging_per_step], 
+        name="eos_loss", group="training")
     metrics.logger.track(
         avg_grad_norm.avg(window=logging_per_step)[::logging_per_step], 
         name="grad_norm", group="training")
@@ -707,12 +714,13 @@ def train() -> None:
                 return_expanded_ids=True
             )
 
-        logits, labels, weights, loss_mask, is_text_token, is_image_token = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
+        logits, labels, weights, loss_mask, is_text_token, is_image_token, is_eos_token = _prepare_shifted_labels(expanded_ids, logits, loss_mask, ignore_index=loss_fn.ignore_index, model_config=model.config)
         logits = logits.flatten(1,2)
         labels = labels.flatten(1,2)
         weights = weights.flatten(1,2)
         is_text_token = is_text_token.flatten(1,2)
         is_image_token = is_image_token.flatten(1,2)
+        is_eos_token = is_eos_token.flatten(1,2)
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
         if rank == 0:
@@ -729,6 +737,7 @@ def train() -> None:
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
+        eos_loss = (per_token_loss * is_eos_token).sum() / is_eos_token.sum()
 
         if is_image_token.sum().item() == 0: 
             if last_image_loss is None:
@@ -745,7 +754,8 @@ def train() -> None:
         metrics.tokens.append(input_ids.shape[1])
         metrics.text_loss.append(text_loss.detach())
         metrics.image_loss.append(image_loss.detach())
-
+        metrics.eos_loss.append(eos_loss.detach())
+        
         clip_grad_by_value(model, args.clip_range)
 
         if step_scheduler.is_gradient_accumulation_boundary():
