@@ -1,0 +1,3 @@
+Rejection reasons: oversaturated (saturation: 0.923 > 0.9)
+Image mode: RGB
+Image size: (512, 512)

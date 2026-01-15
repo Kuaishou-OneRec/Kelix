@@ -1,0 +1,3 @@
+Rejection reasons: too dark (brightness: 0.068 < 0.15)
+Image mode: RGB
+Image size: (700, 700)

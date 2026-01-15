@@ -1,0 +1,3 @@
+Rejection reasons: too bright (brightness: 0.884 > 0.85); undersaturated (saturation: 0.005 < 0.05)
+Image mode: RGB
+Image size: (960, 1200)
