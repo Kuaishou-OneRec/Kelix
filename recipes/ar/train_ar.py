@@ -710,22 +710,6 @@ def train() -> None:
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
-        if rank == 0:
-            torch.save(
-                {
-                    "per_token_loss": per_token_loss,
-                    "is_text_token": is_text_token,
-                    "is_image_token": is_image_token,
-                    "is_eos_token": is_eos_token,
-                    "logits": logits,
-                    "labels": labels,
-                    "weights": weights,
-                    "expanded_ids": expanded_ids,
-                    "input_ids": input_ids,
-                },
-                "debug.pt"
-            )
-            exit()
 
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
@@ -738,6 +722,25 @@ def train() -> None:
                 image_loss = last_image_loss.detach()
         
         last_image_loss = image_loss
+
+        print(f"text_loss: {text_loss.item():.4f}, image_loss: {image_loss.item():.4f}, eos_loss: {eos_loss.item():.4f}")
+        if rank == 0:
+            torch.save(
+                {
+                    "per_token_loss": per_token_loss,
+                    "is_text_token": is_text_token,
+                    "is_image_token": is_image_token,
+                    "is_eos_token": is_eos_token,
+                    "logits": logits,
+                    "labels": labels,
+                    "weights": weights,
+                    "expanded_ids": expanded_ids,
+                    "input_ids": input_ids,
+                    "loss_mask": loss_mask,
+                },
+                "debug.pt"
+            )
+            exit()
 
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
