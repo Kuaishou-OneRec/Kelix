@@ -1,6 +1,8 @@
 
 # 注意: max-condition-length要按照实际vlm输出的token数来，因为计算rope时要获取实际的height和width，如果max-condition-length过大，会导致rope的计算与实际token数有diff
 
+
+
 mkdir -p  /mmu_mllm_hdd_2/zangdunju/code/dev/muse_v2/exp3.22/0.7.58/18000step/dit100000_512/greedy/GenEval
 PYTHONPATH=. torchrun --nproc_per_node=8 recipes/sana/inference_auto_encoder_vlm.py \
         --model-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
