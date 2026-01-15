@@ -472,19 +472,12 @@ class DistributedDataset(IterableDataset):
           except (AttributeError, ValueError):
             pass
           raise
-        
-        except BadAspectRatioException as e:
-          # Clear timeout
-          try:
-            signal.alarm(0)
-          except (AttributeError, ValueError):
-            pass
 
         except Exception as e:
           # Clear timeout
           try:
             signal.alarm(0)
-          except (AttributeError, ValueError):
+          except (AttributeError, ValueError, BadAspectRatioException):
             pass
           
           # Track errors
