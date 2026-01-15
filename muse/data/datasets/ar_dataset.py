@@ -72,10 +72,11 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
                aspect_ratio_threshold=None,
                force_assistant_image_size=None,
                use_resolution_finder=False,
-               resolution_finder_kwargs={},
+               resolution_finder_kwargs=None,
                **kwargs
                ):
       super().__init__(**kwargs)
+      if resolution_finder_kwargs is None: resolution_finder_kwargs = {}
       self.force_assistant_image_size = force_assistant_image_size
       self.aspect_ratio_threshold = aspect_ratio_threshold
       self.reso_finder = ResolutionFinder(**resolution_finder_kwargs) if use_resolution_finder else None

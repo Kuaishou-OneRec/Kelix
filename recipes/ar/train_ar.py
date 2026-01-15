@@ -216,6 +216,10 @@ def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     if args.max_length:
         ds_cfg["max_length"] = args.max_length
 
+    if torch.distributed.is_initialized():
+        ds_cfg["rank"] = dist.get_rank()
+        ds_cfg["world_size"] = dist.get_world_size()
+            
     dataset = ARChatCompletionVisionDataset(**ds_cfg)
 
     # dataset 内部通常会提供 collate_fn（如果没有，就用默认）
