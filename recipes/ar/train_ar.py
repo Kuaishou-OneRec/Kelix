@@ -266,8 +266,8 @@ def _prepare_shifted_labels(input_ids: torch.Tensor, logits: torch.Tensor, loss_
     weights = weights[:,1:]
     loss_mask = loss_mask[:,1:]
     logits = logits[:,:-1,:]
-    is_text_token = is_text_token[:,1:]
-    is_image_token = is_image_token[:,1:]
+    is_text_token = is_text_token[:,1:] & (labels != ignore_index)
+    is_image_token = is_image_token[:,1:] & (labels != ignore_index)
 
     return logits, labels.to(torch.int64), weights, loss_mask, is_text_token, is_image_token
 
@@ -368,6 +368,8 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
  
     # Global-step metrics, skip the first step
     avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
+    avg_image_loss = metrics.image_loss.avg(window=acc_steps)[::acc_steps][1:]
+    avg_text_loss = metrics.text_loss.avg(window=acc_steps)[::acc_steps][1:]
 
     avg_grad_norm = metrics.grad_norm[::acc_steps][1:]
     
@@ -389,10 +391,10 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
         avg_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="loss", group="training")
     metrics.logger.track(
-        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
+        avg_image_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="image_loss", group="training")
     metrics.logger.track(
-        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
+        avg_text_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="text_loss", group="training")
     metrics.logger.track(
         avg_grad_norm.avg(window=logging_per_step)[::logging_per_step], 
@@ -715,12 +717,17 @@ def train() -> None:
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
+        if is_image_token.sum().item() == 0: 
+            image_loss = torch.zeros_like(text_loss)
         print(f"text_loss={text_loss}, image_loss={image_loss}")
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
         metrics.text_loss.append(text_loss.detach())
         metrics.image_loss.append(image_loss.detach())
+
+        print(f"metrics.image_loss", metrics.image_loss)
+        print(f"metrics.text_loss", metrics.text_loss)
 
         clip_grad_by_value(model, args.clip_range)
 
