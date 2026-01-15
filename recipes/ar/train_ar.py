@@ -722,7 +722,8 @@ def train() -> None:
                     "weights": weights,
                     "expanded_ids": expanded_ids,
                     "input_ids": input_ids,
-                }
+                },
+                "debug.pt"
             )
             exit()
 
