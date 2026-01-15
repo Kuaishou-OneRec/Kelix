@@ -641,7 +641,7 @@ def train() -> None:
         data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
 
     last_image_loss = None
-    
+
     # train loop
     while True:
         try:
@@ -715,7 +715,16 @@ def train() -> None:
         is_image_token = is_image_token.flatten(1,2)
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
-
+        if rank == 0:
+            torch.save(
+                {
+                    "logits": logits,
+                    "per_token_loss": per_token_loss,
+                    "labels": labels,
+                    "is_text_token": is_text_token,
+                }
+            )
+            exit()
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
