@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # Model and output directories - modify as needed
 MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/image/stage1
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/image/stage1_debug
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 KAI_FLAG_FILE=msy
@@ -143,6 +143,7 @@ nohup mpirun --allow-run-as-root \
                 --comment '$comment' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
+                --allow-random-init-params 'visual_tokenizer.up_projectors.0.weight,visual_tokenizer.up_projectors.1.weight,visual_tokenizer.up_projectors.2.weight,visual_tokenizer.up_projectors.3.weight,visual_tokenizer.up_projectors.4.weight,visual_tokenizer.up_projectors.5.weight,visual_tokenizer.up_projectors.6.weight,visual_tokenizer.up_projectors.7.weight' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 

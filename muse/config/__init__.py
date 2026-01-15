@@ -34,6 +34,7 @@ from muse.config.model_config import (
     UnifiedTokenDecoderConfig,
     KeyeARConfig,
     UnifiedQwen3Config,
+    SanaConfig
 )
 
 from muse.config.dataset_config import DatasetConfig
@@ -66,6 +67,9 @@ __all__ = [
     "KeyeTokenizerConfig",
     "KeyeTokenizerEnd2EndImageConfig",
     "KeyeTokenizerEnd2EndVideoConfig",
+    "UnifiedTokenDecoderConfig",
+    "KeyeARConfig",
+    "UnifiedQwen3Config",
     "SanaConfig",
     
     # Dataset config

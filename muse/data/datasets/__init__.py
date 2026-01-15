@@ -2,7 +2,10 @@ from .base import DistributedDataset
 from .text import TextDataset
 from .tokenizer_dataset import ChatCompletionVisionDataset_keye_vitrope_slowfast
 from .tokenizer_dataset_video import ChatCompletionVisionDataset_keye_vitrope_slowfast_video
+<<<<<<< HEAD
 from .ar_dataset import ARChatCompletionVisionDataset
+=======
+>>>>>>> master
 from .image import (
     Text2ImageDataset, 
     Token2ImageDataset,
@@ -19,8 +22,12 @@ __all__ = [
     'Text2ImageDataset',
     'Token2ImageDataset',
     'MultiScaleDatasetWrapper',
+<<<<<<< HEAD
     'Chat2ImageDataset',
     'GenEvalInferenceDataset'
     'ChatCompletionVisionDataset_keye_vitrope_slowfast_video',
     'ARChatCompletionVisionDataset'
+=======
+    'ChatCompletionVisionDataset_keye_vitrope_slowfast_video',
+>>>>>>> master
 ]

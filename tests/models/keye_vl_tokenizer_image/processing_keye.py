@@ -27,7 +27,21 @@
 from typing import List, Union
 
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import ImageInput, VideoInput
+import numpy as np
+ImageInput = Union[
+    "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
+]  # noqa
+
+VideoInput = Union[
+    list["PIL.Image.Image"],
+    "np.ndarray",
+    "torch.Tensor",
+    list["np.ndarray"],
+    list["torch.Tensor"],
+    list[list["PIL.Image.Image"]],
+    list[list["np.ndarrray"]],
+    list[list["torch.Tensor"]],
+]  # noqa
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from .image_processing_keye import SiglipImageProcessor

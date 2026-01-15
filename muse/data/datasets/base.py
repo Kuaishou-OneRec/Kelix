@@ -166,6 +166,7 @@ class ParquetReader(Reader):
             continue
 
 
+<<<<<<< HEAD
 class ShuffledParquetReaderV2(Reader):
     """
     IterableDataset for parquet files, consuming files in order.
@@ -216,6 +217,8 @@ class ShuffledParquetReaderV2(Reader):
             continue
 
 
+=======
+>>>>>>> master
 class ShuffledParquetReader(ParquetReader):
     """
     带局部窗口打乱的 Parquet 读取器。
@@ -362,7 +365,7 @@ class DistributedDataset(IterableDataset):
     self.shard_by = shard_by
     self.reader = reader
     self.kwargs = kwargs
-    
+    self.shuffle_window = shuffle_window
     # Initialize attributes
     self._files = []
     self._actual_shard_by = shard_by
@@ -397,9 +400,14 @@ class DistributedDataset(IterableDataset):
     # 根据配置返回对应的 Reader
     if self.reader == "parquet":
       if self.shuffle_window > 1:
+<<<<<<< HEAD
         print(f"Shuffle window: {self.shuffle_window}")
         # 返回一个构造函数，支持传入 window_size
         return lambda sources: ShuffledParquetReaderV2(sources, local_shuffle_buffer_size=1024 * self.shuffle_window)
+=======
+        # 返回一个构造函数，支持传入 window_size
+        return lambda sources: ShuffledParquetReader(sources, window_size=self.shuffle_window)
+>>>>>>> master
       return ParquetReader
     else:
       raise ValueError(f"Unsupported reader: {self.reader}")

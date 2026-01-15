@@ -475,6 +475,7 @@ def get_rope_index_slowfast(
             return position_ids
 
 
+<<<<<<< HEAD
 def get_rope_index_qwen3(
     input_ids: torch.LongTensor,
     attention_mask: Optional[torch.Tensor] = None,
@@ -501,6 +502,8 @@ def get_rope_index_qwen3(
     return position_ids
 
 
+=======
+>>>>>>> master
 
 class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
   """
@@ -540,7 +543,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
                max_visual_tokens_per_frame: int = 512,
                shuffle_window: int = 5,
                train_video: bool = True,
+<<<<<<< HEAD
                get_rope_index_fn: str="get_rope_index_slowfast",
+=======
+>>>>>>> master
                **kwargs
                ):
     """
@@ -572,8 +578,12 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
          logger.warning(f"Failed to load config/Processor from {base_model_dir}: {e}. Using default args.")
 
     self.use_flops_balance = kwargs.pop("use_flops_balance", False)
+<<<<<<< HEAD
     self.get_rope_index_fn = eval(get_rope_index_fn) if isinstance(get_rope_index_fn, str) else get_rope_index_fn
     self.slowfast_padder = SlowFastVisionPadder(base_model_dir, get_rope_index=self.get_rope_index_fn)
+=======
+    self.slowfast_padder = SlowFastVisionPadder(base_model_dir)
+>>>>>>> master
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.process_vision_info = process_vision_info
@@ -582,7 +592,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
+<<<<<<< HEAD
     
+=======
+>>>>>>> master
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -824,7 +837,11 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
+<<<<<<< HEAD
     inputs["position_ids"] = self.get_rope_index_fn(
+=======
+    inputs["position_ids"] = get_rope_index_slowfast(
+>>>>>>> master
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
@@ -835,7 +852,11 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
         spatial_merge_size=self.spatial_merge_size,
         vision_start_token_id=self.vision_start_token_id,
     )
+<<<<<<< HEAD
     print(f"getppp ", inputs["position_ids"].shape)
+=======
+
+>>>>>>> master
     inputs.pop("attention_mask")
     return inputs
 
@@ -947,7 +968,11 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(DistributedDataset):
           f"Unable to generate sample with 0 loss_mask."
         )
 
+<<<<<<< HEAD
     inputs["position_ids"] = self.get_rope_index_fn(
+=======
+    inputs["position_ids"] = get_rope_index_slowfast(
+>>>>>>> master
         input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
@@ -1514,7 +1539,11 @@ class SlowFastVisionPadder:
     """
     给slow fast的padding，最多使用4+6个token
     """
+<<<<<<< HEAD
     def __init__(self, model_dir, get_rope_index):
+=======
+    def __init__(self, model_dir):
+>>>>>>> master
         processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
         self.processor = processor
         self.patch_size = processor.image_processor.patch_size
@@ -1528,7 +1557,10 @@ class SlowFastVisionPadder:
         self.vision_start = processor.tokenizer.encode("<|vision_start|>")[0]
         self.vision_end = processor.tokenizer.encode("<|vision_end|>")[0]
         self.frame = processor.tokenizer.encode("<|frame|>")[0]
+<<<<<<< HEAD
         self.get_rope_index = get_rope_index
+=======
+>>>>>>> master
 
     def __call__(self, packed_pixel_values, packed_pixel_values_videos, packed_fast_pixel_values_videos):
           return [
@@ -1561,7 +1593,11 @@ class SlowFastVisionPadder:
             "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
+<<<<<<< HEAD
         inputs["position_ids"] = self.get_rope_index(
+=======
+        inputs["position_ids"] = get_rope_index(
+>>>>>>> master
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),
@@ -1605,7 +1641,11 @@ class SlowFastVisionPadder:
             "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
+<<<<<<< HEAD
         inputs["position_ids"] = self.get_rope_index(
+=======
+        inputs["position_ids"] = get_rope_index(
+>>>>>>> master
           inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw"),
           video_grid_thw=inputs.get("video_grid_thw"),

@@ -63,7 +63,7 @@ class VectorQuantizer(nn.Module):
             if norm_type == 'LayerNorm':
                 return nn.LayerNorm(embedding_dim) # lzx norm
             elif norm_type == 'l2':
-                return lambda x: torch.norm(x, p=2, dim=-1)
+                return lambda x: F.normalize(x, p=2, dim=-1)
             elif norm_type is None:
                 return nn.Identity()
             else:
@@ -72,7 +72,7 @@ class VectorQuantizer(nn.Module):
         self.q_norm = make_norm()
         self.z_norm = make_norm()
 
-    def train_code_book(self):
+    def train_codebook(self):
         print(f"train code book embeddings.")
         for p in self.embedding.parameters():
             p.requires_grad = True

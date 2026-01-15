@@ -143,6 +143,7 @@ nohup mpirun --allow-run-as-root \
                 --comment '$comment' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
+                --allow-random-init-params 'visual_tokenizer.up_projectors.0.weight,visual_tokenizer.up_projectors.1.weight,visual_tokenizer.up_projectors.2.weight,visual_tokenizer.up_projectors.3.weight,visual_tokenizer.up_projectors.4.weight,visual_tokenizer.up_projectors.5.weight,visual_tokenizer.up_projectors.6.weight,visual_tokenizer.up_projectors.7.weight' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 

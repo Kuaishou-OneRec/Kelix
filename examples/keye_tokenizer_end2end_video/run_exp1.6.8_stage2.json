@@ -1,5 +1,5 @@
 {
-    "sources": "/llm_reco/vlm/datahub/staging/video_for_resampler_stage1/0.0.1/index/parquet.json",
+    "sources": "/llm_reco/vlm/datahub/staging/video_for_resampler_stage2/0.0.5/index/parquet.json",
     "max_length": 16000,
     "min_visual_tokens_per_image": 32,
     "max_visual_tokens_per_image": 1280,

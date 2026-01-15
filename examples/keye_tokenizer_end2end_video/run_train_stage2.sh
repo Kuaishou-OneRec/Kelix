@@ -16,9 +16,9 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo/MuseV2/video/stage1/global_step21000/converted
+MODEL_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage1/global_step27000/converted
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e_purevideo/MuseV2/video/stage2_debug
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/keye_tok_e2e/MuseV2/mix/stage2
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 KAI_FLAG_FILE=msy
@@ -27,7 +27,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="keye_tokenizer_end2end_image_train_video_stage2"
+comment="keye_tokenizer_end2end_video_train_stage2"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -113,7 +113,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "bash numa_runner.sh python3 recipes/train_keye_tok_end2end_video.py \
+        bash -c "python3 recipes/train_keye_tok_end2end_video.py \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_tokenizer_end2end_video/run_exp1.6.8_stage2.json \
@@ -140,6 +140,7 @@ nohup mpirun --allow-run-as-root \
                 --comment '$comment' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
+                --allow-random-init-params 'visual_tokenizer.up_projectors.0.weight,visual_tokenizer.up_projectors.1.weight,visual_tokenizer.up_projectors.2.weight,visual_tokenizer.up_projectors.3.weight,visual_tokenizer.up_projectors.4.weight,visual_tokenizer.up_projectors.5.weight,visual_tokenizer.up_projectors.6.weight,visual_tokenizer.up_projectors.7.weight' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 

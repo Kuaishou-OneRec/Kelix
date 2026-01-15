@@ -300,6 +300,11 @@ class Qwen3Attention(nn.Module):
         return self.output_proj(output)
 
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> master
 class KeyeFlashAttention2(nn.Module):
     """
     Basically, it is standard multihead attention, but with QK-norm applied before
@@ -495,7 +500,6 @@ class KeyeFlashAttention2(nn.Module):
         q = q.transpose(1,2)
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
-            print(f"possss q={q.shape}, input_pos={input_pos.shape}")
             q = self.pos_embeddings(q, input_pos=input_pos)
 
         if y is None:
@@ -751,4 +755,8 @@ class MultimodalRotaryEmbedding(nn.Module):
 
         
         return x_out
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> master
