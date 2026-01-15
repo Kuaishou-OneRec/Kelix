@@ -140,7 +140,7 @@ nohup mpirun --allow-run-as-root \
                 --beta1 0.9 \
                 --beta2 0.95 \
                 --model-dtype bfloat16 \
-                --chuncked-loss-compute-size 2048 \
+                --chuncked-loss-compute-size 1024 \
                 --warmup-steps 1000 \
                 --lr-scheduler cosine \
                 --min-lr 1e-6 \
