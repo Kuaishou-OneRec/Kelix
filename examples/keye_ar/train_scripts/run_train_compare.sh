@@ -144,7 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --model-name KeyeARModel \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_ar/train_scripts/run_train_compare.json \
-                --learning-rate 1e-5 \
+                --learning-rate 1e-4 \
                 --weight-decay 0.0 \
                 --beta1 0.9 \
                 --beta2 0.95 \
@@ -152,7 +152,7 @@ nohup mpirun --allow-run-as-root \
                 --chuncked-loss-compute-size 1024 \
                 --warmup-steps 20 \
                 --lr-scheduler cosine \
-                --min-lr 1e-6 \
+                --min-lr 1e-7 \
                 --freeze-params "visual_tokenizer." \
                 --logging-per-step 20 \
                 --max-steps 2500000 \
