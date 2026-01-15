@@ -91,10 +91,7 @@ from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
     get_context_parallel_group,
     get_context_parallel_world_size,
-<<<<<<< HEAD
-=======
     get_data_parallel_group,
->>>>>>> master
     get_data_parallel_rank,
     get_data_parallel_world_size,
     get_local_sequence,
@@ -113,20 +110,13 @@ from muse.data.datasets import ChatCompletionVisionDataset_keye_vitrope_slowfast
 
 from muse.config import load_config
 
-<<<<<<< HEAD
-from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
-from muse.training.common import initialize_metrics, StepScheduler
-=======
 from muse.training.common import StepScheduler
 from muse.training.simple_metrics import SimpleMetrics
->>>>>>> master
 from muse.losses import CrossEntropyLoss
 
 logger = logging.getLogger(__name__)
 
 
-<<<<<<< HEAD
-=======
 class TimeTracker:
     """时间跟踪器，用于记录各个阶段的时间间隔，计算最近 n 次的平均值。"""
     
@@ -194,7 +184,6 @@ class TimeTracker:
         return result
 
 
->>>>>>> master
 def compute_codebook_metrics(
     indices: list,
     codebook_size: int,
@@ -261,8 +250,6 @@ def compute_codebook_metrics(
     return global_perplexities, codebook_usages
 
 
-<<<<<<< HEAD
-=======
 def compute_combined_codebook_metrics(
     image_indices: list,
     video_indices: list,
@@ -343,7 +330,6 @@ def compute_combined_codebook_metrics(
     return global_perplexities, codebook_usages
 
 
->>>>>>> master
 def get_argument_parser():
     parser = argparse.ArgumentParser()
 
@@ -475,13 +461,8 @@ def get_argument_parser():
     parser.add_argument("--beta2", type=float, default=0.95,
                         help="beta2 for Adam Optimizer")
     
-<<<<<<< HEAD
-    parser.add_argument("--clip-range", type=float, default=1.0,
-                        help="The gradient clip range.")
-=======
     parser.add_argument("--clip-range", type=float, default=None,
                         help="The gradient clip range. None means no clipping.")
->>>>>>> master
 
     ############ Training Args ############
 
@@ -965,139 +946,6 @@ def train():
         output_dir=args.output_dir) \
         if args.enable_profile else None
 
-<<<<<<< HEAD
-    # Setup logging
-    if dist.get_rank() == 0:
-        stdout_logger = Logger("stdout", [StdoutBackend()])
-        csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
-        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
-        loggers = [stdout_logger, csv_logger, tb_logger]
-    else:
-        loggers = []
-
-    # Initialize metrics and step scheduler
-    metrics = initialize_metrics(
-        acc_steps=args.gradient_accumulation_steps,
-        logging_per_step=args.logging_per_step,
-        loggers=loggers
-    )
-    
-    # Add extra metrics for KeyeTokenizerEnd2EndImage training
-    metrics.new("lm_loss", dtype="float", reduce="mean")
-    metrics.new("codebook_loss", dtype="float", reduce="mean")
-    metrics.new("commitment_loss", dtype="float", reduce="mean")
-    metrics.new("vision_learning_rate", dtype="float", reduce="mean")
-    
-    # Add metrics for codebook perplexity and usage (average across all codebooks)
-    metrics.new("avg_perplexity", dtype="float", reduce="mean")
-    metrics.new("avg_codebook_usage", dtype="float", reduce="mean")
-    
-    # Add per-codebook metrics (for n_q_tokens codebooks)
-    n_q_tokens = model_config.tokenizer_config.n_q_tokens
-    for i in range(n_q_tokens):
-        metrics.new(f"perplexity_{i}", dtype="float", reduce="mean")
-        metrics.new(f"codebook_usage_{i}", dtype="float", reduce="mean")
-    
-    # Add per-codebook loss metrics
-    for i in range(n_q_tokens):
-        metrics.new(f"codebook_loss_{i}", dtype="float", reduce="mean")
-        metrics.new(f"commitment_loss_{i}", dtype="float", reduce="mean")
-    
-    # Add metrics for video codebook perplexity and usage
-    metrics.new("video_avg_perplexity", dtype="float", reduce="mean")
-    metrics.new("video_avg_codebook_usage", dtype="float", reduce="mean")
-    
-    # Add per-codebook metrics for video (for n_q_tokens codebooks)
-    for i in range(n_q_tokens):
-        metrics.new(f"video_perplexity_{i}", dtype="float", reduce="mean")
-        metrics.new(f"video_codebook_usage_{i}", dtype="float", reduce="mean")
-    
-    # Track extra metrics for logging
-    acc_steps = args.gradient_accumulation_steps
-    logging_per_step = args.logging_per_step
-    
-    avg_lm_loss = metrics.lm_loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_codebook_loss = metrics.codebook_loss.avg(window=acc_steps)[::acc_steps][1:]
-    avg_commitment_loss = metrics.commitment_loss.avg(window=acc_steps)[::acc_steps][1:]
-    
-    # Use metrics.logger to track to all registered loggers
-    metrics.logger.track(
-        avg_lm_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="lm_loss", group="training")
-    metrics.logger.track(
-        avg_codebook_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="codebook_loss", group="training")
-    metrics.logger.track(
-        avg_commitment_loss.avg(window=logging_per_step)[::logging_per_step],
-        name="commitment_loss", group="training")
-    
-    # Track vision learning rate
-    avg_vision_lr = metrics.vision_learning_rate.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        avg_vision_lr.avg(window=logging_per_step)[::logging_per_step],
-        name="vision_learning_rate", group="training")
-    
-    # Track perplexity and codebook usage metrics
-    avg_perplexity = metrics.avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
-    avg_usage = metrics.avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
-        name="avg_perplexity", group="metrics")
-    metrics.logger.track(
-        avg_usage.avg(window=logging_per_step)[::logging_per_step],
-        name="avg_codebook_usage", group="metrics")
-    
-    # Track per-codebook metrics
-    for i in range(n_q_tokens):
-        ppl_series = getattr(metrics, f"perplexity_{i}")
-        usage_series = getattr(metrics, f"codebook_usage_{i}")
-        avg_ppl = ppl_series.avg(window=acc_steps)[::acc_steps][1:]
-        avg_usg = usage_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            avg_ppl.avg(window=logging_per_step)[::logging_per_step],
-            name=f"perplexity_{i}", group="metrics")
-        metrics.logger.track(
-            avg_usg.avg(window=logging_per_step)[::logging_per_step],
-            name=f"codebook_usage_{i}", group="metrics")
-    
-    # Track per-codebook loss metrics
-    for i in range(n_q_tokens):
-        cb_loss_series = getattr(metrics, f"codebook_loss_{i}")
-        cm_loss_series = getattr(metrics, f"commitment_loss_{i}")
-        avg_cb_loss = cb_loss_series.avg(window=acc_steps)[::acc_steps][1:]
-        avg_cm_loss = cm_loss_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            avg_cb_loss.avg(window=logging_per_step)[::logging_per_step],
-            name=f"codebook_loss_{i}", group="training")
-        metrics.logger.track(
-            avg_cm_loss.avg(window=logging_per_step)[::logging_per_step],
-            name=f"commitment_loss_{i}", group="training")
-    
-    # Track video perplexity and codebook usage metrics
-    video_avg_perplexity = metrics.video_avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
-    video_avg_usage = metrics.video_avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
-    metrics.logger.track(
-        video_avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
-        name="video_avg_perplexity", group="metrics")
-    metrics.logger.track(
-        video_avg_usage.avg(window=logging_per_step)[::logging_per_step],
-        name="video_avg_codebook_usage", group="metrics")
-    
-    # Track per-codebook metrics for video
-    for i in range(n_q_tokens):
-        video_ppl_series = getattr(metrics, f"video_perplexity_{i}")
-        video_usage_series = getattr(metrics, f"video_codebook_usage_{i}")
-        video_avg_ppl = video_ppl_series.avg(window=acc_steps)[::acc_steps][1:]
-        video_avg_usg = video_usage_series.avg(window=acc_steps)[::acc_steps][1:]
-        metrics.logger.track(
-            video_avg_ppl.avg(window=logging_per_step)[::logging_per_step],
-            name=f"video_perplexity_{i}", group="metrics")
-        metrics.logger.track(
-            video_avg_usg.avg(window=logging_per_step)[::logging_per_step],
-            name=f"video_codebook_usage_{i}", group="metrics")
-    
-    # Store codebook config for metrics computation
-=======
     # Initialize simple metrics (lightweight alternative to complex Metrics class)
     # Note: tb_writer is already initialized earlier in the code
     metrics = SimpleMetrics(
@@ -1108,7 +956,6 @@ def train():
     
     # Store config for metrics computation
     n_q_tokens = model_config.tokenizer_config.n_q_tokens
->>>>>>> master
     codebook_size = model_config.tokenizer_config.codebook_size
     
     # Initialize step scheduler for training loop management
@@ -1151,8 +998,6 @@ def train():
     total_data_source_tokens = collections.defaultdict(int)
     batch_data_source_loss = collections.defaultdict(float)
     batch_data_source_tokens = collections.defaultdict(int)
-<<<<<<< HEAD
-=======
     
     # Initialize time trackers (与 video 版本对齐)
     ticker = TimeTracker(n=args.logging_per_step)
@@ -1167,34 +1012,24 @@ def train():
     acc_valid_num_tokens = 0
     start_time = time.perf_counter()
     
->>>>>>> master
     print_rank_0("Starting training...")
     model.train()
     
     while True:
-<<<<<<< HEAD
-=======
         ticker.tick("while_True")
->>>>>>> master
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
 
-<<<<<<< HEAD
-=======
             ticker.tick("enter_context(torch_profiler)")
 
->>>>>>> master
             # 1. DataLoader
             with record_function("DataLoader"):
                 try:
                     batch = next(data_iter)
                 except StopIteration:
                     break
-<<<<<<< HEAD
-=======
             ticker.tick("next_batch")
->>>>>>> master
 
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
@@ -1204,10 +1039,7 @@ def train():
                             device=torch.cuda.current_device(),
                             dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                         )
-<<<<<<< HEAD
-=======
             ticker.tick("to_cuda(batch)")
->>>>>>> master
             
             scheduler.step()
 
@@ -1225,10 +1057,7 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
             position_ids = batch.get("position_ids", None)
-<<<<<<< HEAD
-=======
             cu_seqlens = batch.get("cu_seqlens", None)  # for sample packing with flash_attn_varlen
->>>>>>> master
             
             # Process input_ids: set negative values to 0
             input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1241,29 +1070,6 @@ def train():
                 # Fallback: use input_ids as labels if no loss_mask provided
                 labels = input_ids.clone()
 
-<<<<<<< HEAD
-            num_tokens = input_ids.numel()
-            metrics.tokens.append(num_tokens)
-            if sample_idx is not None:
-                # 考虑 CP 和 Packing 的逻辑样本数
-                logical_samples = (sample_idx.max() + 1).item() / get_context_parallel_world_size()
-                metrics.samples.append(logical_samples)
-            else:
-                metrics.samples.append(input_ids.shape[0] / get_context_parallel_world_size())
-
-            # ================================================ Forward pass ================================================
-            with record_function("Forward"):
-                output = model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    pixel_values_videos=pixel_values_videos,
-                    video_grid_thw=video_grid_thw,
-                    labels=labels,
-                )
-=======
             # 计算 token 统计 (与 end2end 对齐)
             num_tokens = input_ids.numel() / get_context_parallel_world_size()
             if sample_idx is not None:
@@ -1329,7 +1135,6 @@ def train():
                         cu_seqlens=cu_seqlens,
                     )
                 ticker.tick("model.forward")
->>>>>>> master
             
             # Get logits from model output
             logits = output["logits"]
@@ -1349,8 +1154,6 @@ def train():
             
             # Compute LM loss and per-token loss
             lm_loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-<<<<<<< HEAD
-=======
             ticker.tick("loss_fn")
             
             # ============ Compute global average lm_loss (与 end2end 对齐) ============
@@ -1370,7 +1173,6 @@ def train():
                 global_avg_lm_loss = total_loss_sum / total_valid_tokens_count if total_valid_tokens_count > 0 else lm_loss
             else:
                 global_avg_lm_loss = lm_loss
->>>>>>> master
             
             # Extract auxiliary losses from model output
             codebook_loss_raw = output.get("codebook_loss", torch.tensor(0.0))
@@ -1386,20 +1188,6 @@ def train():
             
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             
-<<<<<<< HEAD
-            # Record metrics (使用 .item() 转为标量，防止tensor引用泄漏)
-            metrics.loss.append(total_loss.detach().item())
-            metrics.lm_loss.append(lm_loss.detach().item())
-            metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
-            metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
-            
-            # Record per-codebook loss metrics
-            for i, (cb_loss, cm_loss) in enumerate(zip(codebook_loss_list, commitment_loss_list)):
-                cb_val = cb_loss.detach().item() if isinstance(cb_loss, torch.Tensor) else cb_loss
-                cm_val = cm_loss.detach().item() if isinstance(cm_loss, torch.Tensor) else cm_loss
-                getattr(metrics, f"codebook_loss_{i}").append(cb_val)
-                getattr(metrics, f"commitment_loss_{i}").append(cm_val)
-=======
             # ============ All-reduce codebook/commitment loss for TensorBoard (与 end2end 对齐) ============
             avg_codebook_loss = torch.stack([x.detach() for x in codebook_loss_list])
             avg_commitment_loss = torch.stack([x.detach() for x in commitment_loss_list])
@@ -1424,7 +1212,6 @@ def train():
             for i in range(len(avg_codebook_loss)):
                 metrics.append(f"codebook_loss_{i}", avg_codebook_loss[i].item())
                 metrics.append(f"commitment_loss_{i}", avg_commitment_loss[i].item())
->>>>>>> master
             
             # ============ Compute codebook perplexity and usage (image) ============
             vq_indices = output.get("indices", None)
@@ -1435,20 +1222,7 @@ def train():
                     codebook_size=codebook_size,
                     n_q_tokens=n_q_tokens
                 )
-<<<<<<< HEAD
-                
-                # Record average perplexity and usage
-                if global_perplexities:
-                    metrics.avg_perplexity.append(sum(global_perplexities) / len(global_perplexities))
-                    metrics.avg_codebook_usage.append(sum(codebook_usages) / len(codebook_usages))
-                    
-                    # Record per-codebook metrics
-                    for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
-                        getattr(metrics, f"perplexity_{i}").append(ppl)
-                        getattr(metrics, f"codebook_usage_{i}").append(usage)
-=======
                 ticker.tick("compute_codebook_metrics_image")
->>>>>>> master
             
             # ============ Compute codebook perplexity and usage (video) ============
             video_vq_indices = output.get("video_indices", None)
@@ -1458,18 +1232,6 @@ def train():
                     codebook_size=codebook_size,
                     n_q_tokens=n_q_tokens
                 )
-<<<<<<< HEAD
-
-                # Record average perplexity and usage for video
-                if video_global_perplexities:
-                    metrics.video_avg_perplexity.append(sum(video_global_perplexities) / len(video_global_perplexities))
-                    metrics.video_avg_codebook_usage.append(sum(video_codebook_usages) / len(video_codebook_usages))
-
-                    # Record per-codebook metrics for video
-                    for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
-                        getattr(metrics, f"video_perplexity_{i}").append(ppl)
-                        getattr(metrics, f"video_codebook_usage_{i}").append(usage)
-=======
                 ticker.tick("compute_codebook_metrics_video")
             
             # ============ Compute combined (image+video) codebook perplexity and usage ============
@@ -1511,7 +1273,6 @@ def train():
                 for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
                     metrics.append(f"video_perplexity_{i}", ppl)
                     metrics.append(f"video_codebook_usage_{i}", usage)
->>>>>>> master
                         
             # ============ Compute data source loss and sample count ============
             if args.monitor_datasource_loss and data_source is not None and sample_idx is not None:
@@ -1534,52 +1295,12 @@ def train():
                     key = data_source[int(s_idx.item())]
                     batch_data_source_loss[key] += sum_loss.item()
                     batch_data_source_tokens[key] += mask.sum().item()
-<<<<<<< HEAD
-=======
                 
                 ticker.tick("monitor_datasource_loss")
->>>>>>> master
             
             if args.monitor_datasource_cnt and data_source is not None:
                 for data_source_name in data_source:
                     local_acc_data_source_samples[data_source_name] += 1
-<<<<<<< HEAD
-            # ================================================ End of Forward pass ================================================
-
-            # ================================================ Backward pass ================================================
-            with record_function("Backward"):
-                total_loss.backward()
-            
-            with record_function("GradClip"):
-                clip_grad_by_value(model, args.clip_range)
-
-            # Update optimizer at gradient accumulation boundaries
-            if scheduler.is_gradient_accumulation_boundary():
-                with record_function("GradNorm"):
-                    grad_norm = compute_fsdp_zero2_grad_norm(model)
-                metrics.grad_norm.append(grad_norm)
-                learning_rate = lr_scheduler.get_last_lr()[0]
-                metrics.learning_rate.append(learning_rate)
-                
-                # Get vision learning rate from optimizer param groups
-                # Vision params are typically in later param groups
-                model_lrs = lr_scheduler.get_last_lr()
-                if len(model_lrs) > 2:
-                    vision_learning_rate = model_lrs[2]
-                elif len(model_lrs) > 1:
-                    vision_learning_rate = model_lrs[1]
-                else:
-                    vision_learning_rate = learning_rate
-                metrics.vision_learning_rate.append(vision_learning_rate)
-                
-                with record_function("OptimizerStep"):
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
-            # ================================================ End of Backward pass ================================================
-
-            metrics.step_time.tick()
-=======
                 ticker.tick("monitor_datasource_cnt")
             # ================================================ End of Forward pass ================================================
 
@@ -1621,15 +1342,10 @@ def train():
                     ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
             # ================================================ End of Backward pass ================================================
 
->>>>>>> master
             metrics.step()
 
             # Logging at specified intervals
             if scheduler.should_logging():
-<<<<<<< HEAD
-                metrics.write_logs(scheduler.global_step)
-                
-=======
                 # 计算 perf 指标 (与 end2end 对齐)
                 end_time = time.perf_counter()
                 elapsed_time = end_time - start_time
@@ -1681,7 +1397,6 @@ def train():
                 acc_valid_num_tokens = 0
                 start_time = time.perf_counter()
                 
->>>>>>> master
                 # Reduce data source metrics across all ranks (must be called on all ranks)
                 reduced_batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
                 reduced_batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
@@ -1746,20 +1461,14 @@ def train():
                             checkpoint_dir=args.output_dir,
                             global_step=scheduler.global_step
                         )
-<<<<<<< HEAD
-=======
                     ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}")
->>>>>>> master
 
             if torch_profiler:
                 torch_profiler.step()
 
-<<<<<<< HEAD
-=======
             # 记录整个迭代的时间
             iter_ticker.tick("iter_ticker")
 
->>>>>>> master
             # 显式清理中间变量，防止显存泄漏
             del output, logits, total_loss, lm_loss, per_token_loss
             del codebook_loss, commitment_loss

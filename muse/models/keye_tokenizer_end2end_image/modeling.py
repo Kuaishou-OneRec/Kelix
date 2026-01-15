@@ -659,12 +659,8 @@ class KeyeTokenizerEnd2EndImage(Model):
             tokens=None,
             mask=attention_mask,
             input_embeds=inputs_embeds,
-<<<<<<< HEAD
-            input_pos=position_ids
-=======
             input_pos=position_ids,
             cu_seqlens=cu_seqlens,  # pass cu_seqlens for sample packing
->>>>>>> master
         )
 
         # TransformerDecoder可能返回list/张量，这里取最后一个为logits

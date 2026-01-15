@@ -519,7 +519,6 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
-<<<<<<< HEAD
     y_embedding_init_method: str = Field(
         default="randn",
         description="Method for initializing y_embeddings"
@@ -702,8 +701,6 @@ class KeyeARConfig(ModelConfig):
         description="Configuration for the token decoder component"
     )
 
-=======
->>>>>>> master
 
 class KeyeTokenizerEnd2EndImageConfig(ModelConfig):
     """Configuration for KeyeTokenizerEnd2EndImage model."""

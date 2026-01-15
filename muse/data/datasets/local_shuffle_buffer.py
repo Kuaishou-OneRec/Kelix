@@ -145,8 +145,6 @@ class LocalShuffleBuffer(object):
         df['__sample_index__'] = range(len(df))
         return df
 
-    
-
     def __len__(self) -> int:
         """Return current number of samples in the buffer"""
         return len(self.buffer)
