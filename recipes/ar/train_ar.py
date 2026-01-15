@@ -667,7 +667,6 @@ def train() -> None:
         input_ids = batch["input_ids"]
         loss_mask = batch.get("loss_mask", None)
 
-        print(f"rank={rank}", input_ids.float().mean())
         # KeyeARModel.forward:
         #   - tokens: (b, s)
         #   - input_pos: (b, s)
@@ -729,18 +728,7 @@ def train() -> None:
         is_eos_token = is_eos_token.flatten(1,2)
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
-        # if rank == 0:
-        #     torch.save(
-        #         {
-        #             "logits": logits,
-        #             "per_token_loss": per_token_loss,
-        #             "labels": labels,
-        #             "is_text_token": is_text_token,
-        #         },
-        #         "tmp.pt"
-        #     )
-        #     exit()
-        print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
+
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
         eos_loss = (per_token_loss * is_eos_token).sum() / is_eos_token.sum()
@@ -753,8 +741,6 @@ def train() -> None:
         
         last_image_loss = image_loss
 
-
-        print(f"text_loss={text_loss}, image_loss={image_loss}")
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
