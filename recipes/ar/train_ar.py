@@ -624,7 +624,7 @@ def train() -> None:
     step_scheduler = StepScheduler(args)
 
     model_config = _load_model_config(args)
-
+    
     # iterator
     if args.overfit_batches and args.overfit_batches > 0:
         print_rank_0(f"=== OVERFIT DEBUG MODE: Caching {args.overfit_batches} batches ===")
@@ -640,6 +640,8 @@ def train() -> None:
     else:
         data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
 
+    last_image_loss = None
+    
     # train loop
     while True:
         try:
@@ -716,13 +718,13 @@ def train() -> None:
 
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
-        last_image_loss = image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
+        image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
 
         if is_image_token.sum().item() == 0: 
             if last_image_loss is None:
                 image_loss = torch.zeros_like(text_loss)
             else:
-                metrics.image_loss.append(last_image_loss)
+                image_loss = last_image_loss.detach()
         
         last_image_loss = image_loss
 
