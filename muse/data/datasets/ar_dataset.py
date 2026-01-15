@@ -76,6 +76,7 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
                **kwargs
                ):
       super().__init__(**kwargs)
+      self.force_assistant_image_size = force_assistant_image_size
       self.aspect_ratio_threshold = aspect_ratio_threshold
       self.reso_finder = ResolutionFinder(**resolution_finder_kwargs) if use_resolution_finder else None
       task2prompt_coarse = {
