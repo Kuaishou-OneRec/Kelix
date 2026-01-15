@@ -17,6 +17,8 @@ from torch.utils.data import IterableDataset
 from fastparquet import ParquetFile
 import pandas as pd
 from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
+from muse.data.datasets.ar_utils.pre_resize_ops import BadAspectRatioException
+
 PARQUET_CACHE_DIR = os.environ.get("PARQUET_CACHE_DIR", "/code/dataset_cache")
 
 def is_hdfs(path: str) -> bool:
@@ -470,6 +472,14 @@ class DistributedDataset(IterableDataset):
           except (AttributeError, ValueError):
             pass
           raise
+        
+        except BadAspectRatioException as e:
+          # Clear timeout
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+
         except Exception as e:
           # Clear timeout
           try:
