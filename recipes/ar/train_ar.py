@@ -189,26 +189,6 @@ def _load_dataset_config(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
-    # Determine training mode and get model_class
-    if args.model_dir:
-        # Continue pretrain mode: get model_class from model_dir/config.json
-        model_config_path = Path(args.model_dir) / "config.json"
-        if not model_config_path.exists():
-            raise FileNotFoundError(
-                f"Config file not found: {model_config_path}. "
-                f"Cannot continue pretrain without config.json in {args.model_dir}"
-            )
-        model_config = load_config(model_config_path)
-    elif args.model_config:
-        # Train from scratch mode: get model_class from model_config
-        model_config = load_config(args.model_config)
-    else:
-        raise ValueError(
-            "Either --model-dir (for continue pretrain) or --model-config "
-            "(for train from scratch) must be provided.")
-
-
 def _build_dataloader(args: argparse.Namespace) -> DataLoader:
     ds_cfg = _load_dataset_config(args.dataset_config)
 
@@ -288,6 +268,7 @@ def _load_model_config(args: argparse.Namespace) -> KeyeARConfig:
                 f"Config file not found: {model_config_path}. "
                 f"Cannot continue pretrain without config.json in {args.model_dir}"
             )
+        print(f"model_config_path={model_config_path}")
         model_config = load_config(model_config_path)
     elif args.model_config:
         # Train from scratch mode: get model_class from model_config

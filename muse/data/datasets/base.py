@@ -473,18 +473,11 @@ class DistributedDataset(IterableDataset):
             pass
           raise
 
-        except BadAspectRatioException as e:
-          # Clear timeout
-          try:
-            signal.alarm(0)
-          except (AttributeError, ValueError, BadAspectRatioException):
-            pass
-
         except Exception as e:
           # Clear timeout
           try:
             signal.alarm(0)
-          except (AttributeError, ValueError):
+          except (AttributeError, ValueError, BadAspectRatioException):
             pass
           
           # Track errors
@@ -504,7 +497,6 @@ class DistributedDataset(IterableDataset):
         
         if not new_inputs:
           continue
-        
         if self.packing:
           new_sample_length = self.get_sample_length(new_inputs)
           if current_length + new_sample_length > self.max_length:
