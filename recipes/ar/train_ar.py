@@ -724,7 +724,8 @@ def train() -> None:
             else:
                 metrics.image_loss.append(last_image_loss)
         
-        
+        last_image_loss = image_loss
+
 
         print(f"text_loss={text_loss}, image_loss={image_loss}")
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
