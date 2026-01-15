@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
 # MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted/
-
+MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage2_5e-5_force324/step93500/global_step93500/converted/
 
 
 # 动态构建 OUTPUT_DIR，对齐 exp30_ar_dit_324tokens_1e-4_reproduce_lbs.sh 命名风格
