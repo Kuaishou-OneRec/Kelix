@@ -1,5 +1,5 @@
 {
-    "sources": "/llm_reco/vlm/datahub/datasets/Stage3_blended/0.9.5/index/parquet.json",
+    "sources": "/llm_reco/vlm/datahub/datasets/Stage3_blended/0.9.6/index/parquet.json",
     "sources_": "/llm_reco/vlm/datahub/datasets/ChineseOCR/1.0.5/index/parquet.json",
     "max_length": 16000,
     "min_visual_tokens_per_image": 32,

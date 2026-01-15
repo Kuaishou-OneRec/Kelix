@@ -710,23 +710,6 @@ def train() -> None:
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
-        if 0:
-            # 核心：仅在rank=0进程中启用IPython embed，其他进程无限等待（不阻塞集群）
-            if rank == 0:
-                print(f"进入进程 {rank} 的交互式调试...")
-                # 调试前可先同步一次，确保其他进程已完成前期初始化
-                dist.barrier()
-                from IPython import embed
-                embed()  # 仅rank=0进入交互式调试
-            else:
-                # 非调试进程：执行barrier同步后，进入无限休眠（不占用资源，不引发死锁）
-                dist.barrier()
-                while True:
-                    import time
-                    torch.cuda.empty_cache()
-                    time.sleep(3600)  # 休眠1小时，可按需调整
-
-
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
         eos_loss = (per_token_loss * is_eos_token).sum() / is_eos_token.sum()
@@ -738,25 +721,6 @@ def train() -> None:
                 image_loss = last_image_loss.detach()
         
         last_image_loss = image_loss
-
-        print(f"text_loss: {text_loss.item():.4f}, image_loss: {image_loss.item():.4f}, eos_loss: {eos_loss.item():.4f}")
-        if rank == 0 and 0:
-            torch.save(
-                {
-                    "per_token_loss": per_token_loss,
-                    "is_text_token": is_text_token,
-                    "is_image_token": is_image_token,
-                    "is_eos_token": is_eos_token,
-                    "logits": logits,
-                    "labels": labels,
-                    "weights": weights,
-                    "expanded_ids": expanded_ids,
-                    "input_ids": input_ids,
-                    "loss_mask": loss_mask,
-                },
-                "debug.pt"
-            )
-            exit()
 
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())

@@ -76,7 +76,7 @@ def resize_with_aspect_ratio_check(image: Image.Image, target_width: int, target
     total_images_processed += 1
 
     if total_images_processed % 1000 == 0:
-        print(f"resize_with_aspect_ratio_check: Processed image count: {total_images_processed}, Exception images count: {exception_images_count}")
+        print(f"resize_with_aspect_ratio_check: Processed image count: {total_images_processed}, Exception images count: {exception_images_count}, target_width= {target_width}, target_height= {target_height}")
 
     assert target_width == target_height  # 确保目标尺寸是正方形
     assert aspect_ratio_threshold <= 1.0
