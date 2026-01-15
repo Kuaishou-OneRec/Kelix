@@ -15,9 +15,9 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
-PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
-        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/converted/ \
-        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/
+# PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
+#         --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/converted/ \
+#         --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/config.json
