@@ -717,7 +717,7 @@ def train() -> None:
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
-
+        print(f"text_loss={text_loss}, image_loss={image_loss}")
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
         metrics.loss.append(loss.detach())
         metrics.tokens.append(input_ids.shape[1])
