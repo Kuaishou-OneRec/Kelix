@@ -724,7 +724,7 @@ def train() -> None:
         last_image_loss = image_loss
 
         print(f"text_loss: {text_loss.item():.4f}, image_loss: {image_loss.item():.4f}, eos_loss: {eos_loss.item():.4f}")
-        if rank == 0:
+        if rank == 0 and 0:
             torch.save(
                 {
                     "per_token_loss": per_token_loss,
