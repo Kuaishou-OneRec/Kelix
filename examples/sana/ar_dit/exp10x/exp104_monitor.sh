@@ -34,4 +34,5 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dataset-config "$DATASET_CONFIG" \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
+    --good-steps "200" \
     > ${log_file} &
