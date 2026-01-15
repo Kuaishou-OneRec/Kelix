@@ -14,8 +14,10 @@ export PYTHONPATH="${PYTHONPATH:-.}"
 
 # ---- Defaults (单机版本，移除分布式相关配置) ----
 MODEL_DIR="/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/DiTSFT/batch6_324_1024_more_data/global_step80000/muse_converted/"
+MODEL_DIR="/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/"
+MODEL_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp10x/exp104_ar_dit_324tokens_1e-4_sft/global_step1400/converted/"
 VAE_DIR="/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
-KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/"
 DATASET_CONFIG="examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json"
 PARQUET_PATH="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet"
 OUTPUT_DIR="./vis_output_local"
@@ -29,7 +31,7 @@ CFG_SCALE=1.0
 MAX_CONDITION_LENGTH=324
 IMAGE_SIZE=1024
 SEED=42
-MODEL_CONFIG_OVERRIDES=""  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
+MODEL_CONFIG_OVERRIDES="model_max_length=720"  # Model config overrides, e.g., "caption_channels=4096 model_max_length=324"
 DCP_CKPT_DIR=""
 DCP_TAG=""
 

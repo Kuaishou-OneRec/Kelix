@@ -12,6 +12,7 @@ TB_LOG_NAME="auto_eval"
 
 MODEL_DIR="/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/"
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/"
+KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/"
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp10x/exp103_ar_dit_324tokens_1e-4_baseline/"
 DATASET_CONFIG="examples/sana/ar_dit/exp10x/exp100_ar_dit_324tokens_1e-4_sft_from52k.json"
 MAX_CONDITION_LENGTH=720
