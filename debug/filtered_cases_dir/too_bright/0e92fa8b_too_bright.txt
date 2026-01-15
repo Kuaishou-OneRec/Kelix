@@ -1,3 +1,0 @@
-Rejection reasons: too bright (brightness: 0.884 > 0.85)
-Image mode: RGB
-Image size: (750, 750)

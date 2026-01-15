@@ -1,3 +1,0 @@
-Rejection reasons: undersaturated (saturation: 0.007 < 0.05)
-Image mode: RGB
-Image size: (1238, 1372)
