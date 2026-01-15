@@ -710,6 +710,22 @@ def train() -> None:
 
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
+        if rank == 0:
+            torch.save(
+                {
+                    "per_token_loss": per_token_loss,
+                    "is_text_token": is_text_token,
+                    "is_image_token": is_image_token,
+                    "is_eos_token": is_eos_token,
+                    "logits": logits,
+                    "labels": labels,
+                    "weights": weights,
+                    "expanded_ids": expanded_ids,
+                    "input_ids": input_ids,
+                }
+            )
+            exit()
+
         text_loss = (per_token_loss * is_text_token).sum() / is_text_token.sum()
         image_loss = (per_token_loss * is_image_token).sum() / is_image_token.sum()
         eos_loss = (per_token_loss * is_eos_token).sum() / is_eos_token.sum()
