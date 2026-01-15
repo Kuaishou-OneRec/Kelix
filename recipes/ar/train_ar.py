@@ -722,7 +722,8 @@ def train() -> None:
                     "per_token_loss": per_token_loss,
                     "labels": labels,
                     "is_text_token": is_text_token,
-                }
+                },
+                "tmp.pt"
             )
             exit()
         print(f"is_text_token={is_text_token.shape}{is_text_token.sum()}, is_image_token={is_image_token.shape}/{is_image_token.sum()}, per_token_loss={per_token_loss.shape}")
