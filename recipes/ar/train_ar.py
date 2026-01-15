@@ -625,6 +625,8 @@ def train() -> None:
         logits = logits.flatten(0,1)
         labels = labels.flatten(0,1)
         weights = weights.flatten(0,1)
+
+        print(f"logits shape: {logits.shape}, labels shape: {labels.shape}, weights shape: {weights.shape}")
         loss, per_token_loss = chunked_loss_computer.forward_and_backward(logits, labels, tokenwise_loss_weight=weights)
 
         # 对齐 sana：append detached tensor，避免 hot path `.item()` 触发 CPU-GPU sync
