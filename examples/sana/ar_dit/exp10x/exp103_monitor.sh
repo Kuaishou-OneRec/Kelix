@@ -20,7 +20,6 @@ INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"
 log_file=${DCP_CKPT_DIR}/auto_monitor.log
 echo "log_file=${log_file}"
-ln -s /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp4x/exp42_ar_dit_324tokens_1e-4_cond_special/token_cache/ $DCP_CKPT_DIR
 # Run the Python script with all parameters
 PYTHONPATH=. \
 INFERENCE_SCRIPT=${INFERENCE_SCRIPT} \
