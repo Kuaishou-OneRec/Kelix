@@ -662,6 +662,8 @@ def train() -> None:
 
         input_ids = batch["input_ids"]
         loss_mask = batch.get("loss_mask", None)
+
+        print(f"rank={rank}", input_ids.float().mean())
         # KeyeARModel.forward:
         #   - tokens: (b, s)
         #   - input_pos: (b, s)
