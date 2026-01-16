@@ -38,6 +38,7 @@ import torch
 import easydict
 import pickle
 import time
+import traceback
 import torch.distributed as dist
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -1000,7 +1001,13 @@ if __name__ == "__main__":
         if not args.keye_ar_dir:
             print("Error: --keye-ar-dir is required for inference mode")
             exit(1)
-        main()
+
+        try:
+            main()
+        except Exception as e:
+            print(f"Error in main: {e}")
+            traceback.print_exc()
+
     else:
         # For visualize mode, only need dcp_ckpt_dir
         if not args.dcp_ckpt_dir:
