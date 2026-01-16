@@ -153,7 +153,7 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp13x/exp130.json \
-                --resolution-budgets "1024:20" \
+                --resolution-budgets "1024:24" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 6000 \
@@ -161,13 +161,13 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 20 \
+                --batch-size 24 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
-                --save-checkpoint-per-step 1000 \
+                --save-checkpoint-per-step 500 \
                 --logging-per-step 20 \
                 --clip-range 9999999 \
                 --fp32-weight \
