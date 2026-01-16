@@ -218,6 +218,102 @@ class ShuffledParquetReaderV2(Reader):
             continue
 
 
+
+class ShuffledParquetReader(ParquetReader):
+    """
+    带局部窗口打乱的 Parquet 读取器。
+    通过维护一个滑动的文件窗口并重新对窗口内的所有行进行打乱，来增加数据的随机性。
+    """
+    def __init__(self, sources: Union[List[str], str], window_size: int = 5):
+        super().__init__(sources)
+        self.window_size = window_size
+
+    def __iter__(self):
+        rank = get_data_parallel_rank()
+        worker_id, _ = get_worker_info()
+        
+        if not self.sources:
+            return
+
+        file_list = list(self.sources)
+        # 初始加载窗口
+        current_window_dfs = []
+        file_idx = 0
+        
+        # 记录窗口中每个文件贡献的行数，用于触发“滑出”逻辑
+        rows_per_file = []
+
+        def load_next_df():
+            nonlocal file_idx
+            while file_idx < len(file_list):
+                fn = file_list[file_idx]
+                file_idx += 1
+                try:
+                    pf = load_parquet(fn)
+                    df = pf.to_pandas()
+                    if len(df) > 0:
+                        df["__file_origin__"] = fn # 记录来源用于解析
+                        return df
+                except Exception as e:
+                    print(f"Error loading {fn}: {e}")
+            return None
+
+        # 1. 填充初始窗口
+        for _ in range(min(self.window_size, len(file_list))):
+            df = load_next_df()
+            if df is not None:
+                current_window_dfs.append(df)
+                rows_per_file.append(len(df))
+
+        if not current_window_dfs:
+            return
+
+        # 合并并执行第一次打乱
+        combined_df = pd.concat(current_window_dfs, ignore_index=True)
+        combined_df = combined_df.sample(frac=1).reset_index(drop=True)
+
+        rows_processed_since_update = 0
+
+        # 2. 开始迭代
+        while True:
+            for idx, row in combined_df.iterrows():
+                # 解析并产出
+                sample = self._parser(row.to_dict(), row["__file_origin__"], idx, len(combined_df))
+                if sample is not None:
+                    yield sample
+                
+                rows_processed_since_update += 1
+
+                # 3. 检查是否处理完了一个文件的等量数据，需要滑动窗口
+                # 当处理行数达到窗口中“最老”文件的行数时，替换数据
+                if rows_processed_since_update >= rows_per_file[0]:
+                    # 如果还有后续文件，则补充
+                    next_df = load_next_df()
+                    
+                    # 移除旧文件行（简单处理：重新构建 df 防止内存碎片或偏移混乱）
+                    # 这里的逻辑是：去掉前 rows_per_file[0] 行，加上新文件，再打乱
+                    if next_df is not None:
+                        # 窗口滑动：去掉已消耗的部分，加入新数据
+                        remaining_df = combined_df.iloc[idx + 1:]
+                        combined_df = pd.concat([remaining_df, next_df], ignore_index=True)
+                        combined_df = combined_df.sample(frac=1).reset_index(drop=True)
+                        
+                        rows_per_file.pop(0)
+                        rows_per_file.append(len(next_df))
+                        rows_processed_since_update = 0
+                        break # 跳出当前的 iterrows，从新的 combined_df 开始
+                    else:
+                        # 没有新文件了，继续消耗完当前窗口剩下的
+                        rows_per_file.pop(0)
+                        rows_processed_since_update = 0
+                        # 如果所有文件都处理完且 rows_per_file 为空，则退出
+                        if not rows_per_file:
+                            return
+            else:
+                # 正常消耗完整个 combined_df 且没有 break 的情况（即最后几个文件）
+                return
+
+
 class DistributedDataset(IterableDataset):
   def __init__(self,
                sources: Union[List[str], str],
@@ -306,7 +402,8 @@ class DistributedDataset(IterableDataset):
     if self.reader == "parquet":
       if self.shuffle_window > 1:
         # 返回一个构造函数，支持传入 window_size
-        return lambda sources: ShuffledParquetReaderV2(sources, local_shuffle_buffer_size=1024 * self.shuffle_window)
+        # return lambda sources: ShuffledParquetReaderV2(sources, local_shuffle_buffer_size=1024 * self.shuffle_window)
+        return lambda sources: ShuffledParquetReader(sources, window_size=min(self.shuffle_window, 5))
       return ParquetReader
     else:
       raise ValueError(f"Unsupported reader: {self.reader}")
