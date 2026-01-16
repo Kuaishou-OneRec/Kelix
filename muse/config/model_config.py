@@ -186,7 +186,7 @@ class Qwen3Config(ModelConfig):
     )
     # Multimodal RoPE (3D RoPE for vision-language models)
     use_multimodal_rope: bool = Field(
-        default=True,
+        default=False,
         description="Whether to use 3D multimodal RoPE instead of standard 1D RoPE. "
                     "Required for models like Keye-VL that use temporal/height/width position encoding."
     )
