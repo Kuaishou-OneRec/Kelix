@@ -20,6 +20,7 @@ MODEL_CONFIG_OVERRIDES="model_max_length=720"
 log_file=${DCP_CKPT_DIR}/auto_monitor.log
 echo "log_file=${log_file}"
 
+
 # Run the Python script with all parameters
 PYTHONPATH=. \
 INFERENCE_SCRIPT=${INFERENCE_SCRIPT} \
