@@ -189,7 +189,7 @@ def load_safetensors_state_dict(model_dir):
 
 def convert_hf_checkpoint(hf_checkpoint_path: str, new_model_dir: str):
     """Convert a Hugging Face Keye checkpoint to a Muse KeyeAR checkpoint"""
-    
+
     # 设置设备
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16
@@ -341,6 +341,10 @@ def main():
     
     args = parser.parse_args()
     
+    if os.path.exists(args.output_dir):
+        print(f"Output directory {args.output_dir} already exists. Skipping conversion.")
+        return
+
     print("=" * 60)
     print("KeyeAR Hugging Face to Muse Conversion")
     print("=" * 60)
