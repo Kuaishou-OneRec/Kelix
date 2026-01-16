@@ -26,7 +26,6 @@ PYTHONPATH=. \
 INFERENCE_SCRIPT=${INFERENCE_SCRIPT} \
 MODEL_CONFIG_OVERRIDES=${MODEL_CONFIG_OVERRIDES} \
 MAX_CONDITION_LENGTH=${MAX_CONDITION_LENGTH} \
-MODEL_DIR=${MODEL_DIR} \
 nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dcp-ckpt-dir "$DCP_CKPT_DIR" \
     --monitor-interval "$MONITOR_INTERVAL" \
