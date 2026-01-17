@@ -18,8 +18,8 @@ script_name=$(basename "$0" .sh)
 
 
 PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
-        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/converted \
-        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/muse_converted/
+        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/converted/ \
+        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted/
 
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
@@ -163,7 +163,7 @@ nohup mpirun --allow-run-as-root \
                 --beta2 0.95 \
                 --batch-size 24 \
                 --lr-scheduler-type cosine_v2 \
-                --num-warmup-steps 1000 \
+                --num-warmup-steps 100 \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
