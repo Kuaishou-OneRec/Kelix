@@ -13,7 +13,7 @@ TB_LOG_NAME="auto_eval"
 MODEL_DIR="/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/"
 KEYE_AR_DIR="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp9/step5500/global_step5500/muse_converted/"
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step18000/global_step18000/muse_converted
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/muse_converted/
 
 # Override parameters (if needed)
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp141_0116sftv1_1e-4lr_23500_newds/"
