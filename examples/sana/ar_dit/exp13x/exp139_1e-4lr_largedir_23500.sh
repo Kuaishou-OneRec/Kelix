@@ -21,7 +21,7 @@ PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
         --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/converted/ \
         --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted/
 
-
+MODEL_DIR="/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/"
 MODEL_CONFIG=/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers_muse_converted-0105-advanced-conf/config.json
 VAE_DIR=/mmu_mllm_hdd_2/yangyiping/models/SANA1.5_4.8B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
