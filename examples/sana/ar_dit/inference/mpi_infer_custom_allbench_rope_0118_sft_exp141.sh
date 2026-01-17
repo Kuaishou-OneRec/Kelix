@@ -21,6 +21,9 @@ KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted}"
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted}"
 KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted}"
+KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted}"
+
+# /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/
 
 DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp30_ar_dit_324tokens_1e-4_reproduce_lbs_inf.json}"
 PARQUET_PATH="${PARQUET_PATH:-/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet}"
@@ -44,6 +47,10 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=658}"
 
 DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp31_ar_dit_324tokens_1e-4_cond_special/}"
 DCP_TAG="${DCP_TAG:-global_step24000}"
+
+
+DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp131_1e-4lr_23500}"
+DCP_TAG="${DCP_TAG:-global_step9500}"
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
