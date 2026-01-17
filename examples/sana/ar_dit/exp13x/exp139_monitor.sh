@@ -16,7 +16,7 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted
 
 # Override parameters (if needed)
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp131_1e-4lr_23500/"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp139_1e-4lr_largedir_23500/"
 DATASET_CONFIG="examples/sana/ar_dit/exp13x/exp130.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
