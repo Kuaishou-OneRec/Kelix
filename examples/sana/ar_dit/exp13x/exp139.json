@@ -1,0 +1,16 @@
+{
+    "name": "Chat2ImageDataset",
+    "sources": "/llm_reco/vlm/datahub/datasets/Gen_Stage3_blended/0.0.4/index/parquet.json",
+    "image_size": 1024,
+    "max_condition_length": 720,
+    "center_crop": false,
+    "packing": false,
+    "valid_hw_range": [128, 5120],
+    "multi_scale": false,
+    "force_assistant_image_size": 504,
+    "template": "Gen_qwen_image_mix/0.0.1", 
+    "max_hw_ratio": 9999,
+    "shuffle_window": 2048,
+    "num_epochs": 999,
+    "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working, compare exp43"
+}
