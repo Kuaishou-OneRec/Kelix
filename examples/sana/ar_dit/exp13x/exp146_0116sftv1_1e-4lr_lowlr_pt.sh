@@ -154,7 +154,7 @@ nohup mpirun --allow-run-as-root \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp13x/exp142_1e-4lr_23500_pt.json \
                 --resolution-budgets "1024:20" \
-                --learning-rate 2e-4 \
+                --learning-rate 1e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 6000 \
                 --weight-decay 0.0 \
