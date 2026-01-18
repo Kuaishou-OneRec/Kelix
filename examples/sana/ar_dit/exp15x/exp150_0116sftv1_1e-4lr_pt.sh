@@ -12,7 +12,7 @@ else
         echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile | head -10 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile | head -99 > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 
