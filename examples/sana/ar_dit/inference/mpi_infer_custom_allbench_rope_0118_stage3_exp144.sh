@@ -45,12 +45,12 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 # DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
 # DCP_TAG="${DCP_TAG:-global_step12000}"
 
-DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp31_ar_dit_324tokens_1e-4_cond_special/}"
-DCP_TAG="${DCP_TAG:-global_step24000}"
+# DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit_23p/exp31_ar_dit_324tokens_1e-4_cond_special/}"
+# DCP_TAG="${DCP_TAG:-global_step24000}"
 
 
 DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp144_1e-4lr_23500_pt/}"
-DCP_TAG="${DCP_TAG:-global_step3000}"
+DCP_TAG="${DCP_TAG:-global_step6000}"
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
