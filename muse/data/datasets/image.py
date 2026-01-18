@@ -1406,6 +1406,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         if image is None:
             return None
 
+        print(f"find pair")
         return pair
 
     def collate_fn(
