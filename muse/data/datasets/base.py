@@ -280,7 +280,6 @@ class ShuffledParquetReader(ParquetReader):
                 # 解析并产出
                 sample = self._parser(row.to_dict(), row["__file_origin__"], idx, len(combined_df))
                 if sample is not None:
-                    print(f"yield sample, idx={idx}, rank={rank}, worker={worker_id}")
                     yield sample
                 
                 rows_processed_since_update += 1
