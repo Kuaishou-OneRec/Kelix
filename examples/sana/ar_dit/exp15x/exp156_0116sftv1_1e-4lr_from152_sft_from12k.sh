@@ -175,7 +175,7 @@ nohup mpirun --allow-run-as-root \
                 --resolution-budgets "1024:6" \
                 --learning-rate 1.5e-4 \
                 --min-lr 5e-5 \
-                --num-decay-steps 4000 \
+                --num-decay-steps 8000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
@@ -183,7 +183,7 @@ nohup mpirun --allow-run-as-root \
                 --batch-size 6 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
-                --num-training-steps 10000 \
+                --num-training-steps 100000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
                 --save-checkpoint-per-step 200 \
