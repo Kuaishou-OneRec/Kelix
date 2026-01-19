@@ -816,7 +816,15 @@ class KeyeARModel(Model):
         hf_state_dict.update(reverted_main_state_dict)
 
         for kk, vv in reverted_visual_state_dict.items():
-            hf_state_dict[f"visual_tokenizer.{kk}"] = vv
+            # 兼容原始 HF ckpt 的命名：
+            # - convert 时：顶层 `quant_projector.*` 会被喂给 visual_tokenizer.convert，并进入 KeyeImageTokenizer.up_projectors
+            # - revert 时：KeyeImageTokenizer.revert 会生成 `quant_projector.*`
+            #   但这里如果统一加 `visual_tokenizer.` 前缀，就会变成 `visual_tokenizer.quant_projector.*`，与原始 ckpt 不一致。
+            # 因此：quant_projector.* 保持顶层；其它视觉相关权重仍然保留 visual_tokenizer.* 前缀。
+            if kk.startswith("quant_projector."):
+                hf_state_dict[kk] = vv
+            else:
+                hf_state_dict[f"visual_tokenizer.{kk}"] = vv
 
         # 5) 顶层 lm_head.weight
         if lm_head_weight is not None and not tie_word_embeddings:

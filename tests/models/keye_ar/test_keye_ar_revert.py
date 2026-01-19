@@ -153,28 +153,9 @@ def demo_round_trip_revert(hf_ckpt_dir: str) -> None:
     reverted_hf_sd = model.revert_hf_state_dict(muse_sd, tie_word_embeddings=False)
     print(f"[revert] reverted hf keys={len(reverted_hf_sd)}")
 
-    # 先解决 quant_projector 的 mismatch：
-    # - 原始 HF ckpt 的 projector 在顶层是 `quant_projector.*`
-    # - 我们当前 revert 出来的 key 里是 `visual_tokenizer.quant_projector.*`
-    # 这里先在对比前做一次 key 归一化，并打印提示。
-    normalized_reverted_hf_sd: Dict[str, torch.Tensor] = {}
-    moved = 0
-    for k, v in reverted_hf_sd.items():
-        if k.startswith("visual_tokenizer.quant_projector."):
-            normalized_reverted_hf_sd[k.replace("visual_tokenizer.", "", 1)] = v
-            moved += 1
-        else:
-            normalized_reverted_hf_sd[k] = v
-
-    if moved:
-        print(
-            f"[normalize] moved {moved} keys: visual_tokenizer.quant_projector.* -> quant_projector.* "
-            "(用于对齐原始 HF ckpt)"
-        )
-
     # 对比（用 cpu+fp32 做严格相等）
     hf_a = _cast_state_dict_to_cpu_fp32(hf_state_dict)
-    hf_b = _cast_state_dict_to_cpu_fp32(normalized_reverted_hf_sd)
+    hf_b = _cast_state_dict_to_cpu_fp32(reverted_hf_sd)
 
     _compare_state_dicts(hf_a, hf_b, name_a="hf_original", name_b="hf_roundtrip", rtol=0.0, atol=0.0)
     print("[ok] round-trip revert success: hf_original == hf_roundtrip")
