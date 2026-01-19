@@ -174,8 +174,8 @@ nohup mpirun --allow-run-as-root \
                 --dataset-config examples/sana/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft.json \
                 --resolution-budgets "1024:6" \
                 --learning-rate 1e-4 \
-                --min-lr 5e-5 \
-                --num-decay-steps 8000 \
+                --min-lr 4e-5 \
+                --num-decay-steps 1000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
