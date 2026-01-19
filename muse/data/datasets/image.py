@@ -1551,7 +1551,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     def _make_GenQwenImageMix_0_0_1_style_prompt(self, question):
         if not question.endswith('.'):
             question = question + '.'
-        question = "Generate an image based on the description: " + question
+        question = "Generate an image base on the description: " + question
         return question
 
     def process(self, sample):
