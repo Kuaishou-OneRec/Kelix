@@ -23,7 +23,7 @@ VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffuser
 # KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.2_stage3_0.81_128u/step23500/global_step23500/muse_converted}"
 # KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/muse_converted/}"
 
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/muse_converted/
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft_from3k/global_step200/converted
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/
 
@@ -54,8 +54,8 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 # DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp144_1e-4lr_23500_pt/}"
 # DCP_TAG="${DCP_TAG:-global_step6000}"
 
-DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp154_0116sftv1_1e-4lr_from152_sft_from6k/
-DCP_TAG=global_step3000
+DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft
+DCP_TAG=global_step4800
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
