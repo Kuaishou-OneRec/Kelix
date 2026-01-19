@@ -826,6 +826,18 @@ class KeyeARModel(Model):
             else:
                 hf_state_dict[f"visual_tokenizer.{kk}"] = vv
 
+        # 额外对齐：token_head 的命名在原始 HF ckpt 顶层是 `token_head.*`
+        # 但 `UnifiedQwen3Model.revert_hf_state_dict` 会还原成 `model.token_head.*`。
+        # 这里把它提升到顶层，保证 round-trip 后 key 与原始 HF ckpt 对齐。
+        moved_token_head = 0
+        for k in list(hf_state_dict.keys()):
+            if k.startswith("model.token_head."):
+                new_k = k[len("model."):]
+                hf_state_dict[new_k] = hf_state_dict.pop(k)
+                moved_token_head += 1
+        if moved_token_head:
+            logger.info(f"KeyeARModel.revert_hf_state_dict: moved {moved_token_head} keys model.token_head.* -> token_head.*")
+
         # 5) 顶层 lm_head.weight
         if lm_head_weight is not None and not tie_word_embeddings:
             hf_state_dict["lm_head.weight"] = lm_head_weight
