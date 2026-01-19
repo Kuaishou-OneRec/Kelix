@@ -1,8 +1,11 @@
-"""UnifiedTokenDecoder demo + 权重转换/回滚验证。
+"""UnifiedTokenDecoder demo + 权重转换/回滚验证（GPU + bf16）。
 
-注意：你要求的是 demo 脚本风格（非 pytest）。
+注意：你要的是 demo 脚本风格（非 pytest）。
 - 直接 `python tests/models/keye_ar/test_unified_token_decoder_revert.py` 即可。
-- 里面会在 `__main__` 里依次调用各个 demo，并打印调试信息。
+- 入口在 `__main__`，会依次调用各个 demo，并打印调试信息。
+
+约束：
+- 不允许 CPU 跑；全部使用 `cuda + torch.bfloat16`。
 """
 
 from __future__ import annotations
@@ -16,11 +19,31 @@ from muse.models.keye_ar.unified_token_decoder import UnifiedTokenDecoder
 from tests.models.keye_ar.original_transformer_decoder import PureDecoderTransformer
 
 
+DTYPE = torch.bfloat16
+DEVICE = torch.device("cuda")
+
+
+def _require_cuda_bf16() -> None:
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA 不可用：该 demo 强制要求 GPU 运行")
+    if not torch.cuda.is_bf16_supported():
+        raise RuntimeError("当前 GPU/驱动不支持 bfloat16：该 demo 强制要求 torch.bfloat16")
+
+
 def _tensor_stat(x: torch.Tensor) -> str:
+    xf = x.detach().float()
     return (
         f"shape={tuple(x.shape)}, dtype={x.dtype}, device={x.device}, "
-        f"min={x.min().item():.6g}, max={x.max().item():.6g}, mean={x.float().mean().item():.6g}"
+        f"min={xf.min().item():.6g}, max={xf.max().item():.6g}, mean={xf.mean().item():.6g}"
     )
+
+
+def _to_cuda_bf16(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    out: dict[str, torch.Tensor] = {}
+    for k, v in sd.items():
+        if torch.is_tensor(v):
+            out[k] = v.detach().to(device=DEVICE, dtype=DTYPE)
+    return out
 
 
 def _make_models(
@@ -67,27 +90,40 @@ def _make_models(
         input_dim=d_model if reduce else None,
         reduce=reduce,
         lm_head=None,
-    )
+    ).to(device=DEVICE, dtype=DTYPE)
 
     torch.manual_seed(0)
-    uni = UnifiedTokenDecoder(cfg)
+    uni = UnifiedTokenDecoder(cfg).to(device=DEVICE, dtype=DTYPE)
+
     return cfg, ref, uni
 
 
-def demo_unified_token_decoder_forward_cpu() -> None:
-    print("\n==================== demo_unified_token_decoder_forward_cpu ====================")
+def demo_env_info() -> None:
+    _require_cuda_bf16()
+    print("\n==================== demo_env_info ====================")
+    print(f"torch={torch.__version__}")
+    print(f"cuda_available={torch.cuda.is_available()}")
+    print(f"device_name={torch.cuda.get_device_name(0)}")
+    print(f"bf16_supported={torch.cuda.is_bf16_supported()}")
+    print(f"DEVICE={DEVICE}, DTYPE={DTYPE}")
+
+
+def demo_unified_token_decoder_forward_bf16_cuda() -> None:
+    print("\n==================== demo_unified_token_decoder_forward_bf16_cuda ====================")
     cfg, _ref, uni = _make_models()
     uni.eval()
 
-    x = torch.randn(2, 16, cfg.d_model)
+    x = torch.randn(2, 16, cfg.d_model, device=DEVICE, dtype=DTYPE)
     print(f"[input]  {_tensor_stat(x)}")
 
-    y = uni(x)
+    with torch.inference_mode():
+        y = uni(x)
+
     print(f"[output] {_tensor_stat(y)}")
 
     assert y.shape == (2, 16, cfg.d_model)
-    assert torch.isfinite(y).all()
-    print("[ok] forward pass")
+    assert torch.isfinite(y.float()).all()
+    print("[ok] forward pass (cuda+bf16)")
 
 
 def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
@@ -96,8 +132,8 @@ def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
 
     _cfg, ref, _uni = _make_models(reduce=reduce_mode)
 
-    # 参考模型的 state_dict（模拟“原始实现”的 HF 权重命名）
-    ref_sd = copy.deepcopy(ref.state_dict())
+    # convert/revert 是 key/shape/拼接映射：这里用 GPU+bf16 的 state_dict 跑一遍
+    ref_sd = _to_cuda_bf16(copy.deepcopy(ref.state_dict()))
     print(f"[ref] state_dict keys={len(ref_sd)}")
 
     # 原始 -> Unified
@@ -124,12 +160,12 @@ def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
 
     # tensor 必须完全一致（转换/逆转换应该是可逆的）
     max_diff = 0.0
-    max_diff_k = None
+    max_diff_k: str | None = None
     for k in ref_sd.keys():
         a = ref_sd[k]
         b = ref_sd_2[k]
         if not torch.equal(a, b):
-            diff = (a - b).abs().max().item()
+            diff = (a.float() - b.float()).abs().max().item()
             if diff > max_diff:
                 max_diff = diff
                 max_diff_k = k
@@ -140,17 +176,14 @@ def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
 
 
 def demo_load_converted_weights_and_forward(*, reduce_mode: bool = False) -> None:
-    """额外 demo：把 ref 权重转成 unified 格式 load 进 UnifiedTokenDecoder，然后跑一次 forward。
-
-    这个 demo 的价值：确认 convert 出来的 key/shape 能被 UnifiedTokenDecoder.load_state_dict 接受。
-    """
+    """把 ref 权重 convert 成 unified 格式 load 进 UnifiedTokenDecoder，然后跑 forward（cuda+bf16）。"""
 
     print("\n==================== demo_load_converted_weights_and_forward ====================")
     print(f"reduce_mode={reduce_mode}")
 
     cfg, ref, uni = _make_models(reduce=reduce_mode)
 
-    ref_sd = copy.deepcopy(ref.state_dict())
+    ref_sd = _to_cuda_bf16(copy.deepcopy(ref.state_dict()))
     uni_sd = UnifiedTokenDecoder.convert_hf_state_dict(ref_sd, reduce_mode=reduce_mode)
 
     missing, unexpected = uni.load_state_dict(uni_sd, strict=False)
@@ -165,17 +198,21 @@ def demo_load_converted_weights_and_forward(*, reduce_mode: bool = False) -> Non
             print("   -", k)
 
     uni.eval()
-    x = torch.randn(2, 16, cfg.d_model)
-    y = uni(x)
+    x = torch.randn(2, 16, cfg.d_model, device=DEVICE, dtype=DTYPE)
+
+    with torch.inference_mode():
+        y = uni(x)
+
     print(f"[forward after load] output: {_tensor_stat(y)}")
-    assert torch.isfinite(y).all()
+    assert torch.isfinite(y.float()).all()
     print("[ok] forward after loading converted weights")
 
 
 if __name__ == "__main__":
     torch.set_printoptions(precision=4, sci_mode=False)
 
-    demo_unified_token_decoder_forward_cpu()
+    demo_env_info()
+    demo_unified_token_decoder_forward_bf16_cuda()
     demo_convert_and_revert_state_dict(reduce_mode=False)
     demo_load_converted_weights_and_forward(reduce_mode=False)
 
