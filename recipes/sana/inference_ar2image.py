@@ -130,6 +130,7 @@ def parse_args():
                         help="Overwrite existing token cache files")
     parser.add_argument("--im-token-generation-length", type=int, default=None,
                         help="Generation length for image tokens, if None, use max_condition_length")
+    parser.add_argument("--cache-image-for-same-input-id", default=1, help="Cache image for same input id")
     return parser.parse_args()
 
 
@@ -640,6 +641,8 @@ def main():
     else:
         cached = {}
 
+    cache_for_same_input_id = {}
+
 
     for i_sample, samples in tqdm.tqdm(enumerate(dataset)):
         if i_sample >= args.n_infer_items:
@@ -653,6 +656,11 @@ def main():
             batch_size = samples.input_ids.shape[0]
 
             cache_key = ','.join([str(x) for x in samples.input_ids.flatten().tolist()])
+            
+            if cache_key in cache_for_same_input_id and args.cache_image_for_same_input_id:
+                sample_data = cache_for_same_input_id[cache_key]
+                samples_dict[samples.metadata.index] = sample_data
+
             if cached.get(cache_key) is not None:
                 conds = cached[cache_key]
                 cond_embeds, cond_mask = conds[:2]
@@ -773,7 +781,9 @@ def main():
                     'metadata': samples.metadata
                 }
                 samples_dict[sample_index] = sample_data
+                cache_for_same_input_id[cache_key] = sample_data
 
+        
     world_size = torch.distributed.get_world_size()
     rank = torch.distributed.get_rank()
 
