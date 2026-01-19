@@ -153,7 +153,7 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft.json \
-                --resolution-budgets "1024:3" \
+                --resolution-budgets "1024:6" \
                 --learning-rate 2e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 10000 \
@@ -161,7 +161,7 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 3 \
+                --batch-size 6 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 300000 \
