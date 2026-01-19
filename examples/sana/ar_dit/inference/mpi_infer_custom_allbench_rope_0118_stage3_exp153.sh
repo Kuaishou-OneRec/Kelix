@@ -55,7 +55,7 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 # DCP_TAG="${DCP_TAG:-global_step6000}"
 
 DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft_from3k/
-DCP_TAG=global_step200
+DCP_TAG=global_step800
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
