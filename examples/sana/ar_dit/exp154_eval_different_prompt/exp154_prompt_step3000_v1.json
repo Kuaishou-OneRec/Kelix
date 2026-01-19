@@ -1,0 +1,18 @@
+{
+    "name": "Chat2ImageDataset",
+    "sources": "/llm_reco/vlm/datahub/datasets/Gen_Stage3_blended/0.0.5/index/parquet.json",
+    "image_size": 1024,
+    "max_condition_length": 720,
+    "center_crop": false,
+    "packing": false,
+    "valid_hw_range": [128, 5120],
+    "multi_scale": false,
+    "force_assistant_image_size": 504,
+    "max_hw_ratio": 9999,
+    "force_use_stop": false,
+    "template": "Please generate an image base on the description: {}.",
+    "shuffle_window": 2,
+    "num_epochs": 999,
+    "num_workers": 4,
+    "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working, compare exp43"
+}

@@ -1474,6 +1474,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
                  system_prompt="You are a helpful assistant.",
                  infer_repeats=4,
                  prompt_key='question',
+                 force_use_stop=False,
                  **kwargs
                  ):
         self.gen_eval_csv_path = gen_eval_csv_path
@@ -1486,6 +1487,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
             self.processor_path, trust_remote_code=True)
         self.infer_repeats = infer_repeats
         self.prompt_key = prompt_key
+        self.force_use_stop = force_use_stop
     
     def _load_all_data(self):
         """
@@ -1557,12 +1559,17 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         
+        question = sample[self.prompt_key]
+
+        if not question.endswith('.') and self.force_use_stop:
+            question = question + '.'
+
         if self.template == '__GenUno1M/0.0.2__':
-            prompt = self._make_GenUno1M_0_0_2_style_prompt(sample[self.prompt_key])
+            prompt = self._make_GenUno1M_0_0_2_style_prompt(question=question)
         elif self.template == 'Gen_qwen_image_mix/0.0.1':
-            prompt = self._make_GenQwenImageMix_0_0_1_style_prompt(sample[self.prompt_key])
+            prompt = self._make_GenQwenImageMix_0_0_1_style_prompt(question)
         else:
-            prompt = self.template.format(sample[self.prompt_key])
+            prompt = self.template.format(question)
         
         messages.append({"role": "user", "content": [
             {"type": "text", "text": prompt},
