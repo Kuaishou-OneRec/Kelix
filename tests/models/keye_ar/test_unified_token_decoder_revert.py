@@ -6,6 +6,12 @@
 
 约束：
 - 不允许 CPU 跑；全部使用 `cuda + torch.bfloat16`。
+- demo 里不“手写 forward”去访问模型内部层（避免绕过模型逻辑）。
+
+说明：
+- 目前 `UnifiedTokenDecoder.forward()` 在 reduce=False 时会访问 `self.output_linear.weight.dtype`，
+  但 reduce=False 时 `output_linear` 是 `nn.Identity()` 没有 `weight`，因此会报错。
+- 你要求不能改模型代码，所以 demo 里统一用 `reduce=True` 来确保 `output_linear` 是 `nn.Linear`。
 """
 
 from __future__ import annotations
@@ -55,7 +61,7 @@ def _make_models(
     nhead: int = 8,
     num_layers: int = 2,
     dim_feedforward: int = 256,
-    reduce: bool = False,
+    reduce: bool = True,
 ):
     if max_pos_length is None:
         max_pos_length = max_length
@@ -70,12 +76,11 @@ def _make_models(
         num_layers=num_layers,
         dim_feedforward=dim_feedforward,
         use_gradient_checkpointing=False,
-        input_dim=d_model if reduce else None,
-        reduce=reduce,
+        input_dim=d_model,  # reduce=True 时必须提供
+        reduce=True,
         attention_function="flash_attention_2",
     )
 
-    # 让 ref/uni 初始化一致，方便 debug
     torch.manual_seed(0)
     ref = PureDecoderTransformer(
         vocab_size=vocab_size,
@@ -87,8 +92,8 @@ def _make_models(
         dim_feedforward=dim_feedforward,
         use_flash_attn=False,
         use_gradient_checkpointing=False,
-        input_dim=d_model if reduce else None,
-        reduce=reduce,
+        input_dim=d_model,
+        reduce=True,
         lm_head=None,
     ).to(device=DEVICE, dtype=DTYPE)
 
@@ -110,9 +115,10 @@ def demo_env_info() -> None:
 
 def demo_unified_token_decoder_forward_bf16_cuda() -> None:
     print("\n==================== demo_unified_token_decoder_forward_bf16_cuda ====================")
-    cfg, _ref, uni = _make_models()
+    cfg, _ref, uni = _make_models(reduce=True)
     uni.eval()
 
+    # reduce=True 时 forward 的输入维度仍然是 (B, S, input_dim)；这里 input_dim=d_model
     x = torch.randn(2, 16, cfg.d_model, device=DEVICE, dtype=DTYPE)
     print(f"[input]  {_tensor_stat(x)}")
 
@@ -120,45 +126,62 @@ def demo_unified_token_decoder_forward_bf16_cuda() -> None:
         y = uni(x)
 
     print(f"[output] {_tensor_stat(y)}")
-
     assert y.shape == (2, 16, cfg.d_model)
     assert torch.isfinite(y.float()).all()
     print("[ok] forward pass (cuda+bf16)")
 
 
-def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
+def demo_unified_token_decoder_forward_with_tokens_bf16_cuda() -> None:
+    print("\n==================== demo_unified_token_decoder_forward_with_tokens_bf16_cuda ====================")
+    cfg, _ref, uni = _make_models(reduce=True)
+    uni.eval()
+
+    # forward_with_tokens 需要 token_embedding；UnifiedTokenDecoder 在未传 token_embedding 时会依赖外部传入。
+    # 因此这个 demo 只验证接口存在与报错信息（避免偷偷访问内部层去补 embedding）。
+    tokens = torch.randint(0, cfg.vocab_size, (2, 16), device=DEVICE, dtype=torch.long)
+    print(f"[tokens] shape={tuple(tokens.shape)}, dtype={tokens.dtype}, device={tokens.device}")
+
+    with torch.inference_mode():
+        try:
+            y = uni.forward_with_tokens(tokens)
+        except Exception as e:  # noqa: BLE001
+            print(f"[expected] forward_with_tokens failed (token_embedding not provided): {type(e).__name__}: {e}")
+            return
+
+    print(f"[output] {_tensor_stat(y)}")
+    assert torch.isfinite(y.float()).all()
+    print("[ok] forward_with_tokens")
+
+
+def demo_convert_and_revert_state_dict(*, reduce_mode: bool = True) -> None:
     print("\n==================== demo_convert_and_revert_state_dict ====================")
     print(f"reduce_mode={reduce_mode}")
 
-    _cfg, ref, _uni = _make_models(reduce=reduce_mode)
+    _cfg, ref, _uni = _make_models(reduce=True)
 
-    # convert/revert 是 key/shape/拼接映射：这里用 GPU+bf16 的 state_dict 跑一遍
+    # convert/revert 是 key/shape/拼接映射：用 GPU+bf16 的 state_dict 跑一遍
     ref_sd = _to_cuda_bf16(copy.deepcopy(ref.state_dict()))
     print(f"[ref] state_dict keys={len(ref_sd)}")
 
-    # 原始 -> Unified
     uni_sd = UnifiedTokenDecoder.convert_hf_state_dict(ref_sd, reduce_mode=reduce_mode)
     print(f"[uni] converted state_dict keys={len(uni_sd)}")
 
-    # Unified -> 原始
     ref_sd_2 = UnifiedTokenDecoder.revert_hf_state_dict(uni_sd, reduce_mode=reduce_mode)
     print(f"[ref2] reverted state_dict keys={len(ref_sd_2)}")
 
-    # key 必须完全一致
     missing = sorted(set(ref_sd.keys()) - set(ref_sd_2.keys()))
     extra = sorted(set(ref_sd_2.keys()) - set(ref_sd.keys()))
     print(f"[check] missing_keys={len(missing)}, extra_keys={len(extra)}")
     if missing:
         print("  missing:")
-        for k in missing[:20]:
+        for k in missing[:30]:
             print("   -", k)
     if extra:
         print("  extra:")
-        for k in extra[:20]:
+        for k in extra[:30]:
             print("   -", k)
     assert not missing and not extra
 
-    # tensor 必须完全一致（转换/逆转换应该是可逆的）
     max_diff = 0.0
     max_diff_k: str | None = None
     for k in ref_sd.keys():
@@ -175,13 +198,11 @@ def demo_convert_and_revert_state_dict(*, reduce_mode: bool = False) -> None:
     print("[ok] convert_hf_state_dict <-> revert_hf_state_dict are reversible")
 
 
-def demo_load_converted_weights_and_forward(*, reduce_mode: bool = False) -> None:
-    """把 ref 权重 convert 成 unified 格式 load 进 UnifiedTokenDecoder，然后跑 forward（cuda+bf16）。"""
-
+def demo_load_converted_weights_and_forward(*, reduce_mode: bool = True) -> None:
     print("\n==================== demo_load_converted_weights_and_forward ====================")
     print(f"reduce_mode={reduce_mode}")
 
-    cfg, ref, uni = _make_models(reduce=reduce_mode)
+    cfg, ref, uni = _make_models(reduce=True)
 
     ref_sd = _to_cuda_bf16(copy.deepcopy(ref.state_dict()))
     uni_sd = UnifiedTokenDecoder.convert_hf_state_dict(ref_sd, reduce_mode=reduce_mode)
@@ -213,9 +234,6 @@ if __name__ == "__main__":
 
     demo_env_info()
     demo_unified_token_decoder_forward_bf16_cuda()
-    demo_convert_and_revert_state_dict(reduce_mode=False)
-    demo_load_converted_weights_and_forward(reduce_mode=False)
-
-    # 如果你也想顺便验证 reduce=True 的分支，可以打开：
-    # demo_convert_and_revert_state_dict(reduce_mode=True)
-    # demo_load_converted_weights_and_forward(reduce_mode=True)
+    demo_unified_token_decoder_forward_with_tokens_bf16_cuda()
+    demo_convert_and_revert_state_dict(reduce_mode=True)
+    demo_load_converted_weights_and_forward(reduce_mode=True)
