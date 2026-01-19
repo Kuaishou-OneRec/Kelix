@@ -144,7 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --model-name KeyeARModel \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_ar/train_scripts/run_train_compare.json \
-                --learning-rate 1e-4 \
+                --learning-rate 2e-4 \
                 --weight-decay 0.0 \
                 --beta1 0.9 \
                 --beta2 0.95 \
