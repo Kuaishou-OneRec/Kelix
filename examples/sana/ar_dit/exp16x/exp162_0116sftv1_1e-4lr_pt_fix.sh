@@ -141,7 +141,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 1000 \
+                --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
@@ -151,7 +151,7 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix.json \
-                --resolution-budgets "1024:2" \
+                --resolution-budgets "1024:4" \
                 --learning-rate 2e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 10000 \
@@ -159,13 +159,13 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 2 \
+                --batch-size 4 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
-                --save-checkpoint-per-step 2000 \
+                --save-checkpoint-per-step 1000 \
                 --logging-per-step 20 \
                 --clip-range 9999999 \
                 --fp32-weight \
