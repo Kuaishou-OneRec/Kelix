@@ -162,7 +162,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 1000 \
+                --visualize-per-step 200 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
@@ -174,8 +174,8 @@ nohup mpirun --allow-run-as-root \
                 --dataset-config examples/sana/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft.json \
                 --resolution-budgets "1024:6" \
                 --learning-rate 1e-4 \
-                --min-lr 1e-4 \
-                --num-decay-steps 10000 \
+                --min-lr 5e-5 \
+                --num-decay-steps 4000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
@@ -186,7 +186,7 @@ nohup mpirun --allow-run-as-root \
                 --num-training-steps 300000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
-                --save-checkpoint-per-step 3000 \
+                --save-checkpoint-per-step 200 \
                 --logging-per-step 20 \
                 --clip-range 9999999 \
                 --fp32-weight \
