@@ -483,6 +483,72 @@ class UnifiedQwen3Model(Qwen3Model):
 
         return converted_state_dict
 
+    @override
+    def revert_hf_state_dict(
+        self,
+        muse_state_dict: Dict[str, torch.Tensor],
+        tie_word_embeddings: bool = True,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        """Revert UnifiedQwen3Model state dict back to the original HF/Qwen3 naming.
+
+        这是 `convert_hf_state_dict` 的反函数。
+
+        实现策略：
+        - 主干 Qwen3 权重：复用 `super().revert_hf_state_dict`（即 `Qwen3Model.revert_hf_state_dict`）
+        - `token_head`：复用 `UnifiedTokenDecoder.revert_hf_state_dict`
+
+        Args:
+            muse_state_dict: UnifiedQwen3Model 保存出来的 state_dict。
+            tie_word_embeddings: 是否在 HF 侧补出/处理 lm_head.weight。
+
+        Returns:
+            hf_state_dict: 满足 `muse/models/qwen3/modeling_qwen_ori.py` 命名风格的 state_dict，
+                并包含 `model.token_head.*` 的原始权重命名。
+        """
+
+        # 1) 拆分 main/token_head
+        main_model_state_dict: Dict[str, torch.Tensor] = {}
+        token_head_state_dict: Dict[str, torch.Tensor] = {}
+
+        for k, v in muse_state_dict.items():
+            if k.startswith("model.token_head."):
+                token_head_state_dict[k[len("model.token_head."):]] = v
+                continue
+
+            # convert 里把 model.tok_embeddings.weight -> model.tok_embeddings.embed_tokens.weight
+            # revert 里为了复用 Qwen3Model.revert_hf_state_dict，需要把它恢复回 model.tok_embeddings.weight
+            if k == "model.tok_embeddings.embed_tokens.weight":
+                main_model_state_dict["model.tok_embeddings.weight"] = v
+                continue
+
+            main_model_state_dict[k] = v
+
+        # 2) 主干：复用父类逻辑
+        hf_state_dict = super().revert_hf_state_dict(
+            muse_state_dict=main_model_state_dict,
+            **kwargs,
+        )
+
+        # 3) token_head：复用 UnifiedTokenDecoder 的 revert（静态方法）
+        if token_head_state_dict:
+            reverted_token_head_state_dict = UnifiedTokenDecoder.revert_hf_state_dict(
+                state_dict=token_head_state_dict,
+                reduce_mode=True,
+            )
+
+            # 加回 model.token_head. 前缀
+            for kk, vv in reverted_token_head_state_dict.items():
+                hf_state_dict[f"model.token_head.{kk}"] = vv
+
+        # 4) tie_word_embeddings 相关：对齐 Qwen3Model.revert 的语义
+        # 这里保持一致：如果 tie_word_embeddings=True，则允许补 lm_head.weight
+        if tie_word_embeddings and "lm_head.weight" not in hf_state_dict:
+            if "model.embed_tokens.weight" in hf_state_dict:
+                hf_state_dict["lm_head.weight"] = hf_state_dict["model.embed_tokens.weight"]
+
+        return hf_state_dict
+
 
 class KeyeARModel(Model):
     """
@@ -595,25 +661,25 @@ class KeyeARModel(Model):
                               tie_word_embeddings: bool = True,
                               **kwargs) -> Dict[str, torch.Tensor]:
         """Convert a Hugging Face state dictionary to KeyeARModel state dictionary.
-        
+
         This implementation reuses the UnifiedQwen3Model's convert_hf_state_dict logic for the main model
         and adds handling for the lm_head and visual_tokenizer parameters.
-        
+
         Args:
             hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
             tie_word_embeddings: Whether the model ties embeddings (skip lm_head if True).
             **kwargs: Additional keyword arguments.
-        
+
         Returns:
             A dictionary of model state with converted key names.
         """
-    
+
         # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
         # Extract the keys that belong to the main model (excluding visual_tokenizer and lm_head)
         main_model_state_dict = {}
         lm_head_weight = None
         visual_tokenizer_state_dict = {}
-        
+
         for hf_key, tensor in hf_state_dict.items():
             if hf_key == "lm_head.weight":
                 lm_head_weight = tensor
@@ -642,11 +708,6 @@ class KeyeARModel(Model):
                 # Handle other visual_tokenizer nested structure: model.visual_tokenizer.model.* -> visual_tokenizer.model.*
                 new_k = hf_key.replace("model.visual_tokenizer.model.", "visual_tokenizer.model.")
                 main_model_state_dict[new_k] = tensor
-            # 修复：不要预先转换model.embed_tokens.weight，让Qwen3Model来处理
-            # elif hf_key == "model.embed_tokens.weight":
-            #     # Convert model.embed_tokens.weight to model.tok_embeddings.embed_tokens.weight
-            #     new_k = "model.tok_embeddings.embed_tokens.weight"
-            #     main_model_state_dict[new_k] = tensor
             else:
                 # 修复：对于其他键，如果以"model."开头，需要保留这个前缀
                 # 因为UnifiedQwen3Model期望接收带有"model."前缀的键
@@ -671,24 +732,97 @@ class KeyeARModel(Model):
         for k, v in converted_state_dict.items():
             # 如果键不是以"model."开头，则添加"model."前缀
             final_converted_state_dict[f"model.{k}"] = v
-            
+
         # 更新converted_state_dict引用
         converted_state_dict = final_converted_state_dict
 
         # Handle the lm_head parameter
         if lm_head_weight is not None and not tie_word_embeddings:
             converted_state_dict["lm_head.weight"] = lm_head_weight
-            
+
         # Handle visual_tokenizer weights using KeyeImageTokenizer's convert_hf_state_dict method
         if visual_tokenizer_state_dict:
             # Convert using KeyeImageTokenizer's convert_hf_state_dict method
             converted_visual_tokenizer_state_dict = self.visual_tokenizer.convert_hf_state_dict(visual_tokenizer_state_dict)
-            
+
             for k, v in converted_visual_tokenizer_state_dict.items():
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
 
         return converted_state_dict
+
+    def revert_hf_state_dict(
+        self,
+        muse_state_dict: Dict[str, torch.Tensor],
+        tie_word_embeddings: bool = True,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        """Revert KeyeARModel state dict back to `tests/models/keye_ar/modeling_ori.py` ckpt naming.
+
+        这是 `convert_hf_state_dict` 的反函数：
+        - 输入：KeyeARModel（本 repo 实现）保存出来的 ckpt key
+        - 输出：`tests/models/keye_ar/modeling_ori.py` 所期望的 ckpt key
+
+        实现策略：
+        - 主干语言模型（`self.model` / UnifiedQwen3Model）：复用 `self.model.revert_hf_state_dict`
+        - 视觉 tokenizer（`self.visual_tokenizer` / KeyeImageTokenizer）：复用 `self.visual_tokenizer.revert_hf_state_dict`
+        - 顶层 `lm_head.weight`：根据 tie_word_embeddings 决定是否写出
+
+        Args:
+            muse_state_dict: KeyeARModel 保存出来的 state_dict。
+            tie_word_embeddings: 是否补出/写出 lm_head.weight。
+
+        Returns:
+            hf_state_dict: 还原后的 ckpt（用于 tests/models/keye_ar/modeling_ori.py 加载）。
+        """
+
+        main_model_state_dict: Dict[str, torch.Tensor] = {}
+        visual_tokenizer_state_dict: Dict[str, torch.Tensor] = {}
+        lm_head_weight: Optional[torch.Tensor] = None
+
+        # 1) 拆分 state_dict
+        for k, v in muse_state_dict.items():
+            if k == "lm_head.weight":
+                lm_head_weight = v
+                continue
+
+            if k.startswith("visual_tokenizer."):
+                visual_tokenizer_state_dict[k[len("visual_tokenizer."):]] = v
+                continue
+
+            if k.startswith("model."):
+                main_model_state_dict[k[len("model."):]] = v
+                continue
+
+            # 其他 key：保持原样（一般不应该出现，但为了健壮性保留）
+            main_model_state_dict[k] = v
+
+        # 2) 主干模型：复用 UnifiedQwen3Model.revert
+        reverted_main_state_dict = self.model.revert_hf_state_dict(
+            muse_state_dict=main_model_state_dict,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
+        # 3) 视觉 tokenizer：复用 KeyeImageTokenizer.revert
+        reverted_visual_state_dict: Dict[str, torch.Tensor] = {}
+        if visual_tokenizer_state_dict:
+            reverted_visual_state_dict = self.visual_tokenizer.revert_hf_state_dict(visual_tokenizer_state_dict)
+
+        # 4) 合并输出，并对齐 modeling_ori 的前缀习惯
+        # - reverted_main_state_dict 是 HF/Qwen3 风格，包含 model.* / lm_head.* / (可能的 model.token_head.*)
+        # - reverted_visual_state_dict 需要加 visual_tokenizer.* 前缀
+        hf_state_dict: Dict[str, torch.Tensor] = {}
+        hf_state_dict.update(reverted_main_state_dict)
+
+        for kk, vv in reverted_visual_state_dict.items():
+            hf_state_dict[f"visual_tokenizer.{kk}"] = vv
+
+        # 5) 顶层 lm_head.weight
+        if lm_head_weight is not None and not tie_word_embeddings:
+            hf_state_dict["lm_head.weight"] = lm_head_weight
+
+        return hf_state_dict
 
     def expand_with_image_tokens(
         self,

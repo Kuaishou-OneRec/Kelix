@@ -439,3 +439,53 @@ class KeyeImageTokenizer(Model):
                 muse_state_dict[new_k] = v
         
         return muse_state_dict
+
+    def revert_hf_state_dict(self, muse_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Revert a KeyeImageTokenizer (muse) state dict back to Hugging Face format.
+
+        这是 `convert_hf_state_dict` 的反函数：把 muse 权重 key 还原为 HF 权重 key。
+
+        反向规则：严格对齐 `convert_hf_state_dict` 里做过的每一次替换。
+        注意：`convert_hf_state_dict` 会过滤掉包含 `visual.head` 的键，因此 revert 时也不会生成这些键。
+
+        Args:
+            muse_state_dict: muse(KeyeImageTokenizer) 的 state_dict。
+
+        Returns:
+            hf_state_dict: 还原后的 HF 风格 state_dict。
+        """
+        hf_state_dict: Dict[str, torch.Tensor] = {}
+
+        for k, v in muse_state_dict.items():
+            old_k = k
+
+            # 保持与 convert 一致的过滤逻辑
+            if "visual.head" in old_k:
+                continue
+
+            # 1) Convert visual.* -> visual.vision_model.*
+            if old_k.startswith("visual.") and not old_k.startswith("visual.vision_model."):
+                old_k = "visual.vision_model." + old_k[len("visual."):]
+
+            # 2) Reverse rename rules (strict inverse order)
+            # ln_post -> post_layernorm
+            old_k = old_k.replace(".ln_post.", ".post_layernorm.")
+            # mlp.w2 -> mlp.fc2
+            old_k = old_k.replace(".mlp.w2.", ".mlp.fc2.")
+            # mlp.w1 -> mlp.fc1
+            old_k = old_k.replace(".mlp.w1.", ".mlp.fc1.")
+            # output_proj -> out_proj
+            old_k = old_k.replace(".output_proj.", ".out_proj.")
+            # attn -> self_attn
+            old_k = old_k.replace(".attn.", ".self_attn.")
+            # mlp_norm -> layer_norm2
+            old_k = old_k.replace(".mlp_norm.", ".layer_norm2.")
+            # sa_norm -> layer_norm1
+            old_k = old_k.replace(".sa_norm.", ".layer_norm1.")
+
+            # 3) up_projectors -> quant_projector
+            old_k = old_k.replace("up_projectors", "quant_projector")
+
+            hf_state_dict[old_k] = v
+
+        return hf_state_dict
