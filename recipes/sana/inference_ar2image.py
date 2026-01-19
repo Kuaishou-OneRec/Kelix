@@ -658,8 +658,10 @@ def main():
             cache_key = ','.join([str(x) for x in samples.input_ids.flatten().tolist()])
             
             if cache_key in cache_for_same_input_id and args.cache_image_for_same_input_id:
+                print(f"Using cached image for same input_id, keuy={cache_key}, sample_index={samples.metadata.index}")
                 sample_data = cache_for_same_input_id[cache_key]
                 samples_dict[samples.metadata.index] = sample_data
+                continue
 
             if cached.get(cache_key) is not None:
                 conds = cached[cache_key]
@@ -781,6 +783,8 @@ def main():
                     'metadata': samples.metadata
                 }
                 samples_dict[sample_index] = sample_data
+
+                print(f"add to samples_dict for sample_index={sample_index}, cache_key={cache_key}")
                 cache_for_same_input_id[cache_key] = sample_data
 
         
