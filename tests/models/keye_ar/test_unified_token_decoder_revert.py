@@ -72,7 +72,7 @@ def _make_models(
         use_gradient_checkpointing=False,
         input_dim=d_model if reduce else None,
         reduce=reduce,
-        attention_function="sdpa",
+        attention_function="flash_attention_2",
     )
 
     # 让 ref/uni 初始化一致，方便 debug
