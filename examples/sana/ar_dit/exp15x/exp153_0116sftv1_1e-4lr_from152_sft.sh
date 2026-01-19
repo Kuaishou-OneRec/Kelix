@@ -25,7 +25,22 @@ PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
 
 # MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana_v2/multi_scale/exp3.22/global_step51000/converted/
-MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft/global_step3000/converted/
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp152_0116sftv1_1e-4lr_pt_fix/global_step3000/converted/
+
+
+# 等待MODEL_DIR存在
+# 循环等待，直到目录存在
+while [ ! -d "$MODEL_DIR" ]; do
+    # 打印等待提示信息（包含当前时间，便于排查日志）
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): 目标目录 $MODEL_DIR 尚未存在，将等待3秒后重试..."
+    # 等待3秒钟
+    sleep 3
+done
+
+# 目录存在后，打印完成提示
+echo "$(date '+%Y-%m-%d %H:%M:%S'): 目标目录 $MODEL_DIR 已存在，等待结束！"
+
+
 
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
