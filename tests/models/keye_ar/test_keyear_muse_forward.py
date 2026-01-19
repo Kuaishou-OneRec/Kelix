@@ -281,7 +281,7 @@ def test_keyear_forward():
 
     # ./muse/tools/dcp2torch.py
     keye_dcp_path = "/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/keye_ar/train_scripts/run_train_compare"
-    dcp_tag = "global_step17000"
+    dcp_tag = "global_step16000"
     source_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
 
     # 检查预训练模型路径是否存在
