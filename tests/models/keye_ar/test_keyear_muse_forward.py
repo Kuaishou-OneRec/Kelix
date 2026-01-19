@@ -292,8 +292,6 @@ def test_keyear_forward():
         dcp_to_torch_convert(keye_dcp_path, tag=dcp_tag, source_dir=source_dir)
     else:
         print(f"checkpoint_dir exists: {checkpoint_dir}")
-
-    exit()
         
     processor = AutoProcessor.from_pretrained(
             checkpoint_dir, 
