@@ -156,7 +156,7 @@ nohup mpirun --allow-run-as-root \
                 --freeze-params "visual_tokenizer." \
                 --logging-per-step 20 \
                 --max-steps 2500000 \
-                --save-checkpoint-per-step 1000 \
+                --save-checkpoint-per-step 100 \
                 --seed 19260817 \
                 --max-length 12000 \
                 --enable-gradient-checkpointing \

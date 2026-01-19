@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument("--model-dir", type=str, default=None,
                         help="Directory containing pretrained model or checkpoint (required for inference mode)")
     parser.add_argument("--mode", type=str, default='inference',
-                        choices=["inference", "visualize"], help="Mode to run in")
+                        choices=["inference", "visualize", "cache_reshard"], help="Mode to run in")
     parser.add_argument("--dcp-ckpt-dir", type=str, default=None,
                         help="CKPT directory for DCP checkpoint conversion (required if --dcp-tag is used)")
     parser.add_argument("--dcp-tag", type=str, default=None,
@@ -985,6 +985,12 @@ def collect_eval_scores(dcp_ckpt_dir, model_tag="BLIP3OTransformersSFT", tb_log_
             tb_writer.close()
 
 
+def cache_reshard(args):
+    # reshard all token cache pkl to rank0~7
+    # load all caches
+    cache_pats = glob.glob(os.path.join(args.dcp_ckpt_dir, "**", "*.pkl"), recursive=True)
+
+
 # After inference completes, collect evaluation scores if dcp_ckpt_dir is provided
 if __name__ == "__main__":
     args = parse_args()
@@ -1007,7 +1013,12 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error in main: {e}")
             traceback.print_exc()
-
+    elif args.mode == 'cache_reshard':
+        # For visualize mode, only need dcp_ckpt_dir
+        if not args.dcp_ckpt_dir:
+            print("Error: --dcp-ckpt-dir is required for cache_reshard mode")
+            exit(1)
+        collect_eval_scores(args.dcp_ckpt_dir, args.model_tag, args.tb_log_name)
     else:
         # For visualize mode, only need dcp_ckpt_dir
         if not args.dcp_ckpt_dir:

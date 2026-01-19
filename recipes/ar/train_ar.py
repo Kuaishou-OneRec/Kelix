@@ -628,6 +628,10 @@ def train() -> None:
             except StopIteration:
                 print_rank_0(f"Warning: only {i} batches available")
                 break
+
+        for batch in cached_batches:
+            input_ids = batch["input_ids"].cpu().tolist()
+
         data_iter = iter(itertools.cycle(cached_batches))
     else:
         data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
