@@ -183,7 +183,7 @@ nohup mpirun --allow-run-as-root \
                 --batch-size 6 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
-                --num-training-steps 300000 \
+                --num-training-steps 100000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
                 --save-checkpoint-per-step 200 \
