@@ -175,7 +175,7 @@ nohup mpirun --allow-run-as-root \
                 --resolution-budgets "1024:6" \
                 --learning-rate 1e-4 \
                 --min-lr 4e-5 \
-                --num-decay-steps 1000 \
+                --num-decay-steps 10000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
