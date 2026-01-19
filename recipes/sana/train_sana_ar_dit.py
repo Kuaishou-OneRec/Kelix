@@ -339,7 +339,8 @@ class VisReconstructionLoader:
                  dtype: torch.dtype,
                  num_images: Optional[int] = None,
                  tb_writer=None,
-                 vae=None
+                 vae=None,
+                 given_samples=None
                  ):
         if cls.loaded: return cls.loaded
 
@@ -351,6 +352,7 @@ class VisReconstructionLoader:
             device=device,
             dtype=dtype,
             num_images=num_images,
+            given_samples=given_samples
         )
         
         texts, original_images, pixel_values, image_grid_thw, vae_input_images, input_ids = result
@@ -560,7 +562,8 @@ def load_visualization_images(
     image_size: int,
     device: torch.device,
     dtype: torch.dtype,
-    num_images: Optional[int] = None
+    num_images: Optional[int] = None,
+    given_samples=None
 ) -> tuple:
     """Load and preprocess images from parquet file for visualization.
     
@@ -597,7 +600,11 @@ def load_visualization_images(
     processed_samples = []
     texts = []
     original_images = []
-    for _, row in df.iterrows():
+
+    if given_samples is None:
+        given_samples = list([x[1] for x in df.iterrows()])
+
+    for row in given_samples:
         # Convert parquet row to sample format expected by dataset
         sample = row.to_dict()
         # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
@@ -648,6 +655,7 @@ def visualize_reconstruction(
     tb_writer=None,
     num_images: Optional[int] = None,
     args = None,
+    given_samples = None,
 ):
     """Visualize DiT reconstruction results.
     
@@ -685,7 +693,8 @@ def visualize_reconstruction(
                dtype,
                num_images,
                tb_writer,
-               vae
+               vae,
+               given_samples=given_samples
           )
     # 2. Get condition embeddings from image tokenizer
     print_rank_0("  Getting condition embeddings...")

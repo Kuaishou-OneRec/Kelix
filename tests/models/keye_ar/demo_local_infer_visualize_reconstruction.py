@@ -370,6 +370,10 @@ def main():
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
     dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
+    given_samples = {
+        
+    }
+
     # Run DiT sampling pipeline locally and save results
     print("Running DiT sampling and saving results...")
     savings = {}  # pyright: ignore[reportUnusedVariable]
@@ -384,6 +388,7 @@ def main():
             args.num_images,
             tb_writer=None,
             vae=vae,
+            given_samples=given_samples
         )
 
         # forward_ar_model(
