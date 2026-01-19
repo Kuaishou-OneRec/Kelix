@@ -24,7 +24,10 @@ MODEL_CONFIG_OVERRIDES="model_max_length=720"
 log_file=${DCP_CKPT_DIR}/auto_monitor.log
 echo "log_file=${log_file}"
 
-ln -s /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp145_0116sftv1_1e-4lr_pt/token_cache ${DCP_CKPT_DIR}
+if [ ! -e $DCP_CKPT_DIR/token_cache ]; then
+    ln -s /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp145_0116sftv1_1e-4lr_pt/token_cache ${DCP_CKPT_DIR}
+fi
+
 
 # Run the Python script with all parameters
 PYTHONPATH=. \
