@@ -97,7 +97,7 @@ def _compare_state_dicts(
     max_diff_k = None
     max_shape_k = None
 
-    for k in keys_a:
+    for k in (keys_a & keys_b):
         ta = a[k]
         tb = b[k]
 
