@@ -198,15 +198,20 @@ def run_evaluation(step_name: str, args, benchname: str) -> bool:
         log(f"ULMEvalKit directory not found: {ulm_dir}")
         return False
 
+    # 把 ULMEvalKit 的 stdout/stderr 重定向到 work_dir，便于排查
+    eval_log = os.path.join(work_dir, "run_eval_only.log")
+
     activation_cmd = [
         "bash",
         "-c",
         f"source /mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate && "
         f"conda activate ulmevalkit2 && "
         f"cd {ulm_dir} && "
-        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)}",
+        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)} "
+        f"> {eval_log} 2>&1",
     ]
     print(f"Activation command: {' '.join(activation_cmd)}")
+    print(f"Eval log redirected to: {eval_log}")
     return run_command(activation_cmd)
 
 
