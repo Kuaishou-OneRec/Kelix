@@ -32,11 +32,21 @@ def parse_args():
                        help='Keye AR directory path')
     parser.add_argument('--inference-script',
                        default="examples/sana/ar_dit/inference/mpi_infer_custom.sh",
-                       help='Path to inference script (default: examples/sana/ar_dit/inference/mpi_infer_custom.sh)')
+                       help='Path to inference script (由外部wrapper通过 INFERENCE_SCRIPT env + --inference-script 传入)')
     parser.add_argument('--eval-id', default="default",
                        help='Evaluation ID (default: default)')
     parser.add_argument('--good-steps', default='',
                        help='List of good steps to monitor, split by comma')
+    parser.add_argument('--benchnames', default='GenEval',
+                       help='Comma separated benchmark names to run (default: GenEval,DPGBench)')
+    parser.add_argument('--ulmeval-dir', default="/llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit",
+                       help='ULMEvalKit directory path')
+    parser.add_argument('--ulmeval-config', default="config/blip3o_sft_step800.json",
+                       help='ULMEvalKit config json path (single value, legacy)')
+    parser.add_argument('--ulmeval-configs', default='',
+                       help='Comma separated ULMEvalKit configs aligned with --benchnames. '
+                            'Example: GenEval,DPGBench with configs: config/blip3o_sft_step800.json,config/dpg_blip3o_sft.json. '
+                            'If empty, fallback to --ulmeval-config for all benches.')
     return parser.parse_args()
 
 # Set environment variables for subprocesses
@@ -82,73 +92,154 @@ def run_command(cmd: List[str], env: Dict = None, log_output: bool = True) -> bo
         return False
 
 
-def run_inference(step_name: str, args) -> bool:
-    """Run inference for a step"""
-    log(f"Starting inference for {step_name}")
-    
+def run_inference(step_name: str, args, benchname: str) -> bool:
+    """Run inference for a step for a specific benchmark."""
+    log(f"Starting inference for {step_name}, bench={benchname}")
+
     env_vars = ENV_SETTINGS.copy()
     env_vars.update({
         "DCP_CKPT_DIR": DCP_CKPT_DIR,
         "DCP_TAG": step_name,
-        "OUTPUT_DIR": f"{DCP_CKPT_DIR}/{step_name}/inference/GenEval/outputs",
-        "EVAL_ID": args.eval_id
+        # 注意：inference 脚本内部默认会用 GenEval 组织 OUTPUT_DIR，
+        # 我们通过 env 显式传入 OUTPUT_DIR 覆盖它。
+        "OUTPUT_DIR": f"{DCP_CKPT_DIR}/{step_name}/inference/{benchname}/outputs",
+        "EVAL_ID": args.eval_id,
+        # twobenches 脚本会把 BENCHNAME 透传给 recipes/sana/inference_ar2image.py --benchname
+        # 旧脚本即便不使用该 env，也不会受影响（兼容性）
+        "BENCHNAME": benchname,
     })
-    
+
     # Create output directory
     output_dir = Path(env_vars["OUTPUT_DIR"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Run inference script using the provided path
     log(f"Using inference script: {INFERENCE_SCRIPT}")
     cmd = ["bash", INFERENCE_SCRIPT]
     return run_command(cmd, env_vars)
 
 
-def run_evaluation(step_name: str, args) -> bool:
-    """Run evaluation for a step"""
-    log(f"Starting evaluation for {step_name}")
-    
-    work_dir = f"{DCP_CKPT_DIR}/{step_name}/inference/GenEval/outputs/ulmeval/aggresults/"
+def _parse_bench_to_config(args) -> Dict[str, str]:
+    """Parse benchmark -> ULMEval config mapping.
+
+    兼容性要求：
+    - 如果未传 --ulmeval-configs，则所有 bench 都使用 --ulmeval-config（旧行为）
+    - 如果传了 --ulmeval-configs：
+        * 支持两种格式：
+            1) 按 benchnames 顺序对齐的列表：cfg1,cfg2,...
+            2) 显式键值对：GenEval=config/xxx.json,DPGBench=config/yyy.json
+    """
+
+    benchnames = [b.strip() for b in args.benchnames.split(",") if b.strip()]
+    raw = (args.ulmeval_configs or "").strip()
+
+    bench_to_cfg: Dict[str, str] = {}
+
+    if not raw:
+        for b in benchnames:
+            bench_to_cfg[b] = args.ulmeval_config
+        return bench_to_cfg
+
+    # key=value 格式
+    if "=" in raw:
+        items = [x.strip() for x in raw.split(",") if x.strip()]
+        for it in items:
+            if "=" not in it:
+                continue
+            k, v = it.split("=", 1)
+            bench_to_cfg[k.strip()] = v.strip()
+        # fallback to legacy
+        for b in benchnames:
+            bench_to_cfg.setdefault(b, args.ulmeval_config)
+        return bench_to_cfg
+
+    # 列表对齐格式
+    cfgs = [c.strip() for c in raw.split(",") if c.strip()]
+    if len(cfgs) == 1:
+        for b in benchnames:
+            bench_to_cfg[b] = cfgs[0]
+        return bench_to_cfg
+
+    if len(cfgs) != len(benchnames):
+        # 不抛异常，回退旧行为，保证兼容性
+        for b in benchnames:
+            bench_to_cfg[b] = args.ulmeval_config
+        return bench_to_cfg
+
+    for b, c in zip(benchnames, cfgs):
+        bench_to_cfg[b] = c
+    return bench_to_cfg
+
+
+def run_evaluation(step_name: str, args, benchname: str) -> bool:
+    """Run evaluation for a step for a specific benchmark."""
+    log(f"Starting evaluation for {step_name}, bench={benchname}")
+
+    work_dir = f"{DCP_CKPT_DIR}/{step_name}/inference/{benchname}/outputs/ulmeval/aggresults/"
     Path(work_dir).mkdir(parents=True, exist_ok=True)
-    
+
+    bench_to_cfg = _parse_bench_to_config(args)
+    ulm_cfg = bench_to_cfg.get(benchname, args.ulmeval_config)
+
     eval_cmd = [
-        "torchrun", "--nproc_per_node=8", "run_eval_only.py",
-        "--config", "config/blip3o_sft_step800.json",
-        "--eval-id", args.eval_id,
-        "--work-dir", work_dir
+        "torchrun",
+        "--nproc_per_node=8",
+        "run_eval_only.py",
+        "--config",
+        ulm_cfg,
+        "--eval-id",
+        args.eval_id,
+        "--work-dir",
+        work_dir,
     ]
-    
-    # Run in ULMEvalKit directory with conda environment
-    ulm_dir = "/llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit"
+
+    ulm_dir = args.ulmeval_dir
     if not os.path.exists(ulm_dir):
         log(f"ULMEvalKit directory not found: {ulm_dir}")
         return False
-    
+
     activation_cmd = [
-        "bash", "-c",
+        "bash",
+        "-c",
         f"source /mmu_mllm_hdd_2/chuchenglong/miniconda3/bin/activate && "
         f"conda activate ulmevalkit2 && "
         f"cd {ulm_dir} && "
-        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)}"
+        f"max_infer_items=300000 PYTHONPATH=. {' '.join(eval_cmd)}",
     ]
-    # > {work_dir}/eval_${cf}.out 2>&1 &
     print(f"Activation command: {' '.join(activation_cmd)}")
     return run_command(activation_cmd)
 
 
-def collect_scores(step_name: str) -> bool:
-    """Collect evaluation scores"""
-    log(f"Collecting scores for {step_name}")
-    
+def collect_scores(step_name: str, benchname: str) -> bool:
+    """Collect evaluation scores for a benchmark.
+
+    注意：exp163_monitor_twobenches.sh 调用的 inference 脚本是 mpi_infer_custom_cond_spe.sh，
+    它只负责生成 outputs 目录下的图片与 messages json；
+    聚合/打分依然复用 `recipes/sana/inference_ar2image.py --mode visualize`。
+
+    同时为了对齐 mpi 脚本的目录组织，这里会显式传入 output-dir。
+    """
+
+    log(f"Collecting scores for {step_name}, bench={benchname}")
+
     step_number = step_name.replace("global_step", "")
     cmd = [
-        "python", "recipes/sana/inference_ar2image.py",
-        "--mode", "visualize",
-        "--dcp-ckpt-dir", DCP_CKPT_DIR,
-        "--model-tag", MODEL_TAG,
-        "--tb-log-name", f"{TB_LOG_NAME}_{step_number}"
+        "python",
+        "recipes/sana/inference_ar2image.py",
+        "--mode",
+        "visualize",
+        "--dcp-ckpt-dir",
+        DCP_CKPT_DIR,
+        "--dcp-tag",
+        step_name,
+        "--model-tag",
+        MODEL_TAG,
+        "--tb-log-name",
+        f"{TB_LOG_NAME}_{step_number}",
+        "--benchname",
+        benchname,
     ]
-    
+
     return run_command(cmd)
 
 
@@ -179,26 +270,47 @@ def monitor(args):
     """Main monitoring loop"""
     log(f"Starting monitoring for {DCP_CKPT_DIR}")
     processed_steps: Set[str] = set()
-    
+
+    benchnames = [b.strip() for b in args.benchnames.split(",") if b.strip()]
+
     while True:
         log("Checking for new global_step directories...")
-        
+
         available_steps = find_available_steps(args)
-        
+
         new_steps = [step for step in available_steps if step not in processed_steps]
-        
+
         for step_name in new_steps:
-            # if int(step_name.split('step')[-1]) % 4000 != 0: continue
             log(f"Found new step: {step_name}")
-            
-            if run_inference(step_name, args):
-                if run_evaluation(step_name, args):
-                    collect_scores(step_name)
-                    processed_steps.add(step_name)
+
+            all_ok = True
+            for benchname in benchnames:
+                ok = run_inference(step_name, args, benchname)
+                if not ok:
+                    all_ok = False
+                    log(f"Inference failed for {step_name}, bench={benchname}")
+                    break
+
+                ok = run_evaluation(step_name, args, benchname)
+                if not ok:
+                    all_ok = False
+                    log(f"Evaluation failed for {step_name}, bench={benchname}")
+                    break
+
+                ok = collect_scores(step_name, benchname)
+                if not ok:
+                    all_ok = False
+                    log(f"Collect scores failed for {step_name}, bench={benchname}")
+                    break
+
+            if all_ok:
+                processed_steps.add(step_name)
             else:
                 log(f"Failed to process {step_name}, skipping further steps")
+
+            # 每轮只处理一个最新 step（保持原行为）
             break
-            
+
         if not new_steps:
             time.sleep(MONITOR_INTERVAL)
 
