@@ -1402,7 +1402,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
                 x["max_pixels"] = self.max_pixels
 
-        if np.random.rand() < 0.00002:
+        if np.random.rand() < 0.00002 and self.image_quality_filter is not None:
             self.image_quality_filter.print_statistics()
 
         # 这里是把所有'image'字段替换成路径, recursive_traverse是为了满足不同的格式
