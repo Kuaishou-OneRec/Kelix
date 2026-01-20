@@ -1,6 +1,6 @@
 {
     "name": "Chat2ImageDataset",
-    "sources": "/llm_reco/vlm/datahub/datasets/Gen_Stage3_blended/0.0.8/index/parquet.json",
+    "sources": "/llm_reco/vlm/datahub/datasets/Gen_Stage3_blended/0.0.9/index/parquet.json",
     "image_size": 1024,
     "max_condition_length": 720,
     "center_crop": false,
