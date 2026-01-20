@@ -1348,6 +1348,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         metadata = json.loads(sample.get("metadata", '{}'))
 
         if metadata is None:
+            metadata = {}
             if np.random.rand() < 0.001: print(f"{sample} has None metadata")
             images_info = {}
             for k,v in images.items():
