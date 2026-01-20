@@ -81,6 +81,11 @@ def _compare_state_dicts(
         for k in missing[:print_topk]:
             print("   -", k)
 
+    for k in list(missing):
+        if k.startswith("visual_tokenizer.visual.vision_model.head."):
+            print(f"key {k} is allowed to be missing")
+            del missing[missing.index(k)]
+
     if extra:
         print(f"  extra (top {min(print_topk, len(extra))}):")
         for k in extra[:print_topk]:
