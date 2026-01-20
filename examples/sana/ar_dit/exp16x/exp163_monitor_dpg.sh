@@ -44,6 +44,5 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
     --benchnames "DPGBench" \
-    --good-steps "" \
     --ulmeval-configs "DPGBench=config/dpg_blip3o_sft.json" \
     > ${log_file} &
