@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import json
 from typing import Dict, Tuple
+import tqdm
 
 import torch
 from safetensors.torch import load_file
@@ -97,7 +98,7 @@ def _compare_state_dicts(
     max_diff_k = None
     max_shape_k = None
 
-    for k in (keys_a & keys_b):
+    for k in tqdm.tqdm(keys_a & keys_b):
         ta = a[k]
         tb = b[k]
 
