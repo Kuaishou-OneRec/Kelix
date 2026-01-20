@@ -3,6 +3,7 @@ set -e
 
 # 最简版：直接跑 run_eval_only.py（用于你调试“卡住”问题）
 # 需要改路径就改下面几个变量即可。
+export http_proxy=http://oversea-squid1.jp.txyun:11080 https_proxy=http://oversea-squid1.jp.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 
 ULMEVAL_DIR="/llm_reco/lingzhixin/dit_eval_lzx/ULMEvalKit"
 WORK_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft_debug/global_step4800/inference/DPGBench/outputs/ulmeval/aggresults/"
