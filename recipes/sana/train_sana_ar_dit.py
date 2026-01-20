@@ -297,6 +297,8 @@ def get_argument_parser():
     parser.add_argument("--im-token-generation-length", type=int, default=None,
                         help="Generation length for image tokens, if None, use max_condition_length")
 
+    parser.add_argument("--global-step", type=int, default=0, help="Global step")
+
     ############ Visualization Args ############
     
     parser.add_argument("--cfg-scale", type=float, default=1.0,
@@ -1417,7 +1419,7 @@ def train():
                     parquet_path=args.visualize_parquet_path,  # 改为parquet_path参数
                     dataset=dataset,  # 传入dataset用于处理方法
                     output_dir=args.output_dir,
-                    global_step=0,
+                    global_step=args.global_step,
                     cfg_scale=args.cfg_scale,
                     num_sampling_steps=args.num_sampling_steps,
                     flow_shift=args.flow_shift,

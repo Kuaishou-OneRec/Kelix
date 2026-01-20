@@ -588,7 +588,7 @@ class StepScheduler:
         
         # Internal state tracking
         self._micro_step = 0
-        self._global_step = 0
+        self._global_step = getattr(args, 'global_step', 0)
     
     def step(self):
         """
