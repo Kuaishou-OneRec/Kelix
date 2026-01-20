@@ -84,7 +84,7 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
         "image_edit": self.reso_finder.get_system_prompt("edit"),
         "image_generation": self.reso_finder.get_system_prompt("generation"),
         "__default__": self.reso_finder.get_system_prompt("understanding")
-      }
+      } if self.reso_finder is not None else None
       self.system_prompt_setter = SystemPromptByTask(task2prompt_coarse)
 
   def _fill_image_block(self, block: Dict[str, Any],
@@ -151,6 +151,8 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
 
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
+
+    messages = self.system_prompt_setter(messages, sample["json"]["source"])
 
     if messages is None or not isinstance(messages, list):
       raise ValueError(f"Invalid messages format: messages is None or not a list, got {type(messages)}")

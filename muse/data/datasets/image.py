@@ -1150,7 +1150,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         ...
     }
     """
-    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, with_ori_sample=False, cache_dir=None, image_filters_args=None, **kwargs):
+    def __init__(self, *args, filter_by_score=False, force_assistant_image_size=None, valid_hw_range=None, system_prompt=None, max_hw_ratio=1.5, assistant_resize_method='resize', max_sample_length=1024, with_ori_sample=False, cache_dir=None, image_filters_args=None, resolution_finder_kwargs=None, use_resolution_finder=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.filter_by_score = filter_by_score
         self.valid_hw_range = valid_hw_range
@@ -1162,6 +1162,17 @@ class Chat2ImageDataset(Token2ImageDataset):
         self.with_ori_sample = with_ori_sample
         self.cache_dir = cache_dir
         
+        from .ar_utils.resolution_finder import ResolutionFinder
+        from .ar_utils.prompt_setter import SystemPromptByTask
+
+        self.reso_finder = ResolutionFinder(**resolution_finder_kwargs) if use_resolution_finder else None
+        task2prompt_coarse = {
+            "image_edit": self.reso_finder.get_system_prompt("edit"),
+            "image_generation": self.reso_finder.get_system_prompt("generation"),
+            "__default__": self.reso_finder.get_system_prompt("generation")
+        } if self.reso_finder is not None else None
+        self.system_prompt_setter = SystemPromptByTask(task2prompt_coarse)
+
         os.makedirs(self.cache_dir, exist_ok=True)
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
@@ -1218,6 +1229,8 @@ class Chat2ImageDataset(Token2ImageDataset):
                 {"role": "system", "content": self.system_prompt},
             ] + messages
 
+        messages = self.system_prompt_setter(messages, sample["json"]["source"])
+        
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
             messages, 
