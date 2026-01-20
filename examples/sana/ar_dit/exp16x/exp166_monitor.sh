@@ -42,4 +42,6 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --dataset-config "$DATASET_CONFIG" \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
+    --benchnames "GenEval" \
+    --ulmeval-configs "GenEval=config/blip3o_sft_step800.json" \
     > ${log_file} &
