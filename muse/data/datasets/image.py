@@ -1361,7 +1361,7 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         try:
             image_info = images_info.get(image, {})
-        except:
+        except Exception as e:
             print(f"bad images_info={images_info}({type(images_info)})")
             exit()
         height = image_info.get("height", None)
