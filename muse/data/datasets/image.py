@@ -1359,8 +1359,11 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         images_info = metadata.get("images_info", {})
 
-        print(f"images_info={images_info}")
-        image_info = images_info.get(image, {})
+        try:
+            image_info = images_info.get(image, {})
+        except:
+            print(f"bad images_info={images_info}")
+            exit()
         height = image_info.get("height", None)
         width = image_info.get("width", None)
         if height is not None and width is not None:
