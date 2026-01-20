@@ -1358,6 +1358,8 @@ class Chat2ImageDataset(Token2ImageDataset):
             metadata["images_info"] = images_info
 
         images_info = metadata.get("images_info", {})
+
+        print(f"images_info={images_info}")
         image_info = images_info.get(image, {})
         height = image_info.get("height", None)
         width = image_info.get("width", None)
