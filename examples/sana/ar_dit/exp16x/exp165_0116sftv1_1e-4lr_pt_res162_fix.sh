@@ -171,7 +171,7 @@ nohup mpirun --allow-run-as-root \
                 --clip-range 9999999 \
                 --fp32-weight \
                 --fp32-reduce \
-                --seed 19260817 \
+                --seed 1917 \
                 --global-step 31000 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
