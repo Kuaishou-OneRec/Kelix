@@ -129,6 +129,9 @@ def load_keye_ar_model_v2_for_revert(output_model_dir: str) -> Tuple[KeyeARModel
     _ = processor
 
     config = load_keye_ar_config(f"{output_model_dir}/config.json")
+    
+    print(f"KeyeARModel config: \n{config}")
+
     model = KeyeARModel(config)
 
     hf_state_dict = _load_hf_state_dict_from_dir(output_model_dir)
