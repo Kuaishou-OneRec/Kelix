@@ -292,10 +292,12 @@ def monitor(args):
             log(f"Found new step: {step_name}")
 
             all_ok = True
+            inf_ok = True
             for benchname in benchnames:
                 ok = run_inference(step_name, args, benchname)
                 if not ok:
                     all_ok = False
+                    inf_ok = False
                     log(f"Inference failed for {step_name}, bench={benchname}")
                     break
 
@@ -311,7 +313,7 @@ def monitor(args):
                     log(f"Collect scores failed for {step_name}, bench={benchname}")
                     break
 
-            if all_ok:
+            if inf_ok: #all_ok:
                 processed_steps.add(step_name)
             else:
                 log(f"Failed to process {step_name}, skipping further steps")
