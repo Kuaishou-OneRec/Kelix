@@ -248,7 +248,7 @@ def find_available_steps(args: argparse.Namespace) -> List[str]:
     steps = []
     good_steps = args.good_steps.split(',')
     good_steps = [int(step) for step in good_steps if step != '']
-    
+    verbose = getattr(args, 'verbose', True)
     for item in Path(DCP_CKPT_DIR).iterdir():
         if item.is_dir() and item.name.startswith("global_step"):
             # Extract step number
@@ -256,10 +256,13 @@ def find_available_steps(args: argparse.Namespace) -> List[str]:
             if match:
                 step_number = int(match.group(1))
                 if good_steps and step_number not in good_steps:
+                    if verbose: print(f"skipping {item.name} because of bad step, not in good_steps({good_steps})")
                     continue
                 metadata_file = item / ".metadata"
                 if metadata_file.exists():
                     steps.append((step_number, item.name))
+                else:
+                    if verbose: print(f"metadata_file not found for {item.name}")
     
     # Sort by step number descending
     steps.sort(key=lambda x: x[0], reverse=True)
