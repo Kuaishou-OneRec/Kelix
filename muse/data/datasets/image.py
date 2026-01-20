@@ -1229,8 +1229,8 @@ class Chat2ImageDataset(Token2ImageDataset):
                 {"role": "system", "content": self.system_prompt},
             ] + messages
 
-        messages = self.system_prompt_setter(messages, sample["json"]["source"])
-        
+        messages = self.system_prompt_setter(messages, "__default__")
+
         # Apply chat template using the message from sample
         text = self.processor.apply_chat_template(
             messages, 
