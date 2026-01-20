@@ -17,6 +17,7 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_ex
 
 # Override parameters (if needed)
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft/"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft_debug"
 DATASET_CONFIG="examples/sana/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe_dpg.sh"
@@ -43,5 +44,6 @@ nohup python3 -u examples/keye_ar/auto_infer_eval.py \
     --keye-ar-dir "$KEYE_AR_DIR" \
     --inference-script "$INFERENCE_SCRIPT" \
     --benchnames "DPGBench" \
+    --good-steps "" \
     --ulmeval-configs "DPGBench=config/dpg_blip3o_sft.json" \
     > ${log_file} &
