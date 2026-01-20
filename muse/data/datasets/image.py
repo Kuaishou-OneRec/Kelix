@@ -1353,17 +1353,13 @@ class Chat2ImageDataset(Token2ImageDataset):
             images_info = {}
             for k,v in images.items():
                 image_path = images[k]
-                image = Image.open(image_path)
-                images_info[k] = {"height": image.height, "width": image.width}
+                _image = Image.open(image_path)
+                images_info[k] = {"height": _image.height, "width": _image.width}
             metadata["images_info"] = images_info
 
         images_info = metadata.get("images_info", {})
 
-        try:
-            image_info = images_info.get(image, {})
-        except Exception as e:
-            print(f"bad images_info={images_info}({type(images_info)})")
-            exit()
+        image_info = images_info.get(image, {})
         height = image_info.get("height", None)
         width = image_info.get("width", None)
         if height is not None and width is not None:
