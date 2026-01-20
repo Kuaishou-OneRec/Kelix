@@ -13,5 +13,7 @@
     "shuffle_window": 2,
     "num_epochs": 999,
     "num_workers": 4,
-    "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working, compare exp43"
+    "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working, compare exp43",
+    "use_resolution_finder": true,
+    "resolution_finder_kwargs": {"only_general_template": true}
 }
