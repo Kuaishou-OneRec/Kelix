@@ -144,7 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
                 --visualize-per-step 500 \
                 --keye-ar-dir $KEYE_AR_DIR \
-                --num-vis-images 1 \
+                --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --max-condition-length 720 \
