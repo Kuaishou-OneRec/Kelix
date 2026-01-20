@@ -1362,7 +1362,7 @@ class Chat2ImageDataset(Token2ImageDataset):
         try:
             image_info = images_info.get(image, {})
         except:
-            print(f"bad images_info={images_info}")
+            print(f"bad images_info={images_info}({type(images_info)})")
             exit()
         height = image_info.get("height", None)
         width = image_info.get("width", None)
