@@ -259,7 +259,7 @@ def main():
             self.dcp_ckpt_dir = None
             self.dcp_tag = None
             self.model_config = None
-            self.model_config_overrides = "model_max_length=720"
+            self.model_config_overrides = ["model_max_length=720"]
             self.vae_dir = "/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
             self.keye_ar_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step18000/global_step18000/muse_converted"
             self.dataset_config = "examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json"
