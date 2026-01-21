@@ -57,7 +57,7 @@ class SystemPromptByTask:
     if source not in self.source_to_task:
       task = self.classify_source2task(source)
       self.source_to_task[source] = task
-      if torch.distributed.get_rank() == 0:
+      if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
         print(f"find new source. task: {task}, source: {source}")
     else:
       task = self.source_to_task[source]
