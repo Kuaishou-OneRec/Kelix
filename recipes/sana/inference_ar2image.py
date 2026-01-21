@@ -343,7 +343,6 @@ def tokenize_images(ar_processor : AutoProcessor,
 
         default_vision_embeddings = default_vision_embeddings[is_image_id[-default_vision_embeddings.shape[0]:], :]  # [valid_len, embed_dim]
 
-        print(f"is_image_idis_image_id", is_image_id.shape, flat_input_ids.shape)
         default_image_tokens = flat_input_ids[is_image_id, :][-default_vision_embeddings.shape[0]:]
 
         # Check if we have matching number of start and end positions

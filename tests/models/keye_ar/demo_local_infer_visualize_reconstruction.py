@@ -389,6 +389,8 @@ class LocalAR2ImageGenerator:
                 prompt = (req.get("prompt") or "").strip()
                 output_path = req.get("output_path")
 
+                print(f"receive request: prompt={prompt!r}, output_path={output_path!r}")
+
                 if not prompt:
                     return self._send_json(400, {"error": "prompt is required"})
 
