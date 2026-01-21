@@ -24,12 +24,12 @@ script_name=$(basename "$0" .sh)
 PYTHONPATH=. \
 python3 muse/tools/dcp2torch.py /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix \
 --source-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step32000/converted \
---tag global_step90000
+--tag global_step80000
 
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
 MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix/global_step31000/converted
-MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step90000/converted
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step80000/converted
 # MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana_v2/multi_scale/exp3.22/global_step51000/converted/
 # MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp152_0116sftv1_1e-4lr_pt_fix/global_step12000/converted/
 
