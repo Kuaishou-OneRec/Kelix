@@ -1336,6 +1336,9 @@ class Chat2ImageDataset(Token2ImageDataset):
 
         pair = self.extract_image_text(sample)
         
+        print(f"samplesamplesample", sample)
+        print(f"pairpairpair", pair)
+
         if not pair: return None
 
         if self.filter_by_score and self.is_valid_scores(pair["image"], sample["source"]) is False:
