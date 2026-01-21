@@ -18,6 +18,10 @@ from typing import List, Optional, Tuple
 from transformers import AutoProcessor
 from PIL import Image
 from diffusers import FlowMatchEulerDiscreteScheduler
+from recipes.sana.inference_ar2image import tokenize_images
+
+
+
 
 # Import DCP to torch converter
 from muse.tools.dcp2torch import convert as dcp_to_torch_convert
@@ -64,139 +68,6 @@ def get_model_embedding_and_tokens(
         embeddings = embeddings[0]
         return tokens, embeddings
         
-
-def tokenize_images(ar_processor : AutoProcessor,
-                    ar_model : KeyeARModel,
-                    pixel_values: torch.Tensor,
-                    image_grid_thw: torch.Tensor,
-                    batch_size: int,
-                    max_condition_length: int,
-                    input_ids: Optional[torch.Tensor] = None,
-                    cu_seqlens: Optional[torch.Tensor] = None,
-                    teacher_forcing: bool = False,
-                    ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Tokenize images using KeyeARModel. (单机版本)
-    
-    Args:
-        ar_processor: Keye AR processor
-        ar_model: KeyeARModel instance
-        pixel_values: Pixel values tensor [num_total_patches, ...]
-        image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
-        batch_size: Batch size (number of packed sequences)
-        max_condition_length: Maximum condition sequence length for padding
-        input_ids: Input token IDs [1, total_seq_len] (packed sequences)
-        cu_seqlens: Cumulative sequence lengths for flash attention
-        teacher_forcing: Whether to use teacher forcing
-    
-    Returns:
-        Tuple of (embeddings, attention_mask):
-        - embeddings: [B, max_condition_length, embed_dim]
-        - attention_mask: [B, 1, 1, max_condition_length] with 1s for valid tokens, 0s for padding
-    """
-    assert input_ids.size(0) == 1, "input_ids must has batch size of 1, got {}".format(input_ids.size(0))
-    assistant_start_ids = ar_processor.tokenizer.encode("<|im_start|>assistant\n") # [151644, 77091]
-    
-    if not teacher_forcing:
-        # find assistant_start_ids in input_ids and delete the tokens after
-        assistant_start_tensor = torch.tensor(assistant_start_ids, device=input_ids.device, dtype=input_ids.dtype)
-        
-        seq_len = input_ids.size(1)
-        assistant_len = len(assistant_start_ids)
-        assistant_start_idx = -1
-        
-        if seq_len >= assistant_len:
-            for i in range(seq_len - assistant_len + 1):
-                window = input_ids[0, i:i+assistant_len]
-                if torch.all(window == assistant_start_tensor):
-                    assistant_start_idx = i + assistant_len
-                    break
-        
-        if assistant_start_idx != -1:
-            input_ids = input_ids[:, :assistant_start_idx]
-            print(f"Found assistant_start_ids at index {assistant_start_idx}, truncating input_ids to shape {input_ids.shape}")
-
-    # Extract embeddings between vision_start_id and vision_end_id
-    vision_start_id = ar_model.config.qwen_config.vision_start_token_id
-    vision_end_id = ar_model.config.qwen_config.vision_end_token_id
-
-    if input_ids[0][-1].item() != vision_start_id:
-        input_ids = torch.cat([input_ids, torch.tensor([[vision_start_id]]).to(input_ids)], 1)
-
-    with torch.no_grad():
-        input_pos = torch.arange(input_ids.shape[1], device=input_ids.device, dtype=torch.long).unsqueeze(0)
-
-        input_ids, embeddings = get_model_embedding_and_tokens(
-            model=ar_model,
-            teacher_forcing=teacher_forcing,
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            input_pos=input_pos,
-            cu_seqlens=cu_seqlens,
-            max_new_tokens=max_condition_length+4+99, # space,vis_start,vis_tok,vis_end,eos
-        )
-        
-        # Find the positions of vision_start_id and vision_end_id in input_ids
-        vision_start_mask = (input_ids == vision_start_id)
-        vision_end_mask = (input_ids == vision_end_id)
-        
-        vision_embeddings_list = []
-        vision_seq_lens = []
-        
-        start_positions = torch.nonzero(vision_start_mask.squeeze(0), as_tuple=True)[0]
-        end_positions = torch.nonzero(vision_end_mask.squeeze(0), as_tuple=True)[0]
-        
-        if len(start_positions) != len(end_positions):
-            print(f"Mismatched number of vision_start_id ({len(start_positions)}) and vision_end_id ({len(end_positions)}) tokens")
-            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
-            vision_seq_lens.append(max_condition_length)
-        else:
-            for start_pos, end_pos in zip(start_positions, end_positions):
-                if start_pos >= end_pos:
-                    raise ValueError(f"vision_start_id ({start_pos.item()}) should come before vision_end_id ({end_pos.item()})")
-                
-                vision_embeddings = embeddings[0, start_pos:end_pos+1, :]  # [segment_len, embed_dim]
-                vision_embeddings_list.append(vision_embeddings)
-                vision_seq_lens.append(vision_embeddings.shape[0])
-        
-        vision_embeddings_list = [emb.to(embeddings.device) for emb in vision_embeddings_list]
-        
-        if len(vision_embeddings_list) != batch_size:
-            print(f"Extracted {len(vision_embeddings_list)} segments but batch_size is {batch_size}")
-            vision_embeddings_list.append(embeddings[0, -max_condition_length:, :])
-            vision_seq_lens.append(max_condition_length)
-            
-        max_vision_seq_len = max(vision_seq_lens)
-        embed_dim = embeddings.shape[2]
-        processed_embeddings = torch.zeros(batch_size, max_vision_seq_len, embed_dim,
-                                            device=embeddings.device, dtype=embeddings.dtype)
-        
-        attention_mask = torch.zeros(batch_size, max_vision_seq_len,
-                                   device=embeddings.device, dtype=torch.long)
-        
-        for i, emb in enumerate(vision_embeddings_list):
-            seq_len = emb.shape[0]
-            processed_embeddings[i, :seq_len, :] = emb
-            attention_mask[i, :seq_len] = 1
-        
-        current_seq_len = processed_embeddings.shape[1]
-        if current_seq_len < max_condition_length:
-            padding_embeddings = torch.zeros(batch_size, max_condition_length - current_seq_len, embed_dim,
-                                           device=processed_embeddings.device, dtype=processed_embeddings.dtype)
-            processed_embeddings = torch.cat([processed_embeddings, padding_embeddings], dim=1)
-            
-            padding_mask = torch.zeros(batch_size, max_condition_length - current_seq_len,
-                                     device=attention_mask.device, dtype=attention_mask.dtype)
-            attention_mask = torch.cat([attention_mask, padding_mask], dim=1)
-        elif current_seq_len > max_condition_length:
-            processed_embeddings = processed_embeddings[:, :max_condition_length, :]
-            attention_mask = attention_mask[:, :max_condition_length]
-
-        attention_mask = attention_mask[:, None, None, :]
-
-    return processed_embeddings, attention_mask
-
-
 def load_keye_ar_local(tokenizer_dir: str, device: torch.device, dtype: torch.dtype, output_last_hidden_states_only=True):
     """Local version of load_keye_ar without distributed computing."""
     from muse.models.keye_ar import KeyeARModel
@@ -278,6 +149,7 @@ def main():
             self.results_dir = "./vis_output_local/results"
             self.teacher_forcing = 0
             self.linspace_sigmas = True
+            self.condition_on_special_tokens = True
             self.savings = "/llm_reco/lingzhixin/recovlm_data/for_debug/infer_visualize_reconstruction/for_new_compare_v2.pt"
     
     args = Config()
@@ -407,16 +279,26 @@ def main():
         #     image_grid_thw=loaded.image_grid_thw.to(device=device),
         # )
 
+        '''
+                        cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
+                            ar_model=image_tokenizer,
+                            batch_size=batch_size,
+                            max_condition_length=args.max_condition_length,
+                            input_ids=samples.input_ids.to(device=device),
+                            teacher_forcing=args.teacher_forcing,
+                            ar_processor=ar_processor,
+                            condition_on_special_tokens=args.condition_on_special_tokens,
+                        )
+        '''
         # Tokenize images to condition embeddings
-        cond_embeds, cond_mask = tokenize_images(
+        cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
             ar_processor=ar_processor,
             ar_model=image_tokenizer,
-            pixel_values=loaded.pixel_values.to(device=device),
-            image_grid_thw=loaded.image_grid_thw.to(device=device),
-            batch_size=loaded.batch_size,
+            batch_size=1,
             max_condition_length=args.max_condition_length,
             input_ids=loaded.input_ids.to(device=device),
-            teacher_forcing=args.teacher_forcing,
+            teacher_forcing=False,
+            condition_on_special_tokens=args.condition_on_special_tokens,
         )
         savings["cond_embeds"] = cond_embeds
         savings["cond_mask"] = cond_mask
