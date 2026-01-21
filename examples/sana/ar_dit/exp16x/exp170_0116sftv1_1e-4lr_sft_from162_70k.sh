@@ -21,10 +21,10 @@ script_name=$(basename "$0" .sh)
 #         --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/converted_fix \
 #         --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
 
-PYTHONPATH=. \
-python3 muse/tools/dcp2torch.py /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix \
---source-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step32000/converted \
---tag global_step80000
+# PYTHONPATH=. \
+# python3 muse/tools/dcp2torch.py /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix \
+# --source-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step32000/converted \
+# --tag global_step80000
 
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
