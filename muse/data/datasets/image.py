@@ -1334,6 +1334,11 @@ class Chat2ImageDataset(Token2ImageDataset):
                     res = res if res is not None else recursive_traverse(value, call_back_function)
             return res
 
+
+        print("embedding...")
+        import IPython
+        IPython.embed()
+
         pair = self.extract_image_text(sample)
         
         print(f"samplesamplesample", sample)
