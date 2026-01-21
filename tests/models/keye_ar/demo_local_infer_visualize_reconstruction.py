@@ -200,16 +200,17 @@ class LocalAR2ImageGenerator:
         return model_dir
 
     def _build_given_sample(self, prompt: str) -> Dict[str, Any]:
-        # 这里沿用 demo 的 messages 格式；uuid/images 可为空占位，loader 会以 given_samples 为准
+        # 对齐 bk.py：metadata / images 用一个占位即可（实际不会影响生成）。
+        # 注意这里保持为“字符串化 JSON”，与原始 demo 行为一致。
         return {
-            "uuid": "__local_prompt__",
-            "metadata": json.dumps({"images_info": {"output": {"width": self.cfg.image_size, "height": self.cfg.image_size, "format": "PNG"}}}),
-            "images": json.dumps({"output": ""}),
+            "uuid": "__xxxxxx__",
+            "metadata": '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}',
+            "images": '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}',
             "videos": "{}",
             "source": "__default__",
             "messages": (
-                "[{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Generate an image base on the description: __prompt__\"}]},"
-                "{\"role\": \"assistant\", \"content\": [{\"type\": \"image\", \"image\": \"output\"}]}]"
+                '[{"role": "user", "content": [{"type": "text", "text": "Generate an image base on the description: __prompt__"}]},'
+                '{"role": "assistant", "content": [{"type": "image", "image": "output"}]}]'
             ).replace("__prompt__", prompt),
         }
 
