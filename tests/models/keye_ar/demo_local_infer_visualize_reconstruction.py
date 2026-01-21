@@ -255,7 +255,7 @@ def main():
     class Config:
         def __init__(self):
             # self.model_dir = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/DiTSFT/batch6_324_1024_more_data/global_step80000/muse_converted/"
-            self.model_dir = ""
+            self.model_dir = "/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/global_step4000/converted/"
             self.dcp_ckpt_dir = None
             self.dcp_tag = None
             self.model_config = None
