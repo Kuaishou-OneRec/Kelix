@@ -254,7 +254,8 @@ def main():
     # 参考bash脚本 examples/sana/ar_dit/inference/run_local_infer_visualize_reconstruction.sh 中的默认值
     class Config:
         def __init__(self):
-            self.model_dir = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/DiTSFT/batch6_324_1024_more_data/global_step80000/muse_converted/"
+            # self.model_dir = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/DiTSFT/batch6_324_1024_more_data/global_step80000/muse_converted/"
+            self.model_dir = ""
             self.dcp_ckpt_dir = None
             self.dcp_tag = None
             self.model_config = None
