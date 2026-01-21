@@ -7,7 +7,7 @@ set -euo pipefail
 #   bash examples/keye_ar/serve_dit/demo_client.sh "a cat" [/path/to/save.jpg]
 
 PROMPT=${1:-"a black cat and an apple."}
-OUT_PATH=${2:-""}
+OUT_PATH=${2:-"vis_output_local/service_outputs/tmp.jpg"}
 HOST=${HOST:-"10.48.50.167"}
 PORT=${PORT:-"18080"}
 
