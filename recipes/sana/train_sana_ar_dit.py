@@ -608,7 +608,7 @@ def load_visualization_images(
 
     for row in given_samples:
         # Convert parquet row to sample format expected by dataset
-        sample = row.to_dict()
+        sample = row if isinstance(row, dict) else row.to_dict()
         # messages=[{'role': 'user', 'content': [{'type': 'text', 'text': '这是第0张图像的描述'}]}, {'role': 'assistant', 'content': [{'type': 'image', 'image': '/tmp/tmpmah5htt0/images/image_0.jpg'}]}]
         # Use dataset's process method
         processed_sample = dataset.process(sample, valid_hw_range=(0,10000))
