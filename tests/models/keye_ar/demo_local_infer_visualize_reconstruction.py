@@ -270,7 +270,7 @@ def main():
             self.cfg_scale = 1.0
             self.num_sampling_steps = 50
             self.flow_shift = 3.0
-            self.max_condition_length = 324
+            self.max_condition_length = 720
             self.image_size = 1024
             self.seed = 42
             self.results_dir = "./vis_output_local/results"

@@ -391,7 +391,7 @@ class MultiHeadCrossAttention(nn.Module):
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
-        print(f"2d self.use_rope={self.use_rope}")
+
         # 2D RoPE for cross attention (when use_rope=True)
         if use_rope:
             self.pos_embeddings = Roraty2DPositionalEmbeddings(self.head_dim)
