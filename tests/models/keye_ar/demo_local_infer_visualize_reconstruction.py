@@ -8,6 +8,8 @@ Usage example:
 """
 
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 import json
 import torch
 import numpy as np
