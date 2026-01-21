@@ -14,17 +14,7 @@ set -euo pipefail
 # 环境变量：
 #   HOST / PORT：透传给 demo_client_v2.sh
 
-ROOT_DIR=$(cd "$(dirname "$0")/../../.." && pwd)
-PROMPT=${1:-"a black cat."}
-LOOPS=${2:-""}
-SLEEP_SECS=${3:-1}
-
-CLIENT_SH="$ROOT_DIR/examples/keye_ar/serve_dit/demo_client_v2.sh"
-
-if [[ ! -f "$CLIENT_SH" ]]; then
-  echo "client script not found: $CLIENT_SH" >&2
-  exit 1
-fi
+CLIENT_SH="examples/keye_ar/serve_dit/demo_client_v2.sh"
 
 n=0
 while true; do
