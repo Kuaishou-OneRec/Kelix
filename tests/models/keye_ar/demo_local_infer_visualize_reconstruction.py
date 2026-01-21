@@ -370,9 +370,15 @@ def main():
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
     dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
-    given_samples = {
-        
-    }
+    given_samples = [
+        {
+            "messages": [
+                {"role": "user", "content": "Generate an image of a cat."},
+            ],
+            "images": {
+            }
+        }
+    ]
 
     # Run DiT sampling pipeline locally and save results
     print("Running DiT sampling and saving results...")
