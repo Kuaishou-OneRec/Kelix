@@ -261,6 +261,7 @@ class LocalAR2ImageGenerator:
             tb_writer=None,
             vae=self.vae,
             given_samples=given_samples,
+            add_to_loaded=False,
         )
 
         cond_embeds, cond_mask, token_embed_lengths = tokenize_images(

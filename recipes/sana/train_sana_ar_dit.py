@@ -342,7 +342,8 @@ class VisReconstructionLoader:
                  num_images: Optional[int] = None,
                  tb_writer=None,
                  vae=None,
-                 given_samples=None
+                 given_samples=None,
+                 add_to_loaded=True,
                  ):
         if cls.loaded: return cls.loaded
 
@@ -391,9 +392,9 @@ class VisReconstructionLoader:
             latent_channels=latent_channels,
             latent_size=latent_size,
             vae_recon_images=vae_recon_images,
-
-
         )
+        if not add_to_loaded:
+            cls.loaded = None
         return cls.loaded
 
 def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype, output_last_hidden_states_only=True):
