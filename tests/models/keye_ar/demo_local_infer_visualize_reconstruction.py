@@ -293,7 +293,7 @@ def main():
         }
     # replace("___prompt___", "Generate an image: a cat.")
 
-    input_x = json.loads(input_x)
+    # input_x = json.loads(input_x)
 
     given_samples = [input_x]
 
