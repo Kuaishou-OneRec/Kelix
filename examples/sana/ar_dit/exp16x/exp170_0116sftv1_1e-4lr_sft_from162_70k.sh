@@ -186,7 +186,7 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 40 \
+                --batch-size 3 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 100000 \
