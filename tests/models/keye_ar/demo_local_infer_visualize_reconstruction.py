@@ -260,7 +260,7 @@ def main():
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
     dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
-    input_x = f"""
+    input_x = """
         {'uuid': '826da1b2-d0cb-11f0-aa41-d404e6e202b0', 
             'metadata': 
             '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}', 
