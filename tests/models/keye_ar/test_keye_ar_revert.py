@@ -83,7 +83,7 @@ def _compare_state_dicts(
             print("   -", k)
 
     for k in list(missing):
-        if k.startswith("visual_tokenizer.visual.vision_model.head."):
+        if k.startswith("visual_tokenizer.visual.vision_model.head.") or k == "token_head.token_embedding.weight":
             print(f"key {k} is allowed to be missing")
             del missing[missing.index(k)]
 
