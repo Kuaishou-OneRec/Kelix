@@ -541,26 +541,27 @@ class UnifiedQwen3Model(Qwen3Model):
             for kk, vv in reverted_token_head_state_dict.items():
                 hf_state_dict[f"model.token_head.{kk}"] = vv
 
-            # 原始 HF ckpt 里 token_embedding.weight 是存在的；
-            # 但在 muse 侧我们会主动删除 `model.token_head.token_embedding.weight`
-            # （见 UnifiedQwen3Model.convert_hf_state_dict 里的 delete）。
-            # 因此 round-trip 时无法从 muse_state_dict 还原出 token_head.token_embedding.weight。
-            # 这里做一次显式补齐：用 `model.embed_tokens.weight`（即语言模型词表 embedding）来填充。
-            # 注意：这等价于“权重共享/对齐”，保证 revert 后 key 集合匹配原 ckpt。
-            token_embedding_key = "model.token_head.token_embedding.weight"
-            if token_embedding_key not in hf_state_dict:
-                embed_key = "model.embed_tokens.weight"
-                if embed_key in hf_state_dict:
-                    hf_state_dict[token_embedding_key] = hf_state_dict[embed_key]
-                    logger.info(
-                        "UnifiedQwen3Model.revert_hf_state_dict: filled model.token_head.token_embedding.weight "
-                        "from model.embed_tokens.weight"
-                    )
-                else:
-                    logger.warning(
-                        "UnifiedQwen3Model.revert_hf_state_dict: cannot fill model.token_head.token_embedding.weight "
-                        "because model.embed_tokens.weight is missing"
-                    )
+            # 放弃补齐
+            # # 原始 HF ckpt 里 token_embedding.weight 是存在的；
+            # # 但在 muse 侧我们会主动删除 `model.token_head.token_embedding.weight`
+            # # （见 UnifiedQwen3Model.convert_hf_state_dict 里的 delete）。
+            # # 因此 round-trip 时无法从 muse_state_dict 还原出 token_head.token_embedding.weight。
+            # # 这里做一次显式补齐：用 `model.embed_tokens.weight`（即语言模型词表 embedding）来填充。
+            # # 注意：这等价于“权重共享/对齐”，保证 revert 后 key 集合匹配原 ckpt。
+            # token_embedding_key = "model.token_head.token_embedding.weight"
+            # if token_embedding_key not in hf_state_dict:
+            #     embed_key = "model.embed_tokens.weight"
+            #     if embed_key in hf_state_dict:
+            #         hf_state_dict[token_embedding_key] = hf_state_dict[embed_key]
+            #         logger.info(
+            #             "UnifiedQwen3Model.revert_hf_state_dict: filled model.token_head.token_embedding.weight "
+            #             "from model.embed_tokens.weight"
+            #         )
+            #     else:
+            #         logger.warning(
+            #             "UnifiedQwen3Model.revert_hf_state_dict: cannot fill model.token_head.token_embedding.weight "
+            #             "because model.embed_tokens.weight is missing"
+            #         )
 
         # 4) tie_word_embeddings 相关：对齐 Qwen3Model.revert 的语义
         # 这里保持一致：如果 tie_word_embeddings=True，则允许补 lm_head.weight
