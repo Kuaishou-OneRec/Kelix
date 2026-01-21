@@ -179,7 +179,7 @@ nohup mpirun --allow-run-as-root \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp16x/exp167_0116sftv1_1e-4lr_sft_from162_31k.json \
                 --resolution-budgets "1024:12" \
-                --learning-rate 2e-4 \
+                --learning-rate 2.5e-4 \
                 --min-lr 6e-5 \
                 --num-decay-steps 10000 \
                 --weight-decay 0.0 \
