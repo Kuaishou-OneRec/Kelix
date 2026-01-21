@@ -251,6 +251,13 @@ class LocalAR2ImageGenerator:
         """输入 prompt，返回一张 PIL.Image。"""
         given_samples = [self._build_given_sample(prompt)]
 
+        # --- debug info ---
+        print(f"[LocalAR2ImageGenerator] prompt={prompt!r}")
+        print(f"[LocalAR2ImageGenerator] parquet_path={self.cfg.parquet_path!r}")
+        print(f"[LocalAR2ImageGenerator] dataset={type(self.dataset)}")
+        print(f"[LocalAR2ImageGenerator] image_size={self.cfg.image_size} max_condition_length={self.cfg.max_condition_length}")
+        print(f"[LocalAR2ImageGenerator] device={self.device} dtype={self.dtype}")
+
         loaded = train_rec.VisReconstructionLoader()(  # type: ignore[attr-defined]
             self.cfg.parquet_path,
             self.dataset,
@@ -264,6 +271,23 @@ class LocalAR2ImageGenerator:
             add_to_loaded=False,
         )
 
+        if loaded is None:
+            raise RuntimeError(
+                "VisReconstructionLoader returned None. "
+                "Please check parquet_path / dataset_config / given_samples format."
+            )
+
+        # loaded should contain input_ids
+        if not hasattr(loaded, "input_ids"):
+            raise RuntimeError(f"Loaded object has no input_ids. loaded_type={type(loaded)} keys={dir(loaded)[:50]}")
+        if loaded.input_ids is None:
+            raise RuntimeError("loaded.input_ids is None")
+
+        try:
+            print(f"[LocalAR2ImageGenerator] loaded.input_ids.shape={tuple(loaded.input_ids.shape)}")
+        except Exception:
+            print(f"[LocalAR2ImageGenerator] loaded.input_ids={loaded.input_ids}")
+
         cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
             ar_processor=self.ar_processor,
             ar_model=self.keye_ar,
@@ -272,6 +296,11 @@ class LocalAR2ImageGenerator:
             input_ids=loaded.input_ids.to(device=self.device),
             teacher_forcing=False,
             condition_on_special_tokens=self.cfg.condition_on_special_tokens,
+        )
+
+        print(
+            f"[LocalAR2ImageGenerator] tokenized: cond_embeds={tuple(cond_embeds.shape)} "
+            f"cond_mask={tuple(cond_mask.shape)} token_embed_lengths={token_embed_lengths}"
         )
 
         cond_embeds = self.dit.diffusion_connector(cond_embeds)
