@@ -260,20 +260,27 @@ def main():
     print(f"Building Chat2ImageDataset for visualization with config: {dataset_cfg}")
     dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
-    given_samples = [
-        {
-            "messages": [
-                {"role": "user", "content": "Generate an image of a cat."},
-                {"role": "assistant", "content": {
-                    "type": "image",
-                    "image": "tmp"
-                }}
-            ],
-            "images": {
-                "tmp": generate_circle_image()
-            }
+    input_x = """
+        {'uuid': '826da1b2-d0cb-11f0-aa41-d404e6e202b0', 
+            'metadata': 
+            '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}', 
+            'images': 
+            '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}', 
+            'videos': '{}', 
+            'source': '__default__', 
+            'messages': '[{"role": "user", "content": [{"type": "text", "text": "{prompt}"}]}]', 
+                {
+                    "role": "assistant", "content": [{"type": "image", "image": "output"}], 
+                    'segments': None,
+                    'image': None,
+                    'video': None,
+                    'text': None,
+                    'label': None,
+                }
         }
-    ]
+    """.format(prompt="Generate an image: A beige baby stroller with a canopy.")
+
+    given_samples = [input_x]
 
     # Run DiT sampling pipeline locally and save results
     print("Running DiT sampling and saving results...")

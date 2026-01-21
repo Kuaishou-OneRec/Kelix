@@ -1340,7 +1340,23 @@ class Chat2ImageDataset(Token2ImageDataset):
         # IPython.embed()
 
         """
-        {'uuid': '826da1b2-d0cb-11f0-aa41-d404e6e202b0', 'metadata': '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}', 'images': '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}', 'videos': '{}', 'source': 'GenUno1M/0.0.0', 'messages': '[{"role": "user", "content": [{"type": "text", "text": "A beige baby stroller with a canopy."}]}, {"role": "assistant", "content": [{"type": "image", "image": "output"}]}]', 'segments': None, 'image': None, 'video': None, 'text': None, 'label': None, 'line_id': 'viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/GenUno1M/0.0.2/rank800-0.parquet_row_388', 'source_file': 'viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/GenUno1M/0.0.2/rank0-0.parquet'}
+        {'uuid': '826da1b2-d0cb-11f0-aa41-d404e6e202b0', 
+            'metadata': 
+            '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}', 
+            'images': 
+            '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}', 
+            'videos': '{}', 
+            'source': 'GenUno1M/0.0.0', 
+            'messages': '[{"role": "user", "content": [{"type": "text", "text": "A beige baby stroller with a canopy."}]}, 
+                {"role": "assistant", "content": [{"type": "image", "image": "output"}]}]', 
+                    'segments': None, 
+                    'image': None, 
+                    'video': None, 
+                    'text': None, 
+                    'label': None, 
+                    'line_id': 'viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/GenUno1M/0.0.2/rank800-0.parquet_row_388', 
+                    'source_file': 'viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/GenUno1M/0.0.2/rank0-0.parquet'
+                }
         """
         pair = self.extract_image_text(sample)
         
