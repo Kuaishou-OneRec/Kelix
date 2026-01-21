@@ -20,7 +20,7 @@ n=0
 while true; do
   n=$((n+1))
   echo "\n===== [$n] $(date '+%Y-%m-%d %H:%M:%S') ====="
-  bash "$CLIENT_SH" "$PROMPT"
+  bash "$CLIENT_SH"
 
   if [[ -n "$LOOPS" && "$n" -ge "$LOOPS" ]]; then
     echo "Reached loops=$LOOPS, exiting."
