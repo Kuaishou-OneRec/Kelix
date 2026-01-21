@@ -1,0 +1,26 @@
+{
+  "enable_service": true,
+  "service_host": "0.0.0.0",
+  "service_port": 18080,
+  "service_output_dir": "./vis_output_local/service_outputs",
+
+  "model_dir": "/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/global_step4000/converted/",
+  "model_config_overrides": ["model_max_length=720"],
+
+  "vae_dir": "/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/",
+  "keye_ar_dir": "/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix/",
+
+  "dataset_config": "examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json",
+  "parquet_path": "/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet",
+
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "image_size": 1024,
+  "seed": 42,
+  "cfg_scale": 1.0,
+  "num_sampling_steps": 50,
+  "flow_shift": 3.0,
+  "max_condition_length": 720,
+  "linspace_sigmas": true,
+  "condition_on_special_tokens": true
+}
