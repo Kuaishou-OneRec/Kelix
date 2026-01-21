@@ -16,7 +16,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Optional, Tuple
 from transformers import AutoProcessor
-from PIL import Image
+from PIL import Image, ImageDraw
 from diffusers import FlowMatchEulerDiscreteScheduler
 from recipes.sana.inference_ar2image import tokenize_images
 
@@ -120,6 +120,21 @@ def forward_ar_model(
     print(f"outputs2={outputs2.shape}")
     import IPython
     IPython.embed()
+
+
+def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    与 Origin 代码完全一致的生成函数
+    """
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
 
 
 def main():
@@ -249,8 +264,13 @@ def main():
         {
             "messages": [
                 {"role": "user", "content": "Generate an image of a cat."},
+                {"role": "assistant", "content": {
+                    "type": "image",
+                    "image": "tmp"
+                }}
             ],
             "images": {
+                "tmp": generate_circle_image()
             }
         }
     ]
