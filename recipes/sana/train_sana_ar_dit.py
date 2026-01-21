@@ -380,7 +380,7 @@ class VisReconstructionLoader:
         vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
 
         import easydict
-        cls.loaded = easydict.EasyDict(
+        loaded = easydict.EasyDict(
             texts=texts,
             original_images=original_images,
             pixel_values=pixel_values,
@@ -393,9 +393,9 @@ class VisReconstructionLoader:
             latent_size=latent_size,
             vae_recon_images=vae_recon_images,
         )
-        if not add_to_loaded:
-            cls.loaded = None
-        return cls.loaded
+        if add_to_loaded:
+            cls.loaded = loaded
+        return loaded
 
 def load_keye_ar(tokenizer_dir: str, device: torch.device, dtype: torch.dtype, output_last_hidden_states_only=True):
 
