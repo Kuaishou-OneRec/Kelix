@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import json
 import os
@@ -74,7 +75,7 @@ def _load_keye_ar_local(
 
 @dataclass
 class LocalAR2ImageConfig:
-    # DiT model
+# DiT model
     # - 常规模式：直接给 model_dir（通常是 converted/ 或 muse_converted/）
     # - DCP 模式：只给 dcp_ckpt_dir + dcp_tag 时，也必须给一个 source_model_dir（作为 dcp_to_torch_convert 的 source_dir）
     model_dir: Optional[str] = None
@@ -109,6 +110,18 @@ class LocalAR2ImageConfig:
     service_host: str = "0.0.0.0"
     service_port: int = 18080
     service_output_dir: str = "./vis_output_local/service_outputs"
+
+
+def load_local_ar2image_config(config_path: str) -> LocalAR2ImageConfig:
+    """从 JSON 加载 LocalAR2ImageConfig。
+
+    JSON 里只需要提供你想覆盖的字段即可；未提供的字段使用 dataclass 默认值。
+    """
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"config.json must be an object, got: {type(data)}")
+    return LocalAR2ImageConfig(**data)
 
 
 class LocalAR2ImageGenerator:
@@ -395,21 +408,30 @@ class LocalAR2ImageGenerator:
 
 
 def main():
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default=None, help="Path to LocalAR2ImageConfig JSON")
+    parser.add_argument("--prompt", type=str, default="a cat.")
+    parser.add_argument("--output-path", type=str, default=None, help="Optional output image path when not serving")
+    parser.add_argument("--cuda-visible-devices", type=str, default="1")
+    args = parser.parse_args()
 
-    cfg = LocalAR2ImageConfig(
-        model_dir="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/global_step4000/converted/",
-        model_config_overrides=("model_max_length=720",),
-        keye_ar_dir="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix/",
-        dataset_config="examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json",
-        parquet_path="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet",
-        max_condition_length=720,
-        num_sampling_steps=50,
-        linspace_sigmas=True,
-        condition_on_special_tokens=True,
-        # enable_service=True,
-        # service_port=18080,
-    )
+    if args.cuda_visible_devices is not None:
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", args.cuda_visible_devices)
+
+    if args.config:
+        cfg = load_local_ar2image_config(args.config)
+    else:
+        cfg = LocalAR2ImageConfig(
+            model_dir="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/global_step4000/converted/",
+            model_config_overrides=("model_max_length=720",),
+            keye_ar_dir="/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix/",
+            dataset_config="examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json",
+            parquet_path="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet",
+            max_condition_length=720,
+            num_sampling_steps=50,
+            linspace_sigmas=True,
+            condition_on_special_tokens=True,
+        )
 
     gen = LocalAR2ImageGenerator(cfg)
 
@@ -417,11 +439,8 @@ def main():
         gen.serve_forever()
         return
 
-    img = gen(prompt="a cat.")
-    out = "./vis_output_local/single_prompt.jpg"
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    img.save(out, quality=95)
-    print(f"saved: {out}")
+    out_path = gen.generate_to_path(prompt=args.prompt, output_path=args.output_path)
+    print(f"saved: {out_path}")
 
 
 if __name__ == "__main__":
