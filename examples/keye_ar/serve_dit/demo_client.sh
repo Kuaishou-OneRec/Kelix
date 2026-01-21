@@ -6,7 +6,7 @@ set -euo pipefail
 # 用法：
 #   bash examples/keye_ar/serve_dit/demo_client.sh "a cat" [/path/to/save.jpg]
 
-PROMPT=${1:-"a cat."}
+PROMPT=${1:-"a black cat."}
 OUT_PATH=${2:-""}
 HOST=${HOST:-"127.0.0.1"}
 PORT=${PORT:-"18080"}
