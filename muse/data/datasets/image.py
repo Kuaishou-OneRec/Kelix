@@ -1173,7 +1173,9 @@ class Chat2ImageDataset(Token2ImageDataset):
         } if self.reso_finder is not None else None
         self.system_prompt_setter = SystemPromptByTask(task2prompt_coarse)
 
-        os.makedirs(self.cache_dir, exist_ok=True)
+        if self.cache_dir is not None:
+            os.makedirs(self.cache_dir, exist_ok=True)
+        
         if valid_hw_range is not None:
             assert len(valid_hw_range)== 2 and valid_hw_range[0] <= valid_hw_range[1], f"valid_hw_range must be [min, max] with min <= max, but got {valid_hw_range}"
         self.max_pixels = self.max_condition_length * \
