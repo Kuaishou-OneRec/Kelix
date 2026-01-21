@@ -5,18 +5,30 @@
 - 初始化负责加载：DiT 模型、VAE、KeyeAR tokenizer/processor、dataset（用于把 prompt 变成 input_ids 等）
 - __call__(prompt) 负责：prompt -> input_ids -> DiT sampling -> VAE decode -> PIL.Image
 
+新增：service 模式（可选）
+- 当 LocalAR2ImageConfig.enable_service=True 时，调用 `gen.serve_forever()` 启动 HTTP 服务
+- 客户端可 POST /generate，传入 JSON：
+  - prompt: str（必填）
+  - output_path: str（可选，目标图片写入地址）
+- 服务端返回 JSON：
+  - output_path: str（实际写入路径）
+
 注意：
 - 该类不依赖分布式。
-- 尽量复用现有实现（`recipes.sana.train_sana_ar_dit` 和 `recipes.sana.inference_ar2image.tokenize_images`）。
+- DCP 模式完全兼容原始逻辑：仅给 dcp_ckpt_dir + dcp_tag 时，仍需提供 source_model_dir 或 model_dir 作为 source_dir。
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
+import uuid
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence
+from urllib.parse import urlparse
 
 import numpy as np
 import torch
@@ -30,11 +42,9 @@ from recipes.sana.inference_ar2image import tokenize_images
 from muse.config import load_config
 from muse.models import get_model_class
 from muse.models.keye_ar import KeyeARModel
+from muse.tools.dcp2torch import convert as dcp_to_torch_convert
 from muse.training.common import set_default_dtype
 from muse.utils.common import parse_config_overrides
-
-# Import DCP to torch converter (兼容 dcp_ckpt_dir + dcp_tag 的推理模式)
-from muse.tools.dcp2torch import convert as dcp_to_torch_convert
 
 
 def _get_torch_dtype(dtype: str) -> torch.dtype:
@@ -78,9 +88,9 @@ class LocalAR2ImageConfig:
     vae_dir: str = "/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/"
     keye_ar_dir: str = ""
 
-    # Dataset config (用来把 prompt -> input_ids)
+    # Dataset config（用来把 prompt -> input_ids）
     dataset_config: str = "examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json"
-    parquet_path: str = ""  # 仅复用 loader 的预处理逻辑；可以传任意 parquet（given_samples 会覆盖）
+    parquet_path: str = ""  # 仅复用 loader 的预处理逻辑；given_samples 会覆盖真实内容
 
     # Sampling
     device: str = "cuda"
@@ -94,15 +104,27 @@ class LocalAR2ImageConfig:
     linspace_sigmas: bool = True
     condition_on_special_tokens: bool = True
 
+    # Service mode
+    enable_service: bool = False
+    service_host: str = "0.0.0.0"
+    service_port: int = 18080
+    service_output_dir: str = "./vis_output_local/service_outputs"
+
 
 class LocalAR2ImageGenerator:
-    """单机 prompt -> image 的封装类。"""
+    """单机 prompt -> image 的封装类（支持可选 service 模式）。"""
 
     def __init__(self, cfg: LocalAR2ImageConfig):
         self.cfg = cfg
 
         self.device = torch.device(cfg.device if (cfg.device.startswith("cuda") and torch.cuda.is_available()) else "cpu")
-        self.dtype = _get_torch_dtype(cfg.dtype)        # 1) resolve model_dir (兼容 DCP->torch 转换)
+        self.dtype = _get_torch_dtype(cfg.dtype)
+
+        # service output dir
+        self.service_output_dir = Path(cfg.service_output_dir)
+        self.service_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1) resolve model_dir（兼容 DCP->torch 转换）
         model_dir = self._resolve_model_dir(cfg)
 
         # 2) load DiT config + model
@@ -129,16 +151,20 @@ class LocalAR2ImageGenerator:
         self.dit.to(self.device).to(dtype=self.dtype)
         self.dit.eval()
 
-        # 2) load VAE
+        # 3) load VAE
         self.vae = train_rec.load_vae(cfg.vae_dir, device=self.device, dtype=self.dtype)
 
-        # 3) load KeyeAR + processor
-        self.keye_ar = _load_keye_ar_local(cfg.keye_ar_dir, device=self.device, dtype=self.dtype, output_last_hidden_states_only=False)
+        # 4) load KeyeAR + processor
+        self.keye_ar = _load_keye_ar_local(
+            cfg.keye_ar_dir,
+            device=self.device,
+            dtype=self.dtype,
+            output_last_hidden_states_only=False,
+        )
         self.keye_ar = self.keye_ar.to(self.device).to(dtype=self.dtype)
-
         self.ar_processor = AutoProcessor.from_pretrained(cfg.keye_ar_dir, trust_remote_code=True)
 
-        # 4) build dataset (单机 rank/world_size)
+        # 5) build dataset（单机 rank/world_size）
         with open(cfg.dataset_config, encoding="utf-8") as f:
             dataset_cfg = json.load(f)
 
@@ -149,7 +175,6 @@ class LocalAR2ImageGenerator:
         dataset_cfg["rank"] = 0
         dataset_cfg["world_size"] = 1
 
-        # 复用训练 recipe 的 dataset 实现（原 demo 即如此）
         self.dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
         # cached values for sampling
@@ -157,13 +182,8 @@ class LocalAR2ImageGenerator:
         self.latent_size = cfg.image_size // self.dit.config.vae_downsample_rate
 
     @staticmethod
-    def _resolve_model_dir(cfg: "LocalAR2ImageConfig") -> str:
-        """兼容两种路径组织：
-
-        1) 常规模式：直接给 cfg.model_dir
-        2) DCP 模式：只给 cfg.dcp_ckpt_dir + cfg.dcp_tag：
-           - 仍然需要 cfg.source_model_dir 作为 dcp_to_torch_convert 的 source_dir
-           - 转换产物落在: {dcp_ckpt_dir}/{dcp_tag}/converted
+    def _resolve_model_dir(cfg: LocalAR2ImageConfig) -> str:
+        """兼容两种路径组织。
 
         保持原始脚本语义：只要 dcp_tag 非空就触发转换。
         """
@@ -201,7 +221,6 @@ class LocalAR2ImageGenerator:
 
     def _build_given_sample(self, prompt: str) -> Dict[str, Any]:
         # 对齐 bk.py：metadata / images 用一个占位即可（实际不会影响生成）。
-        # 注意这里保持为“字符串化 JSON”，与原始 demo 行为一致。
         return {
             "uuid": "__xxxxxx__",
             "metadata": '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}',
@@ -219,7 +238,6 @@ class LocalAR2ImageGenerator:
         """输入 prompt，返回一张 PIL.Image。"""
         given_samples = [self._build_given_sample(prompt)]
 
-        # 复用 VisReconstructionLoader 来拿到 input_ids 等
         loaded = train_rec.VisReconstructionLoader()(  # type: ignore[attr-defined]
             self.cfg.parquet_path,
             self.dataset,
@@ -263,7 +281,6 @@ class LocalAR2ImageGenerator:
         uncond_mask[:, :seq_len] = 1
         uncond_mask = uncond_mask[:, None, None, :]
 
-        # scheduler
         scheduler = FlowMatchEulerDiscreteScheduler(shift=self.cfg.flow_shift)
         if self.cfg.linspace_sigmas:
             sigmas = np.linspace(1.0, 1 / self.cfg.num_sampling_steps, self.cfg.num_sampling_steps)
@@ -282,7 +299,7 @@ class LocalAR2ImageGenerator:
         cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
         mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
 
-        # pos args（和分布式脚本保持一致）
+        # pos args（和原流程保持一致）
         pos_args = train_rec.compute_pos_args(
             latent_hw=(self.latent_size, self.latent_size),
             image_grid_thw=torch.tensor(
@@ -315,12 +332,69 @@ class LocalAR2ImageGenerator:
         dit_recon_images = (dit_recon_images / 2 + 0.5).clamp(0, 1)
 
         img_np = dit_recon_images[0].detach().cpu().permute(1, 2, 0).float().numpy()
-        img = Image.fromarray((img_np * 255).round().astype("uint8"))
-        return img
+        return Image.fromarray((img_np * 255).round().astype("uint8"))
+
+    def generate_to_path(self, prompt: str, output_path: Optional[str] = None) -> str:
+        """生成图片并写入到 output_path（可缺省），返回实际写入路径。"""
+        if output_path:
+            out_path = Path(output_path)
+        else:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_path = self.service_output_dir / f"gen_{ts}_{uuid.uuid4().hex[:8]}.jpg"
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        img = self(prompt)
+        img.save(str(out_path), quality=95)
+        return str(out_path)
+
+    def serve_forever(self) -> None:
+        """启动一个最轻量的 HTTP 服务（stdlib，无额外依赖）。"""
+
+        generator = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):  # noqa: N802
+                parsed = urlparse(self.path)
+                if parsed.path != "/generate":
+                    return self._send_json(404, {"error": "not found"})
+
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    raw = self.rfile.read(length)
+                    req = json.loads(raw.decode("utf-8")) if raw else {}
+                except Exception as e:
+                    return self._send_json(400, {"error": f"invalid json: {e}"})
+
+                prompt = (req.get("prompt") or "").strip()
+                output_path = req.get("output_path")
+
+                if not prompt:
+                    return self._send_json(400, {"error": "prompt is required"})
+
+                try:
+                    out_path = generator.generate_to_path(prompt=prompt, output_path=output_path)
+                except Exception as e:
+                    return self._send_json(500, {"error": str(e)})
+
+                return self._send_json(200, {"output_path": out_path})
+
+            def log_message(self, format: str, *args):  # noqa: A002
+                return
+
+        server = ThreadingHTTPServer((self.cfg.service_host, self.cfg.service_port), Handler)
+        print(f"[LocalAR2ImageGenerator] serving on http://{self.cfg.service_host}:{self.cfg.service_port} (POST /generate)")
+        server.serve_forever()
 
 
 def main():
-    # demo: 按你原脚本默认路径（你可以自行改）
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1")
 
     cfg = LocalAR2ImageConfig(
@@ -333,10 +407,17 @@ def main():
         num_sampling_steps=50,
         linspace_sigmas=True,
         condition_on_special_tokens=True,
+        # enable_service=True,
+        # service_port=18080,
     )
 
     gen = LocalAR2ImageGenerator(cfg)
-    img = gen("a cat.")
+
+    if cfg.enable_service:
+        gen.serve_forever()
+        return
+
+    img = gen(prompt="a cat.")
     out = "./vis_output_local/single_prompt.jpg"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     img.save(out, quality=95)
