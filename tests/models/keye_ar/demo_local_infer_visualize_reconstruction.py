@@ -268,7 +268,7 @@ def main():
             '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}', 
             'videos': '{}', 
             'source': '__default__', 
-            'messages': '[{"role": "user", "content": [{"type": "text", "text": "Generate an image: a cat."}]},{"role": "assistant", "content": [{"type": "image", "image": "output"}]}]', 
+            'messages': '[{"role": "user", "content": [{"type": "text", "text": "Generate an image base on the description: a cat."}]},{"role": "assistant", "content": [{"type": "image", "image": "output"}]}]', 
         }
     # replace("___prompt___", "Generate an image: a cat.")
 
