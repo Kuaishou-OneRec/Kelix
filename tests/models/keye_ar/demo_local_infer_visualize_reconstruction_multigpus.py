@@ -398,10 +398,16 @@ class LocalAR2ImageGenerator:
         uncond_mask[:, :seq_len] = 1
         uncond_mask = uncond_mask[:, None, None, :]
 
-        cfg_scale = float(dit_sampling_overrides.get("cfg_scale", self.cfg.cfg_scale))
-        num_sampling_steps = int(dit_sampling_overrides.get("num_sampling_steps", self.cfg.num_sampling_steps))
-        flow_shift = float(dit_sampling_overrides.get("flow_shift", self.cfg.flow_shift))
-        linspace_sigmas = bool(dit_sampling_overrides.get("linspace_sigmas", self.cfg.linspace_sigmas))
+        def get_param(key, default):
+            value = dit_sampling_overrides.get(key)
+            if value is None:
+                value = default
+            return value
+
+        cfg_scale = float(get_param("cfg_scale", self.cfg.cfg_scale))
+        num_sampling_steps = int(get_param("num_sampling_steps", self.cfg.num_sampling_steps))
+        flow_shift = float(get_param("flow_shift", self.cfg.flow_shift))
+        linspace_sigmas = bool(get_param("linspace_sigmas", self.cfg.linspace_sigmas))
 
         scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
         if linspace_sigmas:
