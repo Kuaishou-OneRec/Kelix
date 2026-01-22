@@ -388,7 +388,9 @@ class LocalAR2ImageGenerator:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img = self(prompt)
         img.save(str(out_path), quality=95)
-        return str(out_path)
+
+        # 服务端/脚本统一返回绝对路径，方便 client 侧直接使用
+        return str(out_path.resolve())
 
     def serve_forever(self) -> None:
         """启动一个最轻量的 HTTP 服务（stdlib，无额外依赖）。"""
