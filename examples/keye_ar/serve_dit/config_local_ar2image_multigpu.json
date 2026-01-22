@@ -4,7 +4,7 @@
   "service_port": 18080,
   "service_output_dir": "./vis_output_local/service_outputs",
 
-  "service_gpu_ids": [0, 1],
+  "service_gpu_ids": [0, 1, 2, 3, 4, 5, 6, 7],
   "service_gpu_policy": "round_robin",
 
   "model_dir": "/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/global_step4000/converted/",
