@@ -15,17 +15,20 @@ GPU_ID=${3:-""}
 HOST=${HOST:-"10.48.50.167"}
 PORT=${PORT:-"18080"}
 
-PAYLOAD=$(python3 - <<PY
+PAYLOAD=$(python3 - <<'PY'
 import json
-prompt = ${PROMPT!r}
-out_path = ${OUT_PATH!r}
-gpu_id = ${GPU_ID!r}
+import os
+
+prompt = os.environ.get('PROMPT', 'a black cat.')
+out_path = os.environ.get('OUT_PATH', '')
+gpu_id = os.environ.get('GPU_ID', '')
+
 req = {"prompt": prompt}
 if out_path:
     req["output_path"] = out_path
 if gpu_id:
-    # 允许传字符串，这里转 int
     req["gpu_id"] = int(gpu_id)
+
 print(json.dumps(req, ensure_ascii=False))
 PY
 )
