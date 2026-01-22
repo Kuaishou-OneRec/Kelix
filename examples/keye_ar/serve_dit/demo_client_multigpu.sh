@@ -15,7 +15,7 @@ GPU_ID=${3:-""}
 HOST=${HOST:-"10.48.50.167"}
 PORT=${PORT:-"18080"}
 
-PAYLOAD=$(python3 - <<'PY'
+PAYLOAD=$(PROMPT="$PROMPT" OUT_PATH="$OUT_PATH" GPU_ID="$GPU_ID" python3 - <<'PY'
 import json
 import os
 
