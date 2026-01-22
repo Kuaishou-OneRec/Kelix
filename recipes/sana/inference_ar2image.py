@@ -234,7 +234,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                     teacher_forcing: bool = False,
                     condition_on_special_tokens: bool = False,
                     output_im_tokens: bool = False,
-                    **generation_args: dict = {}
+                    generation_args: dict = {}
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
