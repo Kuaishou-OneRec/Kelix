@@ -234,6 +234,7 @@ def tokenize_images(ar_processor : AutoProcessor,
                     teacher_forcing: bool = False,
                     condition_on_special_tokens: bool = False,
                     output_im_tokens: bool = False,
+                    **generation_args: dict = {}
                     ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Tokenize images using KeyeARModel.
     
@@ -311,6 +312,7 @@ def tokenize_images(ar_processor : AutoProcessor,
             input_pos=input_pos,
             cu_seqlens=cu_seqlens,
             max_new_tokens=max_condition_length*2+10, # space,vis_start,vis_tok,vis_end,eos
+            **generation_args
         )
         
         # Find the positions of vision_start_id and vision_end_id in input_ids

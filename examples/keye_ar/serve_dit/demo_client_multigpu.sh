@@ -12,7 +12,7 @@ set -euo pipefail
 PROMPT=${1:-"a black cat."}
 OUT_PATH=${2:-""}
 GPU_ID=${3:-""}
-HOST=${HOST:-"10.48.50.167"}
+HOST=${HOST:-"10.48.48.83"}
 PORT=${PORT:-"18080"}
 
 PAYLOAD=$(PROMPT="$PROMPT" OUT_PATH="$OUT_PATH" GPU_ID="$GPU_ID" python3 - <<'PY'
