@@ -28,7 +28,7 @@ class ImageGenDemo:
        - linspace_sigmas: bool
     """
 
-    def __init__(self, host: str = "10.48.50.167", port: str = "18080") -> None:
+    def __init__(self, host: str = "10.48.48.106", port: str = "18080") -> None:
         self.host = host
         self.port = port
         self.base_url = f"http://{host}:{port}"
