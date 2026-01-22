@@ -246,6 +246,54 @@ class LocalAR2ImageGenerator:
             ).replace("__prompt__", prompt),
         }
 
+    def serve_forever(self) -> None:
+        """启动一个最轻量的 HTTP 服务（stdlib，无额外依赖）。"""
+
+        generator = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):  # noqa: N802
+                parsed = urlparse(self.path)
+                if parsed.path != "/generate":
+                    return self._send_json(404, {"error": "not found"})
+
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    raw = self.rfile.read(length)
+                    req = json.loads(raw.decode("utf-8")) if raw else {}
+                except Exception as e:
+                    return self._send_json(400, {"error": f"invalid json: {e}"})
+
+                prompt = (req.get("prompt") or "").strip()
+                output_path = req.get("output_path")
+
+                print(f"receive request: prompt={prompt!r}, output_path={output_path!r}")
+
+                if not prompt:
+                    return self._send_json(400, {"error": "prompt is required"})
+
+                try:
+                    out_path = generator.generate_to_path(prompt=prompt, output_path=output_path)
+                except Exception as e:
+                    return self._send_json(500, {"error": str(e)})
+
+                return self._send_json(200, {"output_path": out_path})
+
+            def log_message(self, format: str, *args):  # noqa: A002
+                return
+
+        server = ThreadingHTTPServer((self.cfg.service_host, self.cfg.service_port), Handler)
+        print(f"[LocalAR2ImageGenerator] serving on http://{self.cfg.service_host}:{self.cfg.service_port} (POST /generate)")
+        server.serve_forever()
+        
     @torch.no_grad()
     def __call__(self, prompt: str) -> Image.Image:
         given_samples = [self._build_given_sample(prompt)]

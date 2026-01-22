@@ -12,7 +12,7 @@ set -euo pipefail
 # - 通过 CUDA_VISIBLE_DEVICES 控制可见 GPU（建议与 config 里的 service_gpu_ids 对齐）
 
 ROOT_DIR=$(cd "$(dirname "$0")/../../.." && pwd)
-CONFIG_PATH=${1:-"$ROOT_DIR/examples/keye_ar/serve_dit/config_local_ar2image.json"}
+CONFIG_PATH=${1:-"$ROOT_DIR/examples/keye_ar/serve_dit/config_local_ar2image_multigpu.json"}
 
 export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
 
