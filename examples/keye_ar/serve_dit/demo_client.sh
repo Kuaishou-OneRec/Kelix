@@ -8,7 +8,7 @@ set -euo pipefail
 
 PROMPT=${1:-"a black cat."}
 OUT_PATH=${2:-""}
-HOST=${HOST:-"127.0.0.1"}
+HOST=${HOST:-"10.48.50.167"}
 PORT=${PORT:-"18080"}
 
 if [[ -n "$OUT_PATH" ]]; then
