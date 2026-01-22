@@ -127,7 +127,7 @@ def demo_with_all_args() -> None:
 
     # LLM generation args：透传到 tokenize_images
     generation_args = {
-        "top_k": 2,
+        "top_k": 10,
         # "top_p": 0.9,
     }
 
