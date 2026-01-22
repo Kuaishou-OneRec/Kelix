@@ -218,7 +218,7 @@ def get_model_embedding_and_tokens(
                 **kwargs
             )
         except Exception as e:
-            raise Exception(f"Error in generate: {e}, input_ids: {input_ids}, kwargs: {kwargs}")
+            raise Exception(f"Error in generate: {e}, input_ids: {input_ids}, kwargs: {kwargs}. Traceback: {traceback.format_exc()}")
         embeddings = embeddings[0]
         return tokens, embeddings
         
