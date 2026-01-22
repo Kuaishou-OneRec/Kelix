@@ -22,3 +22,4 @@ while true; do
   echo "\n===== [$n] $(date '+%Y-%m-%d %H:%M:%S') ====="
   bash "$CLIENT_SH"
 done
+

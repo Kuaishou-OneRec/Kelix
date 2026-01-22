@@ -17,3 +17,4 @@ echo "Using config: $CONFIG_PATH"
 python3 -u "$ROOT_DIR/tests/models/keye_ar/demo_local_infer_visualize_reconstruction.py" \
   --config "$CONFIG_PATH" \
   --cuda-visible-devices "${CUDA_VISIBLE_DEVICES:-1}"
+

@@ -32,3 +32,4 @@ echo "response:"
 curl -sS -X POST "http://$HOST:$PORT/generate" \
   -H 'Content-Type: application/json' \
   -d "$PAYLOAD" | python3 -m json.tool
+
