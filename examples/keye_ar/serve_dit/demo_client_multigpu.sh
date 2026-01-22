@@ -23,7 +23,7 @@ prompt = os.environ.get('PROMPT', 'a black cat.')
 out_path = os.environ.get('OUT_PATH', '')
 gpu_id = os.environ.get('GPU_ID', '')
 
-req = {"prompt": prompt}
+req = {"prompt": prompt, "generation_args": {"top_k": 2}}
 if out_path:
     req["output_path"] = out_path
 if gpu_id:

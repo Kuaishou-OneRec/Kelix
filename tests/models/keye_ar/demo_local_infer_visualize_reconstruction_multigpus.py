@@ -1,21 +1,35 @@
 """Local inference demo: prompt -> image (PIL) for Sana AR-DiT + KeyeAR.
 
-这个文件原本是一个“单机版本”的可运行脚本。
-现在整理成一个类：
-- 初始化负责加载：DiT 模型、VAE、KeyeAR tokenizer/processor、dataset（用于把 prompt 变成 input_ids 等）
-- __call__(prompt) 负责：prompt -> input_ids -> DiT sampling -> VAE decode -> PIL.Image
+- 单卡模式：LocalAR2ImageGenerator（可 serve_forever）
+- 多卡模式：MultiGPUAR2ImageService（round_robin / by_request）
 
-新增：service 模式（可选）
-- 当 LocalAR2ImageConfig.enable_service=True 时，调用 `gen.serve_forever()` 启动 HTTP 服务
-- 客户端可 POST /generate，传入 JSON：
-  - prompt: str（必填）
-  - output_path: str（可选，目标图片写入地址）
-- 服务端返回 JSON：
-  - output_path: str（实际写入路径）
+支持两类可选请求参数：
+1) LLM 生成参数：generation_args（透传到 tokenize_images(**generation_args)）
+2) DiT 采样参数（覆盖 cfg 中同名字段）：
+   - cfg_scale: float
+   - num_sampling_steps: int
+   - flow_shift: float
+   - linspace_sigmas: bool
 
-注意：
-- 该类不依赖分布式。
-- DCP 模式完全兼容原始逻辑：仅给 dcp_ckpt_dir + dcp_tag 时，仍需提供 source_model_dir 或 model_dir 作为 source_dir。
+新增：返回 timing 信息（秒）：
+- timings.total_time_s：服务端一次请求总耗时（从开始生成到图片落盘）
+- timings.llm_time_s：tokenize_images（AR/LLM 推理部分）耗时
+- timings.dit_time_s：DiT 采样循环耗时
+
+Request JSON (POST /generate):
+- prompt: str (required)
+- output_path: str (optional)
+- gpu_id: int (optional; multi-gpu)
+- generation_args: dict (optional)
+- cfg_scale: float (optional)
+- num_sampling_steps: int (optional)
+- flow_shift: float (optional)
+- linspace_sigmas: bool (optional)
+
+Response JSON:
+- output_path: str
+- gpu_id: int/str
+- timings: { total_time_s: float, llm_time_s: float, dit_time_s: float }
 """
 
 from __future__ import annotations
@@ -24,14 +38,14 @@ import argparse
 import datetime
 import json
 import os
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import urlparse
-
-import threading
 
 import numpy as np
 import torch
@@ -67,6 +81,7 @@ def _load_keye_ar_local(
     output_last_hidden_states_only: bool = False,
 ) -> KeyeARModel:
     """Local version of KeyeARModel.from_pretrained without distributed init."""
+
     with set_default_dtype(dtype), torch.device(device):
         tokenizer = KeyeARModel.from_pretrained(tokenizer_dir).eval()
         tokenizer.config.qwen_config.output_last_hidden_states_only = output_last_hidden_states_only
@@ -78,8 +93,6 @@ def _load_keye_ar_local(
 @dataclass
 class LocalAR2ImageConfig:
     # DiT model
-    # - 常规模式：直接给 model_dir（通常是 converted/ 或 muse_converted/）
-    # - DCP 模式：只给 dcp_ckpt_dir + dcp_tag 时，也必须给一个 source_model_dir（作为 dcp_to_torch_convert 的 source_dir）
     model_dir: Optional[str] = None
     source_model_dir: Optional[str] = None
     dcp_ckpt_dir: Optional[str] = None
@@ -93,7 +106,7 @@ class LocalAR2ImageConfig:
 
     # Dataset config（用来把 prompt -> input_ids）
     dataset_config: str = "examples/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce_inf.json"
-    parquet_path: str = ""  # 仅复用 loader 的预处理逻辑；given_samples 会覆盖真实内容
+    parquet_path: str = ""
 
     # Sampling
     device: str = "cuda"
@@ -114,17 +127,11 @@ class LocalAR2ImageConfig:
     service_output_dir: str = "./vis_output_local/service_outputs"
 
     # Multi-GPU service
-    # 例如: [0,1,2,3] 或 "0,1,2,3"（json里建议用数组）
     service_gpu_ids: Optional[List[int]] = None
-    # 选卡策略: "round_robin" | "by_request"
-    service_gpu_policy: str = "round_robin"
+    service_gpu_policy: str = "round_robin"  # "round_robin" | "by_request"
 
 
 def load_local_ar2image_config(config_path: str) -> LocalAR2ImageConfig:
-    """从 JSON 加载 LocalAR2ImageConfig。
-
-    JSON 里只需要提供你想覆盖的字段即可；未提供的字段使用 dataclass 默认值。
-    """
     with open(config_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -133,22 +140,18 @@ def load_local_ar2image_config(config_path: str) -> LocalAR2ImageConfig:
 
 
 class LocalAR2ImageGenerator:
-    """单机 prompt -> image 的封装类（支持可选 service 模式）。"""
-
     def __init__(self, cfg: LocalAR2ImageConfig):
         self.cfg = cfg
 
         self.device = torch.device(cfg.device if (cfg.device.startswith("cuda") and torch.cuda.is_available()) else "cpu")
         self.dtype = _get_torch_dtype(cfg.dtype)
 
-        # service output dir
         self.service_output_dir = Path(cfg.service_output_dir)
         self.service_output_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1) resolve model_dir（兼容 DCP->torch 转换）
         model_dir = self._resolve_model_dir(cfg)
+        self.model_dir = model_dir
 
-        # 2) load DiT config + model
         cfg_path = Path(model_dir) / "config.json"
         if not cfg_path.exists():
             raise FileNotFoundError(f"Model config not found at {cfg_path}")
@@ -172,10 +175,8 @@ class LocalAR2ImageGenerator:
         self.dit.to(self.device).to(dtype=self.dtype)
         self.dit.eval()
 
-        # 3) load VAE
         self.vae = train_rec.load_vae(cfg.vae_dir, device=self.device, dtype=self.dtype)
 
-        # 4) load KeyeAR + processor
         self.keye_ar = _load_keye_ar_local(
             cfg.keye_ar_dir,
             device=self.device,
@@ -185,7 +186,6 @@ class LocalAR2ImageGenerator:
         self.keye_ar = self.keye_ar.to(self.device).to(dtype=self.dtype)
         self.ar_processor = AutoProcessor.from_pretrained(cfg.keye_ar_dir, trust_remote_code=True)
 
-        # 5) build dataset（单机 rank/world_size）
         with open(cfg.dataset_config, encoding="utf-8") as f:
             dataset_cfg = json.load(f)
 
@@ -198,7 +198,6 @@ class LocalAR2ImageGenerator:
 
         self.dataset = train_rec.Chat2ImageDataset(**dataset_cfg)
 
-        # cached values for sampling
         self.latent_channels = self.vae.config.latent_channels
         self.latent_size = cfg.image_size // self.dit.config.vae_downsample_rate
 
@@ -247,8 +246,6 @@ class LocalAR2ImageGenerator:
         }
 
     def serve_forever(self) -> None:
-        """启动一个最轻量的 HTTP 服务（stdlib，无额外依赖）。"""
-
         generator = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -274,18 +271,55 @@ class LocalAR2ImageGenerator:
 
                 prompt = (req.get("prompt") or "").strip()
                 output_path = req.get("output_path")
+                generation_args = req.get("generation_args")
 
-                print(f"receive request: prompt={prompt!r}, output_path={output_path!r}")
+                # DiT generation args (optional overrides)
+                cfg_scale = req.get("cfg_scale")
+                num_sampling_steps = req.get("num_sampling_steps")
+                flow_shift = req.get("flow_shift")
+                linspace_sigmas = req.get("linspace_sigmas")
+
+                if generation_args is not None and not isinstance(generation_args, dict):
+                    return self._send_json(400, {"error": f"generation_args must be dict, got {type(generation_args)}"})
+
+                for name, val in {
+                    "cfg_scale": cfg_scale,
+                    "num_sampling_steps": num_sampling_steps,
+                    "flow_shift": flow_shift,
+                }.items():
+                    if val is not None and not isinstance(val, (int, float)):
+                        return self._send_json(400, {"error": f"{name} must be number, got {type(val)}"})
+
+                if num_sampling_steps is not None and not isinstance(num_sampling_steps, int):
+                    return self._send_json(400, {"error": f"num_sampling_steps must be int, got {type(num_sampling_steps)}"})
+
+                if linspace_sigmas is not None and not isinstance(linspace_sigmas, bool):
+                    return self._send_json(400, {"error": f"linspace_sigmas must be bool, got {type(linspace_sigmas)}"})
+
+                print(
+                    f"[SingleGPU] request prompt={prompt!r} output_path={output_path!r} generation_args={generation_args!r} "
+                    f"cfg_scale={cfg_scale!r} num_sampling_steps={num_sampling_steps!r} flow_shift={flow_shift!r} linspace_sigmas={linspace_sigmas!r}"
+                )
 
                 if not prompt:
                     return self._send_json(400, {"error": "prompt is required"})
 
                 try:
-                    out_path = generator.generate_to_path(prompt=prompt, output_path=output_path)
+                    ret = generator.generate_to_path(
+                        prompt=prompt,
+                        output_path=output_path,
+                        generation_args=generation_args,
+                        dit_sampling_overrides={
+                            "cfg_scale": cfg_scale,
+                            "num_sampling_steps": num_sampling_steps,
+                            "flow_shift": flow_shift,
+                            "linspace_sigmas": linspace_sigmas,
+                        },
+                    )
                 except Exception as e:
                     return self._send_json(500, {"error": str(e)})
 
-                return self._send_json(200, {"output_path": out_path})
+                return self._send_json(200, {**ret, "gpu_id": str(generator.device)})
 
             def log_message(self, format: str, *args):  # noqa: A002
                 return
@@ -293,9 +327,18 @@ class LocalAR2ImageGenerator:
         server = ThreadingHTTPServer((self.cfg.service_host, self.cfg.service_port), Handler)
         print(f"[LocalAR2ImageGenerator] serving on http://{self.cfg.service_host}:{self.cfg.service_port} (POST /generate)")
         server.serve_forever()
-        
+
     @torch.no_grad()
-    def __call__(self, prompt: str) -> Image.Image:
+    def __call__(
+        self,
+        prompt: str,
+        generation_args: Optional[Dict[str, Any]] = None,
+        dit_sampling_overrides: Optional[Dict[str, Any]] = None,
+        timings_out: Optional[Dict[str, float]] = None,
+    ) -> Image.Image:
+        generation_args = generation_args or {}
+        dit_sampling_overrides = dit_sampling_overrides or {}
+
         given_samples = [self._build_given_sample(prompt)]
 
         loaded = train_rec.VisReconstructionLoader()(  # type: ignore[attr-defined]
@@ -310,10 +353,12 @@ class LocalAR2ImageGenerator:
             given_samples=given_samples,
             add_to_loaded=False,
         )
+
         if loaded is None or not hasattr(loaded, "input_ids") or loaded.input_ids is None:
             raise RuntimeError("VisReconstructionLoader failed to produce input_ids")
 
-        cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
+        t_llm0 = time.perf_counter()
+        tokenized = tokenize_images(
             ar_processor=self.ar_processor,
             ar_model=self.keye_ar,
             batch_size=1,
@@ -321,7 +366,17 @@ class LocalAR2ImageGenerator:
             input_ids=loaded.input_ids.to(device=self.device),
             teacher_forcing=False,
             condition_on_special_tokens=self.cfg.condition_on_special_tokens,
+            **generation_args,
         )
+        # 类型提示：tokenize_images 在本工程中实际返回 (cond_embeds, cond_mask, token_embed_lengths)
+        cond_embeds, cond_mask, token_embed_lengths = tokenized  # type: ignore[misc,assignment]
+        t_llm1 = time.perf_counter()
+        if timings_out is not None:
+            timings_out["llm_time_s"] = t_llm1 - t_llm0
+
+        if token_embed_lengths is None:
+            # type: ignore[assignment]
+            token_embed_lengths = torch.tensor([self.cfg.max_condition_length], device=self.device)
 
         cond_embeds = self.dit.diffusion_connector(cond_embeds)
 
@@ -343,12 +398,17 @@ class LocalAR2ImageGenerator:
         uncond_mask[:, :seq_len] = 1
         uncond_mask = uncond_mask[:, None, None, :]
 
-        scheduler = FlowMatchEulerDiscreteScheduler(shift=self.cfg.flow_shift)
-        if self.cfg.linspace_sigmas:
-            sigmas = np.linspace(1.0, 1 / self.cfg.num_sampling_steps, self.cfg.num_sampling_steps)
-            scheduler.set_timesteps(self.cfg.num_sampling_steps, sigmas=sigmas, device=self.device)
+        cfg_scale = float(dit_sampling_overrides.get("cfg_scale", self.cfg.cfg_scale))
+        num_sampling_steps = int(dit_sampling_overrides.get("num_sampling_steps", self.cfg.num_sampling_steps))
+        flow_shift = float(dit_sampling_overrides.get("flow_shift", self.cfg.flow_shift))
+        linspace_sigmas = bool(dit_sampling_overrides.get("linspace_sigmas", self.cfg.linspace_sigmas))
+
+        scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
+        if linspace_sigmas:
+            sigmas = np.linspace(1.0, 1 / num_sampling_steps, num_sampling_steps)
+            scheduler.set_timesteps(num_sampling_steps, sigmas=sigmas, device=self.device)
         else:
-            scheduler.set_timesteps(self.cfg.num_sampling_steps, device=self.device)
+            scheduler.set_timesteps(num_sampling_steps, device=self.device)
 
         generator = torch.Generator(device=self.device).manual_seed(self.cfg.seed)
         dit_latents = torch.randn(
@@ -374,6 +434,7 @@ class LocalAR2ImageGenerator:
         )
         model_kwargs = {**pos_args, "is_y_connected": True}
 
+        t_dit0 = time.perf_counter()
         for t in scheduler.timesteps:
             latent_input = torch.cat([dit_latents] * 2)
             timestep = t.expand(latent_input.shape[0])
@@ -385,8 +446,11 @@ class LocalAR2ImageGenerator:
                 **model_kwargs,
             )
             noise_uncond, noise_cond = noise_pred.chunk(2)
-            noise_pred = noise_uncond + self.cfg.cfg_scale * (noise_cond - noise_uncond)
+            noise_pred = noise_uncond + cfg_scale * (noise_cond - noise_uncond)
             dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
+        t_dit1 = time.perf_counter()
+        if timings_out is not None:
+            timings_out["dit_time_s"] = t_dit1 - t_dit0
 
         dit_recon_latents = dit_latents / self.vae.config.scaling_factor
         dit_recon_images = self.vae.decode(dit_recon_latents).sample
@@ -395,7 +459,13 @@ class LocalAR2ImageGenerator:
         img_np = dit_recon_images[0].detach().cpu().permute(1, 2, 0).float().numpy()
         return Image.fromarray((img_np * 255).round().astype("uint8"))
 
-    def generate_to_path(self, prompt: str, output_path: Optional[str] = None) -> str:
+    def generate_to_path(
+        self,
+        prompt: str,
+        output_path: Optional[str] = None,
+        generation_args: Optional[Dict[str, Any]] = None,
+        dit_sampling_overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         if output_path:
             out_path = Path(output_path)
         else:
@@ -403,31 +473,23 @@ class LocalAR2ImageGenerator:
             out_path = self.service_output_dir / f"gen_{ts}_{uuid.uuid4().hex[:8]}.jpg"
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        img = self(prompt)
+
+        timings: Dict[str, float] = {}
+        t_total0 = time.perf_counter()
+        img = self(
+            prompt,
+            generation_args=generation_args,
+            dit_sampling_overrides=dit_sampling_overrides,
+            timings_out=timings,
+        )
         img.save(str(out_path), quality=95)
-        return str(out_path.resolve())
+        t_total1 = time.perf_counter()
+        timings["total_time_s"] = t_total1 - t_total0
+
+        return {"output_path": str(out_path.resolve()), "timings": timings}
 
 
 class MultiGPUAR2ImageService:
-    """在多个 GPU 上各加载一份模型，并在收到请求时选择 GPU 执行。
-
-    设计：
-    - 每张卡一个 `LocalAR2ImageGenerator` 实例
-    - 为每张卡配一把锁，避免同卡并发导致 OOM
-    - 支持两种策略：
-      - round_robin：轮询分配
-      - by_request：客户端请求中显式传 gpu_id
-
-    Request JSON:
-    - prompt: str (required)
-    - output_path: str (optional)
-    - gpu_id: int (optional; when service_gpu_policy=by_request 或想强制指定)
-
-    Response JSON:
-    - output_path: str (absolute path)
-    - gpu_id: int
-    """
-
     def __init__(self, base_cfg: LocalAR2ImageConfig):
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available, cannot start multi-gpu service")
@@ -435,7 +497,6 @@ class MultiGPUAR2ImageService:
         self.base_cfg = base_cfg
 
         if base_cfg.service_gpu_ids is None:
-            # 默认使用当前可见的所有 GPU
             self.gpu_ids = list(range(torch.cuda.device_count()))
         else:
             self.gpu_ids = list(base_cfg.service_gpu_ids)
@@ -455,11 +516,9 @@ class MultiGPUAR2ImageService:
 
         print(f"[MultiGPUAR2ImageService] initializing on GPUs: {self.gpu_ids}, policy={self.policy}")
 
-        # 依次在每个 GPU 上加载一份
         for gid in self.gpu_ids:
             cfg = LocalAR2ImageConfig(**{**base_cfg.__dict__})
             cfg.device = f"cuda:{gid}"
-            # service_output_dir 仍由 base_cfg 决定
             self.generators[gid] = LocalAR2ImageGenerator(cfg)
             self.locks[gid] = threading.Lock()
             print(f"[MultiGPUAR2ImageService] loaded generator on cuda:{gid}")
@@ -471,283 +530,50 @@ class MultiGPUAR2ImageService:
             return requested_gpu_id
 
         if self.policy == "by_request":
-            # by_request 模式下必须显式指定
             raise ValueError("gpu_id is required when service_gpu_policy=by_request")
 
-        # round robin
         with self._rr_lock:
             gid = self.gpu_ids[self._rr_idx % len(self.gpu_ids)]
             self._rr_idx += 1
         return gid
 
-    def generate(self, prompt: str, output_path: Optional[str], gpu_id: Optional[int]) -> Dict[str, Any]:
+    def generate(
+        self,
+        prompt: str,
+        output_path: Optional[str],
+        gpu_id: Optional[int],
+        generation_args: Optional[Dict[str, Any]] = None,
+        dit_sampling_overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         gid = self._pick_gpu(gpu_id)
+        generation_args = generation_args or {}
+
+        print(
+            f"[MultiGPUAR2ImageService] dispatch gpu={gid} prompt={prompt!r} output_path={output_path!r} generation_args={generation_args}"
+        )
+
         gen = self.generators[gid]
         lock = self.locks[gid]
 
         with lock:
-            out_path = gen.generate_to_path(prompt=prompt, output_path=output_path)
-
-        return {"output_path": out_path, "gpu_id": gid}
-    @staticmethod
-    def _resolve_model_dir(cfg: LocalAR2ImageConfig) -> str:
-        """兼容两种路径组织。
-
-        保持原始脚本语义：只要 dcp_tag 非空就触发转换。
-        """
-        model_dir = cfg.model_dir
-
-        if cfg.dcp_tag:
-            if not cfg.dcp_ckpt_dir:
-                raise ValueError("When dcp_tag is set, dcp_ckpt_dir must be provided")
-
-            source_dir = cfg.source_model_dir or model_dir
-            if not source_dir:
-                raise ValueError(
-                    "DCP mode requires a source model dir. Provide source_model_dir (preferred) or model_dir "
-                    "as the source_dir for dcp_to_torch_convert."
-                )
-
-            converted_model_dir = os.path.join(cfg.dcp_ckpt_dir, cfg.dcp_tag, "converted")
-            if not os.path.exists(converted_model_dir):
-                print(f"Converting DCP checkpoint from {cfg.dcp_ckpt_dir} to {converted_model_dir}, dcp_tag={cfg.dcp_tag}")
-                dcp_to_torch_convert(
-                    checkpoint_dir=cfg.dcp_ckpt_dir,
-                    tag=cfg.dcp_tag,
-                    source_dir=source_dir,
-                )
-            else:
-                print(f"DCP checkpoint already converted to torch format at: {converted_model_dir}")
-
-            model_dir = converted_model_dir
-            print(f"Converted DCP checkpoint available at: {model_dir}")
-
-        if not model_dir:
-            raise ValueError("model_dir is required (or use dcp_ckpt_dir+dcp_tag with source_model_dir)")
-
-        return model_dir
-
-    def _build_given_sample(self, prompt: str) -> Dict[str, Any]:
-        # 对齐 bk.py：metadata / images 用一个占位即可（实际不会影响生成）。
-        return {
-            "uuid": "__xxxxxx__",
-            "metadata": '{"images_info": {"output": {"width": 1024, "height": 781, "format": "PNG"}}}',
-            "images": '{"output": "/mmu_mllm_hdd_2/lingzhixin/data/bytedance-research/UNO-1M/downloaded/images/split91/scene_prompt_object_object_v1_w1024_h2048_split_Stroller_Kiwi fruit_53519_asset0_scene5_1_781x1024.png"}',
-            "videos": "{}",
-            "source": "__default__",
-            "messages": (
-                '[{"role": "user", "content": [{"type": "text", "text": "Generate an image base on the description: __prompt__"}]},'
-                '{"role": "assistant", "content": [{"type": "image", "image": "output"}]}]'
-            ).replace("__prompt__", prompt),
-        }
-
-    @torch.no_grad()
-    def __call__(self, prompt: str) -> Image.Image:
-        """输入 prompt，返回一张 PIL.Image。"""
-        given_samples = [self._build_given_sample(prompt)]
-
-        # --- debug info ---
-        print(f"[LocalAR2ImageGenerator] prompt={prompt!r}")
-        print(f"[LocalAR2ImageGenerator] parquet_path={self.cfg.parquet_path!r}")
-        print(f"[LocalAR2ImageGenerator] dataset={type(self.dataset)}")
-        print(f"[LocalAR2ImageGenerator] image_size={self.cfg.image_size} max_condition_length={self.cfg.max_condition_length}")
-        print(f"[LocalAR2ImageGenerator] device={self.device} dtype={self.dtype}")
-
-        loaded = train_rec.VisReconstructionLoader()(  # type: ignore[attr-defined]
-            self.cfg.parquet_path,
-            self.dataset,
-            self.cfg.image_size,
-            self.device,
-            self.dtype,
-            num_images=1,
-            tb_writer=None,
-            vae=self.vae,
-            given_samples=given_samples,
-            add_to_loaded=False,
-        )
-
-        if loaded is None:
-            raise RuntimeError(
-                "VisReconstructionLoader returned None. "
-                "Please check parquet_path / dataset_config / given_samples format."
+            ret = gen.generate_to_path(
+                prompt=prompt,
+                output_path=output_path,
+                generation_args=generation_args,
+                dit_sampling_overrides=dit_sampling_overrides,
             )
 
-        # loaded should contain input_ids
-        if not hasattr(loaded, "input_ids"):
-            raise RuntimeError(f"Loaded object has no input_ids. loaded_type={type(loaded)} keys={dir(loaded)[:50]}")
-        if loaded.input_ids is None:
-            raise RuntimeError("loaded.input_ids is None")
-
-        try:
-            print(f"[LocalAR2ImageGenerator] loaded.input_ids.shape={tuple(loaded.input_ids.shape)}")
-        except Exception:
-            print(f"[LocalAR2ImageGenerator] loaded.input_ids={loaded.input_ids}")
-
-        cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
-            ar_processor=self.ar_processor,
-            ar_model=self.keye_ar,
-            batch_size=1,
-            max_condition_length=self.cfg.max_condition_length,
-            input_ids=loaded.input_ids.to(device=self.device),
-            teacher_forcing=False,
-            condition_on_special_tokens=self.cfg.condition_on_special_tokens,
-        )
-
-        print(
-            f"[LocalAR2ImageGenerator] tokenized: cond_embeds={tuple(cond_embeds.shape)} "
-            f"cond_mask={tuple(cond_mask.shape)} token_embed_lengths={token_embed_lengths}"
-        )
-
-        cond_embeds = self.dit.diffusion_connector(cond_embeds)
-
-        # unconditional embeds for CFG
-        null_embed = self.dit.y_embedder.y_embedding
-        seq_len = min(null_embed.shape[0], self.cfg.max_condition_length)
-        uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(1, -1, -1)
-        if seq_len < self.cfg.max_condition_length:
-            padding = torch.zeros(
-                1,
-                self.cfg.max_condition_length - seq_len,
-                uncond_embeds.shape[-1],
-                device=self.device,
-                dtype=self.dtype,
-            )
-            uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
-        uncond_embeds = uncond_embeds.to(device=self.device, dtype=self.dtype)
-
-        uncond_mask = torch.zeros(1, self.cfg.max_condition_length, device=self.device)
-        uncond_mask[:, :seq_len] = 1
-        uncond_mask = uncond_mask[:, None, None, :]
-
-        scheduler = FlowMatchEulerDiscreteScheduler(shift=self.cfg.flow_shift)
-        if self.cfg.linspace_sigmas:
-            sigmas = np.linspace(1.0, 1 / self.cfg.num_sampling_steps, self.cfg.num_sampling_steps)
-            scheduler.set_timesteps(self.cfg.num_sampling_steps, sigmas=sigmas, device=self.device)
-        else:
-            scheduler.set_timesteps(self.cfg.num_sampling_steps, device=self.device)
-
-        generator = torch.Generator(device=self.device).manual_seed(self.cfg.seed)
-        dit_latents = torch.randn(
-            (1, self.latent_channels, self.latent_size, self.latent_size),
-            generator=generator,
-            device=self.device,
-            dtype=self.dtype,
-        )
-
-        cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
-        mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
-
-        # pos args（和原流程保持一致）
-        pos_args = train_rec.compute_pos_args(
-            latent_hw=(self.latent_size, self.latent_size),
-            image_grid_thw=torch.tensor(
-                [1, 2 * self.cfg.max_condition_length**0.5, 2 * self.cfg.max_condition_length**0.5]
-            )[None].to(self.device),
-            max_seq_len=self.cfg.max_condition_length,
-            device=self.device,
-            cond_pos_scale=1.0,
-            image_size=self.cfg.image_size,
-            token_embed_lengths=token_embed_lengths,
-        )
-        model_kwargs = {**pos_args, "is_y_connected": True}
-
-        for t in scheduler.timesteps:
-            latent_input = torch.cat([dit_latents] * 2)
-            timestep = t.expand(latent_input.shape[0])
-            noise_pred = self.dit.forward_with_dpmsolver(
-                latent_input,
-                timestep,
-                cond_embeds_cfg,
-                mask=mask_cfg,
-                **model_kwargs,
-            )
-            noise_uncond, noise_cond = noise_pred.chunk(2)
-            noise_pred = noise_uncond + self.cfg.cfg_scale * (noise_cond - noise_uncond)
-            dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
-
-        dit_recon_latents = dit_latents / self.vae.config.scaling_factor
-        dit_recon_images = self.vae.decode(dit_recon_latents).sample
-        dit_recon_images = (dit_recon_images / 2 + 0.5).clamp(0, 1)
-
-        img_np = dit_recon_images[0].detach().cpu().permute(1, 2, 0).float().numpy()
-        return Image.fromarray((img_np * 255).round().astype("uint8"))
-
-    def generate_to_path(self, prompt: str, output_path: Optional[str] = None) -> str:
-        """生成图片并写入到 output_path（可缺省），返回实际写入路径。"""
-        if output_path:
-            out_path = Path(output_path)
-        else:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            out_path = self.service_output_dir / f"gen_{ts}_{uuid.uuid4().hex[:8]}.jpg"
-
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        img = self(prompt)
-        img.save(str(out_path), quality=95)
-
-        # 服务端/脚本统一返回绝对路径，方便 client 侧直接使用
-        return str(out_path.resolve())
-
-    def serve_forever(self) -> None:
-        """启动一个最轻量的 HTTP 服务（stdlib，无额外依赖）。"""
-
-        # 单 GPU 服务：保持原样
-        generator = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
-                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                self.send_response(code)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def do_POST(self):  # noqa: N802
-                parsed = urlparse(self.path)
-                if parsed.path != "/generate":
-                    return self._send_json(404, {"error": "not found"})
-
-                try:
-                    length = int(self.headers.get("Content-Length", "0"))
-                    raw = self.rfile.read(length)
-                    req = json.loads(raw.decode("utf-8")) if raw else {}
-                except Exception as e:
-                    return self._send_json(400, {"error": f"invalid json: {e}"})
-
-                prompt = (req.get("prompt") or "").strip()
-                output_path = req.get("output_path")
-                gpu_id = req.get("gpu_id")
-
-                print(f"receive request: prompt={prompt!r}, output_path={output_path!r}, gpu_id={gpu_id!r}")
-
-                if not prompt:
-                    return self._send_json(400, {"error": "prompt is required"})
-
-                try:
-                    out_path = generator.generate_to_path(prompt=prompt, output_path=output_path)
-                except Exception as e:
-                    return self._send_json(500, {"error": str(e)})
-
-                # 单 GPU 模式下仍返回 gpu_id=当前 device
-                return self._send_json(200, {"output_path": out_path, "gpu_id": str(generator.device)})
-
-            def log_message(self, format: str, *args):  # noqa: A002
-                return
-
-        server = ThreadingHTTPServer((self.cfg.service_host, self.cfg.service_port), Handler)
-        print(f"[LocalAR2ImageGenerator] serving on http://{self.cfg.service_host}:{self.cfg.service_port} (POST /generate)")
-        server.serve_forever()
+        return {**ret, "gpu_id": gid}
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=None, help="Path to LocalAR2ImageConfig JSON")
     parser.add_argument("--prompt", type=str, default="a cat.")
-    parser.add_argument("--output-path", type=str, default=None, help="Optional output image path when not serving")
+    parser.add_argument("--output-path", type=str, default=None)
     parser.add_argument("--cuda-visible-devices", type=str, default="6,7")
     args = parser.parse_args()
 
-    # 注意：多 GPU 服务通常建议通过 CUDA_VISIBLE_DEVICES 控制可见卡集合
     if args.cuda_visible_devices is not None:
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", args.cuda_visible_devices)
 
@@ -796,6 +622,30 @@ def main():
                 prompt = (req.get("prompt") or "").strip()
                 output_path = req.get("output_path")
                 gpu_id = req.get("gpu_id")
+                generation_args = req.get("generation_args")
+
+                # DiT generation args (optional overrides)
+                cfg_scale = req.get("cfg_scale")
+                num_sampling_steps = req.get("num_sampling_steps")
+                flow_shift = req.get("flow_shift")
+                linspace_sigmas = req.get("linspace_sigmas")
+
+                if generation_args is not None and not isinstance(generation_args, dict):
+                    return self._send_json(400, {"error": f"generation_args must be dict, got {type(generation_args)}"})
+
+                for name, val in {
+                    "cfg_scale": cfg_scale,
+                    "num_sampling_steps": num_sampling_steps,
+                    "flow_shift": flow_shift,
+                }.items():
+                    if val is not None and not isinstance(val, (int, float)):
+                        return self._send_json(400, {"error": f"{name} must be number, got {type(val)}"})
+
+                if num_sampling_steps is not None and not isinstance(num_sampling_steps, int):
+                    return self._send_json(400, {"error": f"num_sampling_steps must be int, got {type(num_sampling_steps)}"})
+
+                if linspace_sigmas is not None and not isinstance(linspace_sigmas, bool):
+                    return self._send_json(400, {"error": f"linspace_sigmas must be bool, got {type(linspace_sigmas)}"})
 
                 if gpu_id is not None:
                     try:
@@ -803,13 +653,27 @@ def main():
                     except Exception:
                         return self._send_json(400, {"error": f"gpu_id must be int, got {gpu_id!r}"})
 
-                print(f"receive request: prompt={prompt!r}, output_path={output_path!r}, gpu_id={gpu_id!r}")
+                print(
+                    f"receive request: prompt={prompt!r}, output_path={output_path!r}, gpu_id={gpu_id!r}, generation_args={generation_args!r}, "
+                    f"cfg_scale={cfg_scale!r}, num_sampling_steps={num_sampling_steps!r}, flow_shift={flow_shift!r}, linspace_sigmas={linspace_sigmas!r}"
+                )
 
                 if not prompt:
                     return self._send_json(400, {"error": "prompt is required"})
 
                 try:
-                    ret = service.generate(prompt=prompt, output_path=output_path, gpu_id=gpu_id)
+                    ret = service.generate(
+                        prompt=prompt,
+                        output_path=output_path,
+                        gpu_id=gpu_id,
+                        generation_args=generation_args,
+                        dit_sampling_overrides={
+                            "cfg_scale": cfg_scale,
+                            "num_sampling_steps": num_sampling_steps,
+                            "flow_shift": flow_shift,
+                            "linspace_sigmas": linspace_sigmas,
+                        },
+                    )
                 except Exception as e:
                     return self._send_json(500, {"error": str(e)})
 
@@ -823,15 +687,15 @@ def main():
         server.serve_forever()
         return
 
-    # 单 GPU（或未显式给多卡）：沿用原逻辑
     gen = LocalAR2ImageGenerator(cfg)
 
     if cfg.enable_service:
         gen.serve_forever()
         return
 
-    out_path = gen.generate_to_path(prompt=args.prompt, output_path=args.output_path)
-    print(f"saved: {out_path}")
+    ret = gen.generate_to_path(prompt=args.prompt, output_path=args.output_path)
+    print(f"saved: {ret['output_path']}")
+    print(f"timings: {ret['timings']}")
 
 
 if __name__ == "__main__":

@@ -359,3 +359,110 @@ class Qwen3Model(Model):
         )
         
         return converted_state_dict
+
+    def revert_hf_state_dict(
+        self,
+        muse_state_dict: Dict[str, torch.Tensor],
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        """Revert a Muse(Qwen3Model in this repo) state dict back to the original HF Qwen3 naming.
+
+        这是 `convert_hf_state_dict` 的反函数：
+        - 输入：`muse/models/qwen3/modeling.py`（本 repo 的实现）保存出来的 ckpt key
+        - 输出：`muse/models/qwen3/modeling_qwen_ori.py`（原始 HF 代码）所期望的 ckpt key
+
+        规则：严格逐条逆转 `convert_hf_state_dict` 的映射。
+
+        注意：
+        - 当 `tie_word_embeddings=True` 时，muse 的 `model.output.weight` 与 `model.tok_embeddings.weight` 共享；
+          原始 HF 里通常仍然会存在 `lm_head.weight`（是否保存取决于保存方式）。
+          为了保证“可逆”，这里如果看到 `model.output.weight` 就会写出 `lm_head.weight`；
+          如果 tie_word_embeddings=True 且 `model.output.weight` 不存在，则会用 `model.tok_embeddings.weight` 补出。
+
+        Args:
+            muse_state_dict: muse 格式 state_dict。
+
+        Returns:
+            hf_state_dict: 原始 HF 格式 state_dict。
+        """
+
+        hf_state_dict: Dict[str, torch.Tensor] = {}
+        tie_word_embeddings = self.config.tie_word_embeddings
+        skipped_keys: List[str] = []
+
+        for muse_key, tensor in muse_state_dict.items():
+            # Embedding layer
+            if muse_key == "model.tok_embeddings.weight":
+                hf_state_dict["model.embed_tokens.weight"] = tensor
+                continue
+
+            # Final norm
+            if muse_key == "model.norm.scale":
+                hf_state_dict["model.norm.weight"] = tensor
+                continue
+
+            # Output layer
+            if muse_key == "model.output.weight":
+                hf_state_dict["lm_head.weight"] = tensor
+                continue
+
+            # Transformer layers
+            if muse_key.startswith("model.layers."):
+                parts = muse_key.split(".", 3)
+                if len(parts) < 4:
+                    skipped_keys.append(muse_key)
+                    continue
+
+                layer_idx = parts[2]
+                rest_key = parts[3]
+
+                # Attention
+                if rest_key.startswith("attn."):
+                    hf_rest = rest_key.replace("attn.", "self_attn.")
+                    # Map output_proj -> o_proj
+                    hf_rest = hf_rest.replace("output_proj", "o_proj")
+                    # q_norm/k_norm: muse uses .scale, HF uses .weight
+                    hf_rest = hf_rest.replace("q_norm.scale", "q_norm.weight")
+                    hf_rest = hf_rest.replace("k_norm.scale", "k_norm.weight")
+                    hf_state_dict[f"model.layers.{layer_idx}.{hf_rest}"] = tensor
+                    continue
+
+                # MLP
+                if rest_key.startswith("mlp."):
+                    if rest_key == "mlp.w1.weight":
+                        hf_state_dict[f"model.layers.{layer_idx}.mlp.gate_proj.weight"] = tensor
+                        continue
+                    if rest_key == "mlp.w3.weight":
+                        hf_state_dict[f"model.layers.{layer_idx}.mlp.up_proj.weight"] = tensor
+                        continue
+                    if rest_key == "mlp.w2.weight":
+                        hf_state_dict[f"model.layers.{layer_idx}.mlp.down_proj.weight"] = tensor
+                        continue
+
+                # Layer norms
+                if rest_key == "sa_norm.scale":
+                    hf_state_dict[f"model.layers.{layer_idx}.input_layernorm.weight"] = tensor
+                    continue
+
+                if rest_key == "mlp_norm.scale":
+                    hf_state_dict[f"model.layers.{layer_idx}.post_attention_layernorm.weight"] = tensor
+                    continue
+
+            skipped_keys.append(muse_key)
+
+        # tie_word_embeddings 时，允许用 embed_tokens 补出 lm_head
+        if tie_word_embeddings and "lm_head.weight" not in hf_state_dict:
+            # 如果 muse_state_dict 里没存 output.weight，至少保证 hf ckpt 里有 lm_head.weight
+            if "model.embed_tokens.weight" in hf_state_dict:
+                hf_state_dict["lm_head.weight"] = hf_state_dict["model.embed_tokens.weight"]
+
+        if skipped_keys:
+            logger.warning(
+                f"Skipped {len(skipped_keys)} muse keys during revert. First few: {skipped_keys[:10]}"
+            )
+
+        logger.info(
+            f"Reverted {len(hf_state_dict)} keys from {len(muse_state_dict)} muse keys"
+        )
+
+        return hf_state_dict
