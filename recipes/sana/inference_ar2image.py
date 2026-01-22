@@ -211,10 +211,10 @@ def get_model_embedding_and_tokens(
 
         model.set_output_hidden_states([len(model.model.model.layers)])
         try:
+            if "top_k" not in kwargs: kwargs["top_k"] = 1
             # 生成token和嵌入
             tokens, embeddings = model.generate(
                 input_ids=input_ids,
-                top_k=1,
                 **kwargs
             )
         except Exception as e:
