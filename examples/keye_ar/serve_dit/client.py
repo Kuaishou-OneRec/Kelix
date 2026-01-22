@@ -159,4 +159,4 @@ if __name__ == "__main__":
     # 默认保持最简 demo
     demo()
     # 如需测试全参数 demo，取消下一行注释
-    # demo_with_all_args()
+    demo_with_all_args()
