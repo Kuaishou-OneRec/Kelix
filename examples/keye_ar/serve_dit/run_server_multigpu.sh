@@ -17,6 +17,6 @@ CONFIG_PATH=${1:-"$ROOT_DIR/examples/keye_ar/serve_dit/config_local_ar2image_mul
 export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
 
 echo "Using config: $CONFIG_PATH"
-python3 -u "$ROOT_DIR/tests/models/keye_ar/demo_local_infer_visualize_reconstruction_multigpus.py" \
+python3 -u "$ROOT_DIR/examples/keye_ar/serve_dit/serve_visualize_reconstruction_multigpus.py" \
   --config "$CONFIG_PATH" \
   --cuda-visible-devices "${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
