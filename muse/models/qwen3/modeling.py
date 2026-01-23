@@ -90,6 +90,7 @@ class Qwen3Model(Model):
             )
         else:
             # Use standard 1D RoPE
+            print(f"use standard 1D RoPE")
             self.rope = RotaryPositionalEmbeddings(
                 dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base
             )
