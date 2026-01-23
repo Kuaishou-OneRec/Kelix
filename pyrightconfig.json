@@ -1,7 +1,7 @@
 {
-  "reportUnusedCallResult": false,
-  "reportImplicitStringConcatenation": false,
-  "reportAny": false,
+    "reportUnusedCallResult": false,
+    "reportImplicitStringConcatenation": false,
+    "reportAny": false,
   "reportUnknownParameterType": false,
     "reportUnknownMemberType": "none",
     "reportUnknownArgumentType": "none",
@@ -15,12 +15,12 @@
     "reportOptionalIterable": "none",
     "reportOptionalContextManager": "none",
     "reportOptionalOperand": "none",
-"reportArgumentType": "none",
-"reportMissingParameterType": "none",
-"reportOptionalSubscript": "none",
-"reportDeprecated": "none",
-"reportUnannotatedClassAttribute": "none",
-"reportCallIssue": "none",
-"reportPrivateLocalImportUsage": "none",
-"reportUnusedVariable": "none"
+    "reportArgumentType": "none",
+    "reportMissingParameterType": "none",
+    "reportOptionalSubscript": "none",
+    "reportDeprecated": "none",
+    "reportUnannotatedClassAttribute": "none",
+    "reportCallIssue": "none",
+    "reportPrivateLocalImportUsage": "none",
+    "reportUnusedVariable": "none"
 }
