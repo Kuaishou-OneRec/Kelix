@@ -2,7 +2,7 @@
     "reportUnusedCallResult": false,
     "reportImplicitStringConcatenation": false,
     "reportAny": false,
-  "reportUnknownParameterType": false,
+    "reportUnknownParameterType": false,
     "reportUnknownMemberType": "none",
     "reportUnknownArgumentType": "none",
     "reportUnknownVariableType": "none",
