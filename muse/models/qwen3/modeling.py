@@ -85,6 +85,7 @@ class Qwen3Model(Model):
                 base=config.rope_base,
                 mrope_section=mrope_section,
             )
+            print(f"ing MultimodalRotaryEmbedding with m")
             logger.info(
                 f"Using MultimodalRotaryEmbedding with mrope_section={mrope_section}"
             )
@@ -302,7 +303,8 @@ class Qwen3Model(Model):
         # fully_shard will be applied to each individual layer, not the ModuleList itself
         return self.model.layers
 
-    def get_checkpointable_module_classes(self):
+    def get_checkpointable_module_classes(self) -> set[type]:
+        """Return module classes for gradient checkpointing."""
         return {TransformerSelfAttentionLayer}
 
     def convert_hf_state_dict(self,
