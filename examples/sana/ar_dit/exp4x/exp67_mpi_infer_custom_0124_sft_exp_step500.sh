@@ -42,7 +42,7 @@ MAX_CONDITION_LENGTH="${MAX_CONDITION_LENGTH:-720}"
 IMAGE_SIZE="${IMAGE_SIZE:-1024}"
 SEED="${SEED:-42}"
 INITIALIZE_DIST="${INITIALIZE_DIST:-true}"  # initialize a local single-process dist group
-MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}
+MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 
 # DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp21_ar_dit_324tokens_1e-4_reproduce/}"
 # DCP_TAG="${DCP_TAG:-global_step12000}"
