@@ -16,15 +16,15 @@ sed 's/=1/=8/g' /etc/mpi/hostfile | head -99 > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
-        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/converted_fix \
-        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
+        --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u/step47000/converted_fix \
+        --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u/step47000/muse_converted_fix
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
-MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix/global_step31000/converted
+# MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix/global_step31000/converted
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u/step47000/muse_converted_fix
 
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet
