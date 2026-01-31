@@ -140,6 +140,7 @@ def _build_keye_ar_config(hf_cfg: Dict[str, Any]) -> KeyeARConfig:
         codebook_size=codebook_size,
         n_q_tokens=n_q_tokens,
         attention_function="flash_attention_2",
+        use_multimodal_rope=False
     )
 
     # 构造KeyeARConfig
