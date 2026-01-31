@@ -13,7 +13,7 @@
     "shuffle_window": 2,
     "max_sample_length": 2048,
     "num_epochs": 999,
-    "max_hw_ratio": .1,
+    "max_hw_ratio": 1.1,
     "num_workers": 3,
     "_comment": "force_assistant_image_size is set, max_condition_length is indeed not working, compare exp43",
     "use_resolution_finder": true,
