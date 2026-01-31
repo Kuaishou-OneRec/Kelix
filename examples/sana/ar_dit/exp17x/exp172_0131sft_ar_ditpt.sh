@@ -172,7 +172,7 @@ nohup mpirun --allow-run-as-root \
                 --fp32-weight \
                 --fp32-reduce \
                 --seed 1917 \
-                --global-step 31000 \
+                --global-step 0 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --enable-profile \
