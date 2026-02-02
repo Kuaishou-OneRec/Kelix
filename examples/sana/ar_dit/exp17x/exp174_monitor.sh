@@ -17,8 +17,8 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_ex
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u/step47000/global_step47000/muse_converted
 
 # Override parameters (if needed)
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/"
-DATASET_CONFIG="examples/sana/ar_dit/exp17x/exp172_0131sft_ar_ditpt.json"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp174_0131sft_1e-4lr_sft_from172_80k_mix/"
+DATASET_CONFIG="examples/sana/ar_dit/exp17x/exp174_0131sft_1e-4lr_sft_from172_80k_mix.json"
 MAX_CONDITION_LENGTH=720
 INFERENCE_SCRIPT="examples/sana/ar_dit/inference/mpi_infer_custom_cond_spe.sh"
 MODEL_CONFIG_OVERRIDES="model_max_length=720"

@@ -723,5 +723,5 @@ class StepScheduler:
             # Save at global_step 1000
         """
         return (self.is_gradient_accumulation_boundary() and 
-                self._global_step % self.save_checkpoint_per_step == 0)
+                (self._global_step % self.save_checkpoint_per_step == 0) or self._global_step == 200)
 
