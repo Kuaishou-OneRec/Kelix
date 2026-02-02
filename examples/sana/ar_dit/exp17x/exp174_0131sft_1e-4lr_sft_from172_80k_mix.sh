@@ -28,7 +28,7 @@ script_name=$(basename "$0" .sh)
 
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/global_step76000/converted/
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/global_step76000/converted/
 
 
 # # 等待MODEL_DIR存在
