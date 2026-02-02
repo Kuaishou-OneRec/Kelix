@@ -29,7 +29,7 @@ KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_ex
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft_from3k/global_step200/converted
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/
 
-DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp17x/examples/sana/ar_dit/exp17x/exp172_0131sft_ar_ditpt.json}"
+DATASET_CONFIG=examples/sana/ar_dit/exp17x/exp172_0131sft_ar_ditpt.json
 PARQUET_PATH="${PARQUET_PATH:-/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet}"
 
 RESULTS_DIR="${RESULTS_DIR:-./results}"
