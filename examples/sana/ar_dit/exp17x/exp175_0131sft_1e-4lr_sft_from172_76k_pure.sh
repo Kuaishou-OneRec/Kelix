@@ -15,18 +15,40 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile | head -99 > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
+
+
 # PYTHONPATH=. python3 examples/keye_ar/convert_hf_checkpoint.py \
-#         --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp19/step9000/global_step9000/converted/ \
-#         --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp19/step9000/global_step9000/muse_converted/
+#         --hf-checkpoint-path /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/converted_fix \
+#         --output-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
+
+# PYTHONPATH=. \
+# python3 muse/tools/dcp2torch.py /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix \
+# --source-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp165_0116sftv1_1e-4lr_pt_res162_fix/global_step32000/converted \
+# --tag global_step80000
+
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
+/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/global_step76000/converted/
 
-# MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp162_0116sftv1_1e-4lr_pt_fix/global_step31000/converted
+
+# # 等待MODEL_DIR存在
+# # 循环等待，直到目录存在
+# while [ ! -d "$MODEL_DIR" ]; do
+#     # 打印等待提示信息（包含当前时间，便于排查日志）
+#     echo "$(date '+%Y-%m-%d %H:%M:%S'): 目标目录 $MODEL_DIR 尚未存在，将等待3秒后重试..."
+#     # 等待3秒钟
+#     sleep 3
+# done
+
+# # 目录存在后，打印完成提示
+# echo "$(date '+%Y-%m-%d %H:%M:%S'): 目标目录 $MODEL_DIR 已存在，等待结束！"
+
+
+
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp19/step9000/global_step9000/muse_converted/
-
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet
 
@@ -143,7 +165,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/sana/train_sana_ar_dit.py \
                 --visualize-parquet-path $VISUAL_PARQUET_PATH \
-                --visualize-per-step 500 \
+                --visualize-per-step 400 \
                 --keye-ar-dir $KEYE_AR_DIR \
                 --num-vis-images 14 \
                 --model-dir $MODEL_DIR \
@@ -152,19 +174,19 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/exp17x/exp172_0131sft_ar_ditpt.json \
-                --resolution-budgets "1024:8" \
-                --learning-rate 1.5e-4 \
-                --min-lr 1e-4 \
-                --num-decay-steps 10000 \
+                --dataset-config examples/sana/ar_dit/exp17x/exp175_0131sft_1e-4lr_sft_from172_76k_pure.json \
+                --resolution-budgets "1024:12" \
+                --learning-rate 2e-4 \
+                --min-lr 5e-5 \
+                --num-decay-steps 5000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 8 \
+                --batch-size 12 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
-                --num-training-steps 300000 \
+                --num-training-steps 100000 \
                 --model-config-overrides model_max_length=720 \
                 --condition-on-special-tokens \
                 --save-checkpoint-per-step 500 \
@@ -172,8 +194,7 @@ nohup mpirun --allow-run-as-root \
                 --clip-range 9999999 \
                 --fp32-weight \
                 --fp32-reduce \
-                --seed 1917 \
-                --global-step 0 \
+                --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
                 --enable-profile \
