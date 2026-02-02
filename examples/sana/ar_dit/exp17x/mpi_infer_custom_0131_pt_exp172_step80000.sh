@@ -24,10 +24,12 @@ VAE_DIR="${VAE_DIR:-/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffuser
 # KEYE_AR_DIR="${KEYE_AR_DIR:-/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp10/step7000/global_step7000/muse_converted/}"
 
 KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp11/step7000/global_step7000/muse_converted_fix
+KEYE_AR_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/sft_openmmreasoner/run_sft_exp19/step9000/global_step9000/muse_converted/
+
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp15x/exp153_0116sftv1_1e-4lr_from152_sft_from3k/global_step200/converted
 # /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/
 
-DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp16x/exp163_0116sftv1_1e-4lr_directly_sft.json}"
+DATASET_CONFIG="${DATASET_CONFIG:-examples/sana/ar_dit/exp17x/examples/sana/ar_dit/exp17x/exp172_0131sft_ar_ditpt.json}"
 PARQUET_PATH="${PARQUET_PATH:-/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet}"
 
 RESULTS_DIR="${RESULTS_DIR:-./results}"
@@ -54,8 +56,12 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 # DCP_CKPT_DIR="${DCP_CKPT_DIR:-/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp13x/exp144_1e-4lr_23500_pt/}"
 # DCP_TAG="${DCP_TAG:-global_step6000}"
 
-DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k
-DCP_TAG=global_step4000
+# DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k
+# DCP_TAG=global_step4000
+
+DCP_CKPT_DIR==/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/
+DCP_TAG=global_step80000
+
 
 TEACHER_FORCING="${TEACHER_FORCING:-0}"
 N_INFER_ITEMS="${N_INFER_ITEMS:-999999}"
