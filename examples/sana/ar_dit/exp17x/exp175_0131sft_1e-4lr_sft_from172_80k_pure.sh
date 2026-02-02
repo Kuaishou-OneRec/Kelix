@@ -175,15 +175,15 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp17x/exp175_0131sft_1e-4lr_sft_from172_80k_pure.json \
-                --resolution-budgets "1024:6" \
+                --resolution-budgets "1024:4" \
                 --learning-rate 2e-4 \
                 --min-lr 5e-5 \
-                --num-decay-steps 4500 \
+                --num-decay-steps 8000 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 6 \
+                --batch-size 4 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 200 \
                 --num-training-steps 100000 \
