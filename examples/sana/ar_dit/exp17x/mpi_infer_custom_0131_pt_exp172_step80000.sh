@@ -59,7 +59,7 @@ MODEL_CONFIG_OVERRIDES="${MODEL_CONFIG_OVERRIDES:-model_max_length=720}"
 # DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k
 # DCP_TAG=global_step4000
 
-DCP_CKPT_DIR==/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/
+DCP_CKPT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp17x/exp172_0131sft_ar_ditpt/
 DCP_TAG=global_step80000
 
 
