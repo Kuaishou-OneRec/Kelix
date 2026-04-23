@@ -32,11 +32,11 @@ cat "${ENV_FILE}"
 
 nohup rm -rf hs_err_pid*.log &
 
-# if there is no /home/hadoop, run the command below
-# if [ ! -d "/home/hadoop" ]; then
-#     mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "cp -r /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
-# && echo "Directory copied successfully." || echo "Failed to copy directory."
-# fi
+if there is no /home/hadoop, run the command below
+if [ ! -d "/home/hadoop" ]; then
+    mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "ln -s /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
+&& echo "Directory linked successfully." || echo "Failed to link directory."
+fi
 CUSTOM_PIP="/opt/conda/envs/py312/bin/pip3"
 
 # 判断路径是否存在且可执行，赋值PIP_CMD
