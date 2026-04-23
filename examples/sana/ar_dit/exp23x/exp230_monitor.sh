@@ -27,7 +27,7 @@ KEYE_AR_DIR=${top_sft_dir}/step${step}/global_step${step}/muse_converted
 
 # Override parameters (if needed)
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/"
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp20x/exp217_0131sft_1e-4lr_sft_pure/"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp23x/exp230_0131sft_1e-4lr_sft_pure/"
 
 DATASET_CONFIG="examples/sana/ar_dit/exp17x/exp175_0131sft_1e-4lr_sft_from172_80k_pure.json"
 MAX_CONDITION_LENGTH=720
