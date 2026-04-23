@@ -32,7 +32,7 @@ cat "${ENV_FILE}"
 
 nohup rm -rf hs_err_pid*.log &
 
-if there is no /home/hadoop, run the command below
+# if there is no /home/hadoop, run the command below
 if [ ! -d "/home/hadoop" ]; then
     mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "ln -s /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
 && echo "Directory linked successfully." || echo "Failed to link directory."
