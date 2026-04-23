@@ -33,9 +33,15 @@ cat "${ENV_FILE}"
 nohup rm -rf hs_err_pid*.log &
 
 # if there is no /home/hadoop, run the command below
+#!/bin/bash
 if [ ! -d "/home/hadoop" ]; then
-    mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "ln -s /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop" 
-&& echo "Directory linked successfully." || echo "Failed to link directory."
+    mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "ln -s /mmu_mllm_hdd_2/lingzhixin/envs/hadoop/ /home/hadoop"
+    # 修复：独立判断命令执行结果，原始脚本逻辑错误在这里
+    if [ $? -eq 0 ]; then
+        echo "Directory linked successfully."
+    else
+        echo "Failed to link directory."
+    fi
 fi
 CUSTOM_PIP="/opt/conda/envs/py312/bin/pip3"
 
