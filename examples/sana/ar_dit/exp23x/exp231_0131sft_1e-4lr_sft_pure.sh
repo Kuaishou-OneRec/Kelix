@@ -17,7 +17,7 @@ script_name=$(basename "$0" .sh)
 
 # /mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u_from_v86_fix2/step4000/global_step4000/converted
 top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/sft/v103_sft_1.18.1_24u_from_v86fix4
-step=5000
+step=4000
 # cd /llm_reco/lingzhixin/recovlm_vlmevalkit/vlmevalkit
 # PYTHONPATH=. python3 dcp2torch_save.py --dcp_path ${top_sft_dir} --step step${step} --base_model_path /mmu_mllm_hdd_2/zhouyang12/models/onebase_1231_2wtoken/
 # cd -
@@ -182,7 +182,7 @@ nohup mpirun --allow-run-as-root \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
                 --dataset-config examples/sana/ar_dit/exp23x/exp230_0131sft_1e-4lr_sft_pure.json \
-                --resolution-budgets "1024:16" \
+                --resolution-budgets "1024:24" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-4 \
                 --num-decay-steps 10000 \
@@ -190,7 +190,7 @@ nohup mpirun --allow-run-as-root \
                 --image-size 1024 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --batch-size 16 \
+                --batch-size 24 \
                 --lr-scheduler-type cosine_v2 \
                 --num-warmup-steps 100 \
                 --num-training-steps 300000 \
