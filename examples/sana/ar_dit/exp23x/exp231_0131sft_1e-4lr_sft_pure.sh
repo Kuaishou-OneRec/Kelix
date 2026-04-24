@@ -17,7 +17,7 @@ script_name=$(basename "$0" .sh)
 
 # /mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/v9.15_stage3_0.95_256u_from_v86_fix2/step4000/global_step4000/converted
 top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/sft/v103_sft_1.18.1_24u_from_v86fix4
-step=4000
+step=5000
 # cd /llm_reco/lingzhixin/recovlm_vlmevalkit/vlmevalkit
 # PYTHONPATH=. python3 dcp2torch_save.py --dcp_path ${top_sft_dir} --step step${step} --base_model_path /mmu_mllm_hdd_2/zhouyang12/models/onebase_1231_2wtoken/
 # cd -
@@ -37,6 +37,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp18x/exp182_0116sftv
 MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp18x/exp195_0116sftv1_1e-4lr_pt_fix/global_step18000/converted/
 MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp20x/exp206_0131sft_1e-4lr_sft_pure/global_step7000/converted/
 MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp20x/exp216_pretrain_1e-4lr_sft_pure_step15k/global_step4000/converted/
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp23x/exp231_0131sft_1e-4lr_sft_pure/global_step4500/converted/
 # # 等待MODEL_DIR存在
 # # 循环等待，直到目录存在
 # while [ ! -d "$MODEL_DIR" ]; do
