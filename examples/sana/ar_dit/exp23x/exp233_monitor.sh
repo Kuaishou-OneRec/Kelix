@@ -19,7 +19,7 @@ top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/v9.15_stage3_0.95
 top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/sft/v102_sft_1.18.1_24u_from_v86fix2/
 step=5000
 
-top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/sft/exp233_pretrain_1e-4lr_sft_pure_step1w_102
+top_sft_dir=/mmu_mllm_hdd_2/lingzhixin/output/Keye/vqar_11.9.1/sft/v105_sft_1.18.1_24u_from_v86fix5/
 step=7000
 KEYE_AR_DIR=${top_sft_dir}/step${step}/global_step${step}/muse_converted
 
@@ -27,7 +27,7 @@ KEYE_AR_DIR=${top_sft_dir}/step${step}/global_step${step}/muse_converted
 
 # Override parameters (if needed)
 DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp16x/exp168_0116sftv1_1e-4lr_sft_from162_49k/"
-DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp23x/exp232_0131sft_1e-4lr_sft_pure/"
+DCP_CKPT_DIR="/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp23x/exp233_pretrain_1e-4lr_sft_pure_step1w_102/"
 
 DATASET_CONFIG="examples/sana/ar_dit/exp17x/exp175_0131sft_1e-4lr_sft_from172_80k_pure.json"
 MAX_CONDITION_LENGTH=720
