@@ -1,0 +1,33 @@
+参考import os
+from huggingface_hub import login, upload_folder, upload_file
+
+model_path = '/llm_reco_ssd/jinxinqi/code/tech_report_statistics/released_0.6B'
+
+# onereason-upload
+# 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
+# (optional) Login with your Hugging Face credentials
+login()
+
+REPO_ID = "OpenOneRec/OneReason-0.8B-pretrain-competition"
+
+# 1. Push model files
+upload_folder(folder_path=model_path, repo_id=REPO_ID, repo_type="model")
+
+# 2. Push README.md to repo root (overwrites any default README from model folder)
+release_dir = os.path.dirname(os.path.abspath(__file__))
+upload_file(
+    path_or_fileobj=os.path.join(release_dir, "README.md"),
+    path_in_repo="README.md",
+    repo_id=REPO_ID,
+    repo_type="model",
+)
+
+# 3. Push assets/ to assert/ (to match the img src="assert/..." paths in README.md)
+upload_folder(
+    folder_path=os.path.join(release_dir, "assets"),
+    path_in_repo="assert",
+    repo_id=REPO_ID,
+    repo_type="model",
+)代码，我希望你上传
+1. /mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_dit/到https://huggingface.co/OpenOneRec/Kelix-DiT
+2. /mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft/到https://huggingface.co/OpenOneRec/Kelix-SFT
