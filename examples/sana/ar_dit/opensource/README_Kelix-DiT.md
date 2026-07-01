@@ -45,7 +45,7 @@ Kelix achieves state-of-the-art results among comparable-scale unified models on
 | Role | Diffusion-based image de-tokenizer (pretraining stage) |
 | Base architecture | SANA-DiT (customized) |
 | Training objective | Flow-matching |
-| Latent VAE | DC-AE-F32C32 (32× spatial downsampling → 32×32 latent) |
+| Latent VAE | DC-AE-F32C32 (32× spatial downsampling → 32×32 latent) — from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae) |
 | Condition | Last hidden states from the Kelix LLM (between vision start/end tokens) |
 | Output resolution | **1024 × 1024** |
 | Training stage | **Pretraining** (Stage 1 of 2) |
@@ -70,7 +70,7 @@ Kelix-DiT is designed to be driven by the hidden states of the Kelix unified LLM
 2. Use `{h_*}` as the semantic condition (y-embedder input) for Kelix-DiT.
 3. Run flow-matching denoising in the DC-AE latent space (32×32) and decode with DC-AE to obtain a 1024×1024 image.
 
-> ⚠️ This checkpoint is a **component** of the Kelix pipeline, not a standalone text-to-image model. To generate images end-to-end you also need the Kelix unified LLM and the frozen DC-AE-F32C32 VAE.
+> ⚠️ This checkpoint is a **component** of the Kelix pipeline, not a standalone text-to-image model. To generate images end-to-end you also need the Kelix unified LLM and the frozen DC-AE-F32C32 VAE ([`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae)).
 
 ## Key Results
 

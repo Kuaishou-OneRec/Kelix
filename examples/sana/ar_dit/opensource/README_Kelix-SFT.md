@@ -50,9 +50,9 @@ Kelix achieves state-of-the-art results among comparable-scale unified models on
 | **Kelix-Tok** | NaViT-style vision encoder + multi-token VQ (`N=8` independent sub-codebooks, total size `S=65,536`, sum-pooled on the encoder side). Encodes images into discrete visual codes aligned with the LLM text space. | NaViT initialized from Keye-VL 1.5; codebooks K-means initialized, trained with SimVQ |
 | **Kelix-LLM** | Unified autoregressive backbone with Block Encoder / Block Decoder and a Next-Block Prediction (NBP) objective (text block size 2, visual block size `N+1=9`). | Qwen3-8B, vocabulary expanded by 65,536 visual entries |
 | **Kelix-DiT (SFT)** | SFT-stage diffusion-based image de-tokenizer (flow-matching, SANA-DiT based), conditioned on the LLM's last hidden states. | Fine-tuned from `OpenOneRec/Kelix-DiT` |
-| *(frozen, not included)* | DC-AE-F32C32 latent VAE (32× spatial downsampling → 32×32 latent) | Used as-is from the original DC-AE release |
+| *(frozen, not included)* | DC-AE-F32C32 latent VAE (32× spatial downsampling → 32×32 latent) — from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae) | Used as-is from the original SANA1.5 release |
 
-> ⚠️ The **DC-AE-F32C32** VAE used to map pixels ↔ latents for Kelix-DiT is **frozen and not retrained**, so it is not duplicated in this release. Please load it from its original repo when running the image-generation path.
+> ⚠️ The **DC-AE-F32C32** VAE used to map pixels ↔ latents for Kelix-DiT is **frozen and not retrained**, so it is not duplicated in this release. Please load it from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae) when running the image-generation path.
 
 ## Training (SFT Stage)
 
