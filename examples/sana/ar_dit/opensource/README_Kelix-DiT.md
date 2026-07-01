@@ -14,20 +14,27 @@ tags:
   - kelix
 base_model: "Efficient-Large-Model/Sana_1600M_1024px_diffusers"
 pipeline_tag: text-to-image
-arxiv: "https://arxiv.org/pdf/2602.09843"
 ---
 
 # Kelix-DiT
 
-**Kelix-DiT** is the **pretraining-stage** checkpoint of the diffusion-based image de-tokenizer of **Kelix**, a fully discrete autoregressive unified multimodal model proposed by the OneRec Team. It renders high-fidelity **1024×1024** images from the semantic hidden states produced by the Kelix unified LLM, closing the long-standing understanding gap between discrete and continuous visual representations.
+[Paper](https://arxiv.org/pdf/2602.09843) | [Citation](#citation)
 
-> 📄 **Technical report**: <https://arxiv.org/pdf/2602.09843>
+<p align="center">
+  <img src="assert/fig3.png" alt="Kelix training pipeline: Kelix-Tok, Unified LLM, and Image DiT" width="90%">
+</p>
 
-## Background
+<p align="center"><b>Figure 1:</b> The auto-regressive training workflow of Kelix, including the Kelix Tokenizer, the Unified LLM, and the Image DiT de-tokenizer.</p>
 
-Most vision–language models (VLMs) rely on a hybrid interface — discrete text tokens paired with continuous ViT features — and are biased toward understanding. Fully autoregressive unified models that use **discrete** visual tokens, on the other hand, have historically suffered from an information bottleneck: a single discrete code carries far less information than the continuous embedding it replaces, which degrades multimodal understanding (especially on text-rich tasks such as OCRBench).
+## Introduction
 
-Kelix addresses this with a **multi-token vision tokenizer** (Kelix-Tok) that decomposes each patch embedding into `N` parallel discrete codes, expanding the coding capacity exponentially while keeping the LLM context length unchanged via sum pooling on the encoder side. The unified LLM (Qwen3-8B) is trained with a **Next-Block Prediction (NBP)** paradigm, and a diffusion-based **image de-tokenizer (Kelix-DiT)** turns the LLM's hidden states into high-resolution images — forming a modular *Tokenizer → LLM → Detokenizer* pipeline that unifies understanding and generation under a single autoregressive objective.
+**Kelix-DiT** is the **pretraining-stage** checkpoint of the diffusion-based image de-tokenizer of **Kelix**, a fully discrete autoregressive unified multimodal model. It renders high-fidelity **1024×1024** images from the semantic hidden states produced by the Kelix unified LLM, closing the long-standing understanding gap between discrete and continuous visual representations.
+
+Kelix is built on a modular *Tokenizer → LLM → Detokenizer* pipeline:
+
+- **Kelix-Tok** — a multi-token vision tokenizer that decomposes each patch embedding into `N` parallel discrete codes, expanding the coding capacity exponentially while keeping the LLM context length unchanged via sum pooling on the encoder side.
+- **Kelix-LLM** — a unified Qwen3-8B backbone trained with a **Next-Block Prediction (NBP)** paradigm.
+- **Kelix-DiT** (this checkpoint) — a diffusion-based image de-tokenizer that turns the LLM's hidden states into high-resolution images.
 
 Kelix achieves state-of-the-art results among comparable-scale unified models on both understanding and generation benchmarks; notably, it reaches **86.7 on OCRBench**, matching continuous-feature VLMs and surpassing the previous best discrete model by **+23%**.
 
@@ -82,12 +89,15 @@ Highlights (see the technical report for full tables):
 
 ## Citation
 
+If you find Kelix useful, please cite our technical report.
+
 ```bibtex
-@techreport{kelix2026,
+@article{kelix2026,
   title   = {Kelix Technique Report: Closing the Understanding Gap of Discrete Tokens in Unified Multimodal Models},
-  author  = {OneRec Team},
+  author  = {Kuaishou Technology},
+  journal = {arXiv preprint arXiv:2602.09843},
   year    = {2026},
-  url     = {https://arxiv.org/pdf/2602.09843}
+  url     = {https://arxiv.org/abs/2602.09843}
 }
 ```
 
