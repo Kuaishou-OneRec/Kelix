@@ -21,7 +21,7 @@ pipeline_tag: text-to-image
 [Paper](https://arxiv.org/pdf/2602.09843) | [Citation](#citation)
 
 <p align="center">
-  <img src="assert/fig3.png" alt="Kelix training pipeline: Kelix-Tok, Unified LLM, and Image DiT" width="90%">
+  <img src="assets/fig3.png" alt="Kelix training pipeline: Kelix-Tok, Unified LLM, and Image DiT" width="90%">
 </p>
 
 <p align="center"><b>Figure 1:</b> The auto-regressive training workflow of Kelix, including the Kelix Tokenizer, the Unified LLM, and the Image DiT de-tokenizer.</p>
