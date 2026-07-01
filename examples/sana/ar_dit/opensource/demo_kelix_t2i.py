@@ -42,6 +42,7 @@ from muse.models import get_model_class
 from muse.models.keye_ar import KeyeARModel
 from muse.training.common import set_default_dtype, get_torch_dtype
 from muse.training.checkpoint import load_hf_checkpoint
+from muse.utils.common import parse_config_overrides
 from recipes.sana.utils import load_vae
 from recipes.sana.train_sana_ar_dit import compute_pos_args
 from recipes.sana.inference_ar2image import tokenize_images
@@ -73,6 +74,15 @@ MAX_CONDITION_LENGTH = 720
 NUM_SAMPLING_STEPS = 50
 CFG_SCALE = 1.0
 FLOW_SHIFT = 3.0
+
+# DiT model-config overrides. The released Kelix-DiT checkpoint was trained
+# with model_max_length=720, so we must override the config.json default
+# (300) to match — otherwise y_embedder.y_embedding shape mismatches on
+# load_state_dict. Same override as config_local_ar2image_multigpu.json.
+# Override via env var: MODEL_CONFIG_OVERRIDES="model_max_length=720,caption_channels=1024"
+MODEL_CONFIG_OVERRIDES = tuple(
+    filter(None, os.environ.get("MODEL_CONFIG_OVERRIDES", "model_max_length=720").split(","))
+)
 SEED = 42
 
 
@@ -96,6 +106,19 @@ def load_dit(model_dir: str, device: torch.device, dtype: torch.dtype):
     if not os.path.exists(cfg_path):
         raise FileNotFoundError(f"DiT config not found at {cfg_path}")
     model_config = load_config(cfg_path)
+
+    # Apply config overrides (e.g. model_max_length=720) to match the
+    # checkpoint's y_embedder.y_embedding shape.
+    if MODEL_CONFIG_OVERRIDES:
+        overrides = parse_config_overrides(list(MODEL_CONFIG_OVERRIDES))
+        print(f"[demo] DiT config overrides: {overrides}")
+        for k, v in overrides.items():
+            if hasattr(model_config, k):
+                print(f"[demo]   {k}: {getattr(model_config, k)} -> {v}")
+                setattr(model_config, k, v)
+            else:
+                raise ValueError(f"Unknown DiT model config field: {k}")
+
     model_cls = get_model_class(model_config.model_class)
     with set_default_dtype(dtype), torch.device("cpu"):
         dit = model_cls(model_config)
