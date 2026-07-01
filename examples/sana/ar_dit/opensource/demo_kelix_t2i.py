@@ -20,7 +20,7 @@ Reference: examples/keye_ar/serve_dit/serve_visualize_reconstruction.py
 
 Usage:
     python examples/sana/ar_dit/opensource/demo_kelix_t2i.py
-    python examples/sana/ar_dit/opensource/demo_kelix_t2i.py --prompt "画一个漫画风格的猫"
+    python examples/sana/ar_dit/opensource/demo_kelix_t2i.py --prompt "Draw a cat in comic style"
     python examples/sana/ar_dit/opensource/demo_kelix_t2i.py --prompt "a comic-style cat" --output out.png
 
     # Override paths via env vars:
@@ -229,7 +229,7 @@ def generate_image(
 
 def main():
     parser = argparse.ArgumentParser(description="Kelix text-to-image demo")
-    parser.add_argument("--prompt", type=str, default="画一个漫画风格的猫")
+    parser.add_argument("--prompt", type=str, default="Draw a cat in comic style")
     parser.add_argument("--output", type=str, default="./kelix_t2i_demo.png")
     args = parser.parse_args()
 

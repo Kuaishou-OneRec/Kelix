@@ -106,7 +106,7 @@ def demo_generation(model, processor):
     print("Task 2: Image-Token Generation")
     print("=" * 60)
 
-    prompt = "画一个漫画风格的猫"
+    prompt = "Draw a cat in comic style"
     messages = [
         {"role": "user", "content": [{"type": "text", "text": prompt}]}
     ]
