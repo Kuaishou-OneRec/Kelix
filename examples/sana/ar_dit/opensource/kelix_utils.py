@@ -245,19 +245,37 @@ def generate_image_tokens(
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
     inputs = process_message(processor, device, messages)
 
-    # Append <|vision_start|> to the input if it's not already the last token.
-    # This matches the working DiT path (tokenize_images in inference_ar2image.py)
-    # — without it, the model generates <|vision_start|> as the first output
-    # token but lacks the proper context to complete the image block, getting
-    # stuck in a repetitive loop after a few rows and never emitting <|vision_end|>.
-    vision_start_id = model.config.qwen_config.vision_start_token_id
+    # Match the working DiT path (tokenize_images in inference_ar2image.py:269-300):
+    #   1. Strip off the <|im_start|>assistant\n suffix added by add_generation_prompt=True.
+    #      The model is trained to generate image tokens right after <|vision_start|>,
+    #      NOT after <|im_start|>assistant\n — keeping the assistant marker makes the
+    #      model degenerate into a repetitive <|mm_pos_start|>1<|mm_pos_end|> loop.
+    #   2. Append <|vision_start|> to the (truncated) input.
     input_ids = inputs["input_ids"]
+    assistant_start_ids = processor.tokenizer.encode("<|im_start|>assistant\n")
+    asst_tensor = torch.tensor(
+        assistant_start_ids, device=input_ids.device, dtype=input_ids.dtype
+    )
+    asst_len = len(assistant_start_ids)
+    asst_idx = -1
+    seq_len = input_ids.size(1)
+    if seq_len >= asst_len:
+        for i in range(seq_len - asst_len + 1):
+            if torch.all(input_ids[0, i : i + asst_len] == asst_tensor):
+                asst_idx = i
+                break
+    if asst_idx != -1:
+        input_ids = input_ids[:, :asst_idx]
+
+    # Append <|vision_start|> if not already the last token.
+    vision_start_id = model.config.qwen_config.vision_start_token_id
     last_id = int(input_ids[0, -1].item())
     if last_id != vision_start_id:
         vs_tensor = torch.tensor(
             [[vision_start_id]], device=input_ids.device, dtype=input_ids.dtype
         )
-        inputs["input_ids"] = torch.cat([input_ids, vs_tensor], dim=1)
+        input_ids = torch.cat([input_ids, vs_tensor], dim=1)
+    inputs["input_ids"] = input_ids
 
     output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
     new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
