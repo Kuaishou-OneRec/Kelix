@@ -218,7 +218,9 @@ def chat(
     inputs = process_message(processor, device, messages)
     output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
     new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
-    return processor.decode(new_ids[:, 0].long().tolist())
+    # skip_special_tokens=False so <|vision_start|>/<|vision_end|>/<|im_end|> are
+    # preserved in the decoded text (needed to inspect generation structure).
+    return processor.decode(new_ids[:, 0].long().tolist(), skip_special_tokens=False)
 
 
 @torch.no_grad()
@@ -244,7 +246,11 @@ def generate_image_tokens(
     inputs = process_message(processor, device, messages)
     output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
     new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
-    content = processor.decode(new_ids[:, 0].long().tolist())
+    # skip_special_tokens=False so <|vision_start|>/<|vision_end|>/<|im_end|> and
+    # the image tokens are preserved in the decoded text. Without this, the
+    # processor may strip <|vision_end|> from the decoded string, making it look
+    # like the model never emitted it (even when it's present in the token IDs).
+    content = processor.decode(new_ids[:, 0].long().tolist(), skip_special_tokens=False)
     image_token_groups = model.extract_image_tokens(new_ids)
 
     if debug or os.environ.get("KELIX_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on"):
