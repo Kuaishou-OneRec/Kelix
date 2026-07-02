@@ -228,11 +228,16 @@ def generate_image_tokens(
     prompt: str,
     max_new_tokens: int = 450,
     top_k: int = 1,
+    debug: bool = False,
 ):
     """Generate discrete image tokens from a text prompt.
 
     Returns (decoded_text, image_token_groups) where image_token_groups is the
     list returned by model.extract_image_tokens (for downstream DiT or grounding).
+
+    Set ``debug=True`` (or ``KELIX_DEBUG=1``) to print token-id diagnostics:
+    output shape, first-column unique IDs, positions of vision_start/vision_end,
+    and the relevant config values — useful when extract_image_tokens returns [].
     """
     device = next(model.parameters()).device
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
@@ -241,7 +246,77 @@ def generate_image_tokens(
     new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
     content = processor.decode(new_ids[:, 0].long().tolist())
     image_token_groups = model.extract_image_tokens(new_ids)
+
+    if debug or os.environ.get("KELIX_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on"):
+        _debug_image_tokens(model, processor, new_ids, content, image_token_groups)
+
     return content, image_token_groups
+
+
+def _debug_image_tokens(model, processor, new_ids, content, image_token_groups):
+    """Print diagnostics for generate_image_tokens output."""
+    qcfg = model.config.qwen_config
+    vs_id = getattr(qcfg, "vision_start_token_id", None)
+    ve_id = getattr(qcfg, "vision_end_token_id", None)
+    im_id = getattr(qcfg, "image_token_id", None)
+    n_q = getattr(qcfg, "n_q_tokens", None)
+    voc = getattr(qcfg, "vocab_size", None)
+
+    print("\n" + "=" * 60)
+    print("[DEBUG] generate_image_tokens diagnostics")
+    print("=" * 60)
+    print(f"new_ids shape: {tuple(new_ids.shape)}  (expected (seq_len, vocab_dim))")
+    print(f"qwen_config: vision_start_id={vs_id}, vision_end_id={ve_id}, "
+          f"image_token_id={im_id}, n_q_tokens={n_q}, vocab_size={voc}")
+
+    first_col = new_ids[:, 0]
+    # How many vision_start / vision_end / image tokens are in the first column?
+    n_vs = int((first_col == vs_id).sum().item()) if vs_id is not None else "N/A"
+    n_ve = int((first_col == ve_id).sum().item()) if ve_id is not None else "N/A"
+    n_im = int((first_col == im_id).sum().item()) if im_id is not None else "N/A"
+    print(f"first-column counts: vision_start={n_vs}, vision_end={n_ve}, image_token={n_im}")
+
+    # Positions of vision_start / vision_end in the first column.
+    if vs_id is not None:
+        vs_pos = torch.where(first_col == vs_id)[0].tolist()
+        print(f"vision_start positions: {vs_pos}")
+    if ve_id is not None:
+        ve_pos = torch.where(first_col == ve_id)[0].tolist()
+        print(f"vision_end positions:   {ve_pos}")
+
+    # Tokens with id >= vocab_size are image-domain tokens (visual codes).
+    if voc is not None:
+        n_visual = int((first_col >= voc).sum().item())
+        print(f"first-column tokens >= vocab_size({voc}): {n_visual}")
+
+    # Unique token IDs in the first column (truncated for readability).
+    unique_ids = torch.unique(first_col).tolist()
+    preview = unique_ids[:30]
+    print(f"unique first-column ids (first 30 of {len(unique_ids)}): {preview}")
+
+    # Decode each unique id so you can see which special tokens map to what.
+    print("decoded special-token map (id -> token):")
+    for tid in unique_ids[:30]:
+        try:
+            tok = processor.tokenizer.decode([int(tid)])
+        except Exception:
+            tok = "<?>"
+        print(f"  {tid}: {tok!r}")
+
+    # First ~40 raw token IDs of the first column, so you can see the sequence structure.
+    raw_head = first_col[:40].tolist()
+    print(f"first-column raw ids (first 40): {raw_head}")
+
+    print(f"\nextract_image_tokens -> {len(image_token_groups)} group(s), "
+          f"shapes: {[x.shape for x in image_token_groups]}")
+    if not image_token_groups:
+        print("!! extract_image_tokens returned [] — likely because vision_end is "
+              "missing or no (start, end) pair was found.")
+        if n_ve == 0:
+            print("!! Hint: the model did NOT emit <|vision_end|>. Try increasing "
+                  "max_new_tokens, or check that the checkpoint is the SFT release "
+                  "(not a pretrain/understanding-only checkpoint).")
+    print("=" * 60 + "\n")
 
 
 @torch.no_grad()
