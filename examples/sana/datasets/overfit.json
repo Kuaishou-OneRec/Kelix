@@ -1,9 +1,0 @@
-{
-    "name": "Token2ImageDataset",
-    "sources": ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/moe_xtr_0812/base/models/2508/sana_overfit/0.0.0/rank0_0/rank0-0.parquet"],
-    "image_size": 1024,
-    "max_condition_length": 324,
-    "center_crop": true,
-    "packing": false
-  }
-  

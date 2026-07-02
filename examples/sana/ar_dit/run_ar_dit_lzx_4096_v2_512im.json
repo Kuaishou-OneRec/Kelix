@@ -1,9 +1,0 @@
-{
-    "name": "Chat2ImageDataset",
-    "sources": "/llm_reco/vlm/datahub/datasets/Sana_pretrain/0.0.0/index/parquet.json",
-    "image_size": 512,
-    "max_condition_length": 324,
-    "center_crop": true,
-    "packing": false
-}
-  

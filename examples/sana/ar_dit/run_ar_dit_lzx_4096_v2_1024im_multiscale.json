@@ -1,8 +1,0 @@
-{
-    "name": "Chat2ImageDataset",
-    "sources": "/llm_reco/vlm/datahub/datasets/Sana_ae_1024k/0.0.1/index/parquet.json",
-    "image_size": 1024,
-    "max_condition_length": 324,
-    "center_crop": true,
-    "packing": false
-}
