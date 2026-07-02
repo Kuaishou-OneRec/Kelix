@@ -244,6 +244,21 @@ def generate_image_tokens(
     device = next(model.parameters()).device
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
     inputs = process_message(processor, device, messages)
+
+    # Append <|vision_start|> to the input if it's not already the last token.
+    # This matches the working DiT path (tokenize_images in inference_ar2image.py)
+    # — without it, the model generates <|vision_start|> as the first output
+    # token but lacks the proper context to complete the image block, getting
+    # stuck in a repetitive loop after a few rows and never emitting <|vision_end|>.
+    vision_start_id = model.config.qwen_config.vision_start_token_id
+    input_ids = inputs["input_ids"]
+    last_id = int(input_ids[0, -1].item())
+    if last_id != vision_start_id:
+        vs_tensor = torch.tensor(
+            [[vision_start_id]], device=input_ids.device, dtype=input_ids.dtype
+        )
+        inputs["input_ids"] = torch.cat([input_ids, vs_tensor], dim=1)
+
     output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
     new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
     # skip_special_tokens=False so <|vision_start|>/<|vision_end|>/<|im_end|> and
