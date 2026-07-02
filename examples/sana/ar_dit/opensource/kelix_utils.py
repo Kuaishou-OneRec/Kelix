@@ -228,7 +228,7 @@ def generate_image_tokens(
     model: "KeyeARModel",
     processor: AutoProcessor,
     prompt: str,
-    max_new_tokens: int = 450,
+    max_new_tokens: int = 1000,
     top_k: int = 1,
     debug: bool = False,
 ):
