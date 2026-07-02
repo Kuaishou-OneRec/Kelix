@@ -228,7 +228,7 @@ def generate_image_tokens(
     model: "KeyeARModel",
     processor: AutoProcessor,
     prompt: str,
-    max_new_tokens: int = 2048,
+    max_new_tokens: int = 720,
     top_k: int = 1,
 ):
     """Generate discrete image tokens from a text prompt.
