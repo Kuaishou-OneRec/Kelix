@@ -63,7 +63,7 @@ def main():
     print("\n" + "=" * 60)
     print("Task 2: Image-Token Generation")
     print("=" * 60)
-    prompt = "Generate an image of a cat."
+    prompt = "Generate a photo of cat:"
     output_ids, content, image_token_groups = generate_image_tokens(model, processor, prompt)
     print(f"User : {prompt}")
     print(f"Kelix (raw tokens): {content}")
