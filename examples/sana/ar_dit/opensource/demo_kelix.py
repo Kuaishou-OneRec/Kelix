@@ -67,7 +67,9 @@ def main():
     output_ids, content, image_token_groups = generate_image_tokens(model, processor, prompt)
     print(f"User : {prompt}")
     print(f"Kelix (raw tokens): {content}")
-    print(f"output_ids:\n{output_ids}")
+    # Print the full output_ids tensor without PyTorch's "..." truncation.
+    torch.set_printoptions(threshold=10**9, profile="default")
+    print(f"output_ids (shape={tuple(output_ids.shape)}):\n{output_ids}")
     print(f"input_image_ids({[x.shape for x in image_token_groups]})=\n{image_token_groups}")
 
 
