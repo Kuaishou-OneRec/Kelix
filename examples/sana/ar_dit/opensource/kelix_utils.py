@@ -228,134 +228,24 @@ def generate_image_tokens(
     model: "KeyeARModel",
     processor: AutoProcessor,
     prompt: str,
-    max_new_tokens: int = 1000,
+    max_new_tokens: int = 450,
     top_k: int = 1,
-    debug: bool = False,
 ):
     """Generate discrete image tokens from a text prompt.
 
-    Returns (decoded_text, image_token_groups) where image_token_groups is the
-    list returned by model.extract_image_tokens (for downstream DiT or grounding).
-
-    Set ``debug=True`` (or ``KELIX_DEBUG=1``) to print token-id diagnostics:
-    output shape, first-column unique IDs, positions of vision_start/vision_end,
-    and the relevant config values — useful when extract_image_tokens returns [].
+    Returns (output_ids, content, image_token_groups) where:
+      - output_ids: raw generated token tensor (seq_len, n_tokens)
+      - content: decoded text (special tokens preserved)
+      - image_token_groups: list from model.extract_image_tokens
     """
     device = next(model.parameters()).device
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
     inputs = process_message(processor, device, messages)
-
-    # Match the working DiT path (tokenize_images in inference_ar2image.py:269-300):
-    #   1. Strip off the <|im_start|>assistant\n suffix added by add_generation_prompt=True.
-    #      The model is trained to generate image tokens right after <|vision_start|>,
-    #      NOT after <|im_start|>assistant\n — keeping the assistant marker makes the
-    #      model degenerate into a repetitive <|mm_pos_start|>1<|mm_pos_end|> loop.
-    #   2. Append <|vision_start|> to the (truncated) input.
-    input_ids = inputs["input_ids"]
-    assistant_start_ids = processor.tokenizer.encode("<|im_start|>assistant\n")
-    asst_tensor = torch.tensor(
-        assistant_start_ids, device=input_ids.device, dtype=input_ids.dtype
-    )
-    asst_len = len(assistant_start_ids)
-    asst_idx = -1
-    seq_len = input_ids.size(1)
-    if seq_len >= asst_len:
-        for i in range(seq_len - asst_len + 1):
-            if torch.all(input_ids[0, i : i + asst_len] == asst_tensor):
-                asst_idx = i
-                break
-    if asst_idx != -1:
-        input_ids = input_ids[:, :asst_idx]
-
-    # Append <|vision_start|> if not already the last token.
-    vision_start_id = model.config.qwen_config.vision_start_token_id
-    last_id = int(input_ids[0, -1].item())
-    if last_id != vision_start_id:
-        vs_tensor = torch.tensor(
-            [[vision_start_id]], device=input_ids.device, dtype=input_ids.dtype
-        )
-        input_ids = torch.cat([input_ids, vs_tensor], dim=1)
-    inputs["input_ids"] = input_ids
-
     output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
-    new_ids = output_ids[0, inputs["input_ids"].shape[1] :]
-    # skip_special_tokens=False so <|vision_start|>/<|vision_end|>/<|im_end|> and
-    # the image tokens are preserved in the decoded text. Without this, the
-    # processor may strip <|vision_end|> from the decoded string, making it look
-    # like the model never emitted it (even when it's present in the token IDs).
-    content = processor.decode(new_ids[:, 0].long().tolist(), skip_special_tokens=False)
-    image_token_groups = model.extract_image_tokens(new_ids)
-
-    if debug or os.environ.get("KELIX_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on"):
-        _debug_image_tokens(model, processor, new_ids, content, image_token_groups)
-
-    return content, image_token_groups
-
-
-def _debug_image_tokens(model, processor, new_ids, content, image_token_groups):
-    """Print diagnostics for generate_image_tokens output."""
-    qcfg = model.config.qwen_config
-    vs_id = getattr(qcfg, "vision_start_token_id", None)
-    ve_id = getattr(qcfg, "vision_end_token_id", None)
-    im_id = getattr(qcfg, "image_token_id", None)
-    n_q = getattr(qcfg, "n_q_tokens", None)
-    voc = getattr(qcfg, "vocab_size", None)
-
-    print("\n" + "=" * 60)
-    print("[DEBUG] generate_image_tokens diagnostics")
-    print("=" * 60)
-    print(f"new_ids shape: {tuple(new_ids.shape)}  (expected (seq_len, vocab_dim))")
-    print(f"qwen_config: vision_start_id={vs_id}, vision_end_id={ve_id}, "
-          f"image_token_id={im_id}, n_q_tokens={n_q}, vocab_size={voc}")
-
-    first_col = new_ids[:, 0]
-    # How many vision_start / vision_end / image tokens are in the first column?
-    n_vs = int((first_col == vs_id).sum().item()) if vs_id is not None else "N/A"
-    n_ve = int((first_col == ve_id).sum().item()) if ve_id is not None else "N/A"
-    n_im = int((first_col == im_id).sum().item()) if im_id is not None else "N/A"
-    print(f"first-column counts: vision_start={n_vs}, vision_end={n_ve}, image_token={n_im}")
-
-    # Positions of vision_start / vision_end in the first column.
-    if vs_id is not None:
-        vs_pos = torch.where(first_col == vs_id)[0].tolist()
-        print(f"vision_start positions: {vs_pos}")
-    if ve_id is not None:
-        ve_pos = torch.where(first_col == ve_id)[0].tolist()
-        print(f"vision_end positions:   {ve_pos}")
-
-    # Tokens with id >= vocab_size are image-domain tokens (visual codes).
-    if voc is not None:
-        n_visual = int((first_col >= voc).sum().item())
-        print(f"first-column tokens >= vocab_size({voc}): {n_visual}")
-
-    # Unique token IDs in the first column (truncated for readability).
-    unique_ids = torch.unique(first_col).tolist()
-    preview = unique_ids[:30]
-    print(f"unique first-column ids (first 30 of {len(unique_ids)}): {preview}")
-
-    # Decode each unique id so you can see which special tokens map to what.
-    print("decoded special-token map (id -> token):")
-    for tid in unique_ids[:30]:
-        try:
-            tok = processor.tokenizer.decode([int(tid)])
-        except Exception:
-            tok = "<?>"
-        print(f"  {tid}: {tok!r}")
-
-    # First ~40 raw token IDs of the first column, so you can see the sequence structure.
-    raw_head = first_col[:40].tolist()
-    print(f"first-column raw ids (first 40): {raw_head}")
-
-    print(f"\nextract_image_tokens -> {len(image_token_groups)} group(s), "
-          f"shapes: {[x.shape for x in image_token_groups]}")
-    if not image_token_groups:
-        print("!! extract_image_tokens returned [] — likely because vision_end is "
-              "missing or no (start, end) pair was found.")
-        if n_ve == 0:
-            print("!! Hint: the model did NOT emit <|vision_end|>. Try increasing "
-                  "max_new_tokens, or check that the checkpoint is the SFT release "
-                  "(not a pretrain/understanding-only checkpoint).")
-    print("=" * 60 + "\n")
+    output_ids = output_ids[0, inputs["input_ids"].shape[1] :]
+    content = processor.decode(output_ids[:, 0].long().tolist(), skip_special_tokens=False)
+    image_token_groups = model.extract_image_tokens(output_ids)
+    return output_ids, content, image_token_groups
 
 
 @torch.no_grad()

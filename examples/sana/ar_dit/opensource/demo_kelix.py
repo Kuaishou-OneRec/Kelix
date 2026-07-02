@@ -64,10 +64,11 @@ def main():
     print("Task 2: Image-Token Generation")
     print("=" * 60)
     prompt = "Generate an image of a cute cat."
-    content, image_token_groups = generate_image_tokens(model, processor, prompt, debug=True)
-    print(f"User : {prompt}\nKelix (raw tokens): {content}")
-    print(f"Extracted {len(image_token_groups)} image-token group(s), "
-          f"shapes: {[x.shape for x in image_token_groups]}")
+    output_ids, content, image_token_groups = generate_image_tokens(model, processor, prompt)
+    print(f"User : {prompt}")
+    print(f"Kelix (raw tokens): {content}")
+    print(f"output_ids:\n{output_ids}")
+    print(f"input_image_ids({[x.shape for x in image_token_groups]})=\n{image_token_groups}")
 
 
 if __name__ == "__main__":
