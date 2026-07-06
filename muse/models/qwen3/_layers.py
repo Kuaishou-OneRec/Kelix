@@ -571,8 +571,13 @@ class KeyeFlashAttention2(nn.Module):
         # If mask is all ones (equivalent to no mask), treat it as None for causal attention
         if mask is not None and mask.all():
             mask = None  #same as _update_causal_mask in origin
-        
-        is_causal_flag = self.kv_cache is None and mask is None and self.is_causal
+
+        # Use causal mask during prefill (multi-token query) even when kv_cache is set up.
+        # During decode (single-token query), no causal mask needed — the query attends
+        # to all cached keys, which is correct.
+        # The old code `self.kv_cache is None and ...` incorrectly set is_causal=False
+        # during prefill, making every prompt token see all future tokens (non-causal).
+        is_causal_flag = mask is None and self.is_causal and (self.kv_cache is None or s_x > 1)
         
         # # Debug: print attention parameters
         # if is_first_call:

@@ -284,12 +284,15 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         # Separate cos and sin
         # rope_cache shape: [b, s, 1, h_d, 2] or [1, s, 1, h_d, 2]
-        cos = rope_cache[..., 0].to(dtype=x.dtype)  # [b, s, 1, h_d] or [1, s, 1, h_d]
-        sin = rope_cache[..., 1].to(dtype=x.dtype)  # [b, s, 1, h_d] or [1, s, 1, h_d]
+        # Compute RoPE in float32 for numerical precision (matching recovlm's approach:
+        # apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q))
+        cos = rope_cache[..., 0]  # float32 (cache is stored in float32)
+        sin = rope_cache[..., 1]  # float32
 
-        # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
-        x_rotated = self.rotate_half(x)
-        x_out = (x * cos) + (x_rotated * sin)
+        # Apply RoPE in float32, then convert back to input dtype
+        x_f32 = x.float()
+        x_rotated = self.rotate_half(x_f32)
+        x_out = (x_f32 * cos + x_rotated * sin).to(dtype=x.dtype)
 
         return x_out
 
