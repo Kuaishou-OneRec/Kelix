@@ -1,4 +1,4 @@
-from typing import Dict, Callable, Union, List, Optional, Tuple, Any, override
+from typing import Dict, Callable, Union, List, Optional, Tuple, Any
 from functools import partial
 import math
 import numpy as np
@@ -483,7 +483,6 @@ class UnifiedQwen3Model(Qwen3Model):
 
         return converted_state_dict
 
-    @override
     def revert_hf_state_dict(
         self,
         muse_state_dict: Dict[str, torch.Tensor],
@@ -677,7 +676,6 @@ class KeyeARModel(Model):
         print(f"checkpointable={checkpointable}")
         return checkpointable
 
-    @override
     def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
                               tie_word_embeddings: bool = True,
