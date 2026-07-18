@@ -89,7 +89,8 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
 
   def _fill_image_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
-                        conf: Dict[str, Any]):
+                        conf: Dict[str, Any],
+                        is_assistant: bool = False):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
@@ -101,7 +102,7 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
     else:
       image = block["image"]
 
-    if self.force_assistant_image_size is not None:
+    if self.force_assistant_image_size is not None and is_assistant:
       if self.aspect_ratio_threshold:
         image = resize_with_aspect_ratio_check(image, self.force_assistant_image_size, self.force_assistant_image_size, aspect_ratio_threshold=self.aspect_ratio_threshold)
       else:
@@ -169,10 +170,14 @@ class ARChatCompletionVisionDataset(ChatCompletionVisionDataset_keye_vitrope_slo
         for block in content:
           if block["type"] == "image_gen":
             block["type"] = "image"
+            if "image" not in block and "image_gen" in block:
+              block["image"] = block["image_gen"]
 
           if block["type"] == "image":
-            self._fill_image_block(block, sample, 
-                                    conf=data_gen_conf if (turn["role"] == "assistant" and 'chart' not in sample['json']['source'].lower()) else data_conf)
+            is_assistant = turn["role"] == "assistant"
+            self._fill_image_block(block, sample,
+                                    conf=data_gen_conf if (is_assistant and 'chart' not in sample['json']['source'].lower()) else data_conf,
+                                    is_assistant=is_assistant)
 
           elif block["type"] == "video":
             self._fill_video_block(block, sample,
