@@ -49,7 +49,7 @@ def load_muse_model(model_dir, device, dtype=torch.bfloat16):
 def build_prompt_inputs(processor, device, prompt):
     """Build model inputs from a text prompt (no image)."""
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-    from examples.keye_ar.debug.recovlm_model.keye_vl_utils import process_vision_info
+    from keye_vl_utils import process_vision_info
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     image_inputs, video_inputs = process_vision_info(messages)
     inputs = processor(
