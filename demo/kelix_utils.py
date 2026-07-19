@@ -32,6 +32,21 @@ from recipes.sana.utils import load_vae
 from recipes.sana.train_sana_ar_dit import compute_pos_args
 from recipes.sana.inference_ar2image import tokenize_images
 
+
+def _resolve_dir(path: str) -> str:
+    """Resolve a model directory: use it directly if it's a local dir,
+    otherwise download from HuggingFace Hub (treating `path` as a repo id).
+
+    This lets the demos run out-of-the-box with the default HF repo ids
+    (e.g. ``OpenOneRec/Kelix-SFT``) without leaking any internal paths,
+    while still accepting a local directory via the env vars.
+    """
+    if os.path.isdir(path):
+        return path
+    from huggingface_hub import snapshot_download
+    print(f"[kelix] '{path}' is not a local dir; downloading from HuggingFace Hub...")
+    return snapshot_download(repo_id=path)
+
 # ---------------------------------------------------------------------------
 # Config (overridable via env vars)
 # ---------------------------------------------------------------------------
@@ -90,6 +105,7 @@ def load_ar_model(
     """Load the Kelix AR model (Kelix-Tok + Kelix-LLM) in local (non-distributed) mode."""
     device = device or get_device()
     dtype = dtype or get_dtype()
+    ar_dir = _resolve_dir(ar_dir)
     with set_default_dtype(dtype), torch.device(device):
         ar = KeyeARModel.from_pretrained(ar_dir).eval()  # type: ignore[assignment]
     ar.config.qwen_config.output_last_hidden_states_only = False
@@ -100,6 +116,7 @@ def load_ar_model(
 
 def load_processor(ar_dir: str = KELIX_DIR) -> AutoProcessor:
     """Load the AutoProcessor (chat template + tokenizer + image processor)."""
+    ar_dir = _resolve_dir(ar_dir)
     return AutoProcessor.from_pretrained(ar_dir, trust_remote_code=True)
 
 
@@ -111,6 +128,7 @@ def load_dit(
     """Load the Kelix-DiT de-tokenizer from a converted checkpoint dir."""
     device = device or get_device()
     dtype = dtype or get_dtype()
+    model_dir = _resolve_dir(model_dir)
     cfg_path = os.path.join(model_dir, "config.json")
     if not os.path.exists(cfg_path):
         raise FileNotFoundError(f"DiT config not found at {cfg_path}")
@@ -145,6 +163,7 @@ def load_vae_model(
     """Load the frozen DC-AE VAE."""
     device = device or get_device()
     dtype = dtype or get_dtype()
+    vae_dir = _resolve_dir(vae_dir)
     return load_vae(vae_dir, device=device, dtype=dtype)
 
 
