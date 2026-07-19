@@ -37,6 +37,11 @@ def _resolve_dir(path: str) -> str:
     """Resolve a model directory: use it directly if it's a local dir,
     otherwise download from HuggingFace Hub (treating `path` as a repo id).
 
+    Supports repo ids with an optional subdirectory, e.g.
+    ``namespace/repo_name/sub/dir`` — the full repo is downloaded, then the
+    subdirectory path is appended. This is needed for the VAE which lives in
+    a subfolder of the SANA1.5 diffusers repo.
+
     This lets the demos run out-of-the-box with the default HF repo ids
     (e.g. ``OpenOneRec/Kelix-SFT``) without leaking any internal paths,
     while still accepting a local directory via the env vars.
@@ -45,7 +50,15 @@ def _resolve_dir(path: str) -> str:
         return path
     from huggingface_hub import snapshot_download
     print(f"[kelix] '{path}' is not a local dir; downloading from HuggingFace Hub...")
-    return snapshot_download(repo_id=path)
+    parts = path.split("/")
+    if len(parts) <= 2:
+        return snapshot_download(repo_id=path)
+    repo_id = "/".join(parts[:2])
+    sub_dir = "/".join(parts[2:])
+    local_root = snapshot_download(
+        repo_id=repo_id, allow_patterns=[f"{sub_dir}/*"]
+    )
+    return os.path.join(local_root, sub_dir)
 
 # ---------------------------------------------------------------------------
 # Config (overridable via env vars)
