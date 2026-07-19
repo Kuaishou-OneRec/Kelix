@@ -7,7 +7,7 @@ LINT := pylint
 TEST := pytest -vv
 
 # Directories
-SRC_DIR := llmx
+SRC_DIR := muse
 TEST_DIR := tests
 
 # Targets

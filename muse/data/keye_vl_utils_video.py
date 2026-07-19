@@ -789,27 +789,18 @@ def process_vision_info(
 def test1():
     block = {
         "type": "video",
-        "video": "/llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_0215_0316/5438/155507845438.mp4",
+        "video": "path/to/your/video.mp4",
     }
     start = time.time()
     for _ in range(10):
         fetch_video(block)
     print(time.time() - start)
 
-
 def test2():
-    from recovlm.utils.ds_utils import print_input_info
-    ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
-    # slowfast_decord
-    # ele = {'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/luoxinchen/dataset/LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila/RmkLa7AIfSU.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
+    ele={'type': 'video', 'video': 'path/to/your/video.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
     res1 = _read_video_torchvision_slowfast(ele)
     res2 = _read_video_decord_slowfast(ele)
-    print_input_info(
-        {
-            # "res1": res1,
-            "res2": res2
-        }
-    )
+    print({"res1": res1, "res2": res2})
 
 
 if __name__ == "__main__":

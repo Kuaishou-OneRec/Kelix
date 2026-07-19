@@ -29,3 +29,12 @@ vis_output
 *jpg
 debug
 vis_output_local
+
+# Internal-only release tooling and sensitive config (not for public release)
+examples/sana/ar_dit/opensource/
+.env
+.git.bfg-report/
+.codeflicker/
+
+# Keep the Kelix README figure despite the broad *png rule above
+!assets/fig3.png

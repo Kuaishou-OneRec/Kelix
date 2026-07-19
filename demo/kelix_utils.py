@@ -37,17 +37,17 @@ from recipes.sana.inference_ar2image import tokenize_images
 # ---------------------------------------------------------------------------
 KELIX_DIR = os.environ.get(
     "KELIX_DIR",
-    "/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft",
+    "OpenOneRec/Kelix-SFT",
 )
 DIT_DIR = os.environ.get(
     "DIT_DIR",
-    "/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_dit",
+    "OpenOneRec/Kelix-DiT",
 )
 # Frozen DC-AE VAE from the SANA1.5 release.
 #   https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae
 VAE_DIR = os.environ.get(
     "VAE_DIR",
-    "/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/",
+    "Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae",
 )
 DEVICE = "cuda:0"
 DTYPE_STR = "bfloat16"

@@ -9,13 +9,13 @@ decode) lives in `kelix_utils.py`. This script just shows the core flow:
   3. Generate a 1024x1024 image and save it.
 
 Usage:
-    python examples/sana/ar_dit/opensource/demo_kelix_t2i.py
-    python examples/sana/ar_dit/opensource/demo_kelix_t2i.py --prompt "Generate an image of a cute cat."
-    python examples/sana/ar_dit/opensource/demo_kelix_t2i.py --output out.png
+    python demo/demo_kelix_t2i.py
+    python demo/demo_kelix_t2i.py --prompt "Generate an image of a cute cat."
+    python demo/demo_kelix_t2i.py --output out.png
 
     # Override paths via env vars:
     KELIX_DIR=/path/to/release_sft DIT_DIR=/path/to/release_dit \
-    VAE_DIR=/path/to/vae python examples/sana/ar_dit/opensource/demo_kelix_t2i.py
+    VAE_DIR=/path/to/vae python demo/demo_kelix_t2i.py
 """
 
 import argparse

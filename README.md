@@ -1,280 +1,113 @@
-# Visual Large Language Model Training for Recommandation
+# Kelix
 
-## Overview
-```
-KEYE前向代码参考
-PYTHONPATH=. python3 tests/qwen3navit/test_keye_demo_2b.py
-```
+[Paper](https://arxiv.org/pdf/2602.09843) | [Kelix-DiT](https://huggingface.co/OpenOneRec/Kelix-DiT) | [Kelix-SFT](https://huggingface.co/OpenOneRec/Kelix-SFT)
 
+<p align="center">
+  <img src="assets/fig3.png" alt="Kelix training pipeline: Kelix-Tok, Unified LLM, and Image DiT" width="90%">
+</p>
 
-## Features
-- **Data Handling**: The project includes scripts to handle and preprocess data, ensuring compatibility with the training pipeline.
-- **Training Pipeline**: A comprehensive training pipeline that supports fine-tuning on custom datasets.
-- **Evaluation**: Tools to evaluate the performance of the trained models on various benchmarks.
-- **Model Registry**: Dynamic model loading system for flexible training script configuration. Load models by name instead of hardcoded imports. See [Model Registry Guide](muse/models/README.md) for details.
+<p align="center"><b>Figure 1:</b> The auto-regressive training workflow of Kelix, including the Kelix Tokenizer, the Unified LLM, and the Image DiT de-tokenizer.</p>
 
-## Getting Started
+## Introduction
 
-### Prerequisites
-- Python 3.10.12 or higher
-- PyTorch 2.5.1 or higher
-- CUDA 11.8 or higher (for GPU support)
+**Kelix** is a fully discrete autoregressive unified multimodal model by the OneRec Team. It closes the long-standing understanding gap between discrete and continuous visual representations, unifying **multimodal understanding** and **image generation** under a single autoregressive objective.
 
-### Installation
-1. Clone the repository:
-    ```bash
-    git clone https://git.corp.kuaishou.com/recogpt/recovlm.git
-    cd RecoVLM
-    ```
+The name *Kelix* is a portmanteau of **K**uaishou and h**elix** — just as the DNA double helix encodes the full complexity of life using only four discrete nucleotide bases, Kelix encodes rich visual semantics using discrete tokens.
 
-2. Install the required packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+Kelix is built on a modular *Tokenizer → LLM → Detokenizer* pipeline:
 
-### Quick Start: Using the Model Registry
+- **Kelix-Tok** — a multi-token vision tokenizer that decomposes each patch embedding into `N` parallel discrete codes (`N=8`, total codebook size `S=65,536`), expanding the coding capacity exponentially while keeping the LLM context length unchanged via sum pooling on the encoder side. NaViT encoder initialized from Keye-VL 1.5; codebooks K-means initialized and trained with SimVQ.
+- **Kelix-LLM** — a unified Qwen3-8B backbone trained with a **Next-Block Prediction (NBP)** paradigm (text block size 2, visual block size `N+1=9`), with the vocabulary expanded by 65,536 visual entries.
+- **Kelix-DiT** — a diffusion-based image de-tokenizer (SANA-DiT based, flow-matching, DC-AE-F32C32 VAE) that turns the LLM's hidden states into 1024×1024 images.
 
-Load models dynamically by name in your training scripts:
+Kelix achieves state-of-the-art results among comparable-scale unified models on both understanding and generation benchmarks; notably, it reaches **86.7 on OCRBench**, matching continuous-feature VLMs and surpassing the previous best discrete model by **+23%**.
 
-```python
-from muse.models import get_model_class, list_models
-from muse.config import Qwen3Config
+## Installation
 
-# List available models
-print("Available models:", list_models())
-
-# Load model by name
-model_cls = get_model_class("Qwen3Model")
-
-# Create and use the model
-config = Qwen3Config(vocab_size=32000, embed_dim=2048, num_layers=24, num_heads=16)
-model = model_cls(config)
+```bash
+pip install -r requirements.txt
 ```
 
-See [examples/train_with_registry.py](examples/train_with_registry.py) for a complete example and [docs/MODEL_REGISTRY_MIGRATION.md](docs/MODEL_REGISTRY_MIGRATION.md) for migration guide.
+This installs `torch`, `transformers`, `diffusers`, `accelerate`, `pillow`, `numpy`, and `keye_vl_utils`. Run scripts from the repo root so the `muse/` and `recipes/` packages are importable (the demo scripts add their own dir to `sys.path` for `kelix_utils`).
 
-### Data Preparation
+## Model Zoo
 
-#### Parquet Data Format
+| Model | Description | HuggingFace |
+|---|---|---|
+| **Kelix-DiT** | Pretraining-stage diffusion-based image de-tokenizer. Renders 1024×1024 images from Kelix-LLM hidden states. | [`OpenOneRec/Kelix-DiT`](https://huggingface.co/OpenOneRec/Kelix-DiT) |
+| **Kelix-SFT** | Complete end-to-end release at the SFT stage — bundles Kelix-Tok + Kelix-LLM + Kelix-DiT (SFT). Use this for both understanding and generation. | [`OpenOneRec/Kelix-SFT`](https://huggingface.co/OpenOneRec/Kelix-SFT) |
+| *(frozen, not included)* | DC-AE-F32C32 latent VAE (32× spatial downsampling → 32×32 latent) — from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae). | — |
 
-由于 webdataset 无法很好的利用 spark & mapreduce 的大数据处理能力，后续在做数据过滤和处理时更困难。因此使用 parquet 格式能够有更好的数据处理工具以及利用 hdfs 大规模的存储，减少 ssd ceph 存储的压力。
+## Quick Start
 
-##### 格式约定
+### Image understanding + image-token generation
 
-| Field name | Field dtype | comment |
-| ---------- | ----------- | ------- |
-| images     | string      | json string, 实际是 map<string, string> 内容是 image key -> image bytes base64 |
-| videos     | string      | json string, 实际是 list<string> 内容是 messages 或者 segments 里面所有的 video path|
-| source     | string      | 数据来源 |
-| messages   | string      | json string, chat 格式的数据，参考 [chat 数据](#chat-数据)
-| segments   | string      | json string, pretrain 格式的数据，参考 [pretrain 数据](#pretrain-数据)
-| metadata   | string      | json string, map<string, string> 其他 meta 信息
-| uuid       | string      | 样本 uuid，用来唯一标识一条样本 |
-
-##### 数据路径 
-- Stage1 数据 **viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/{dataset_name}**
-- Stage2 数据 **viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/{dataset_name}**
-
-#### WebDataset Data Format
-
-参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
-
-制作 webdataset 可以参考脚本 tools/downloader/main.py, 可以利用 mpi4py 同时拉起多个进程加速数据处理
-
-##### 如何生成 index.json
-```shell
-pip install -e /llm_reco_ssd/luoxinchen/repos/webdataset/ --upgrade
-cd /PATH/TO/WEBDATASET/
-widsindex create *.tar --output index.json --process-num 256
+```bash
+python demo/demo_kelix.py
 ```
 
-##### 约定
-1. 如果样本里面有图片一起打包到 .tar 文件里面，如果有视频则存储视频对应的 ceph 路径。
-2. json 里面应该包含数据来源 __key__, source 字段
+Loads the Kelix unified model (Kelix-Tok + Kelix-LLM) and runs:
+1. **Image understanding** — feed an image + question, get a text answer.
+2. **Image-token generation** — give a text prompt, generate discrete visual tokens.
 
-##### Examples
+### Text-to-image generation
 
-###### pretrain 数据
-```json
-000000000.0.jpg
-000000000.1.jpg
-000000000.2.jpg
-000000000.0.mp4
-000000000.json
-{
-    "__key__": 000000000, 
-    "segments": [
-        {"type": "image", "image": "0.jpg"},
-        {"type": "text", "text": "blablabla..."},
-        {"type": "image", "image": "1.jpg"},
-        {"type": "image", "image": "2.jpg"},
-        {"type": "text", "text": "blablabla..."},
-        {"type": "image", "image": "0.mp4"},
-        {"type": "text", "text": "blablabla..."}
-    ],
-    "source": "XXX"
-}
+```bash
+python demo/demo_kelix_t2i.py \
+    --prompt "Generate an image of a cute cat." \
+    --output ./kelix_t2i_demo.png
 ```
-###### chat 数据
-1. 纯文本
-```json
-000000000.json 
-{
-    "__key__": 000000000, 
-    "messages": [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell me who you are."},
-        {"role": "assistant", "content": "I am a large language model named Qwen..."}
-    ],
-    "source": "XXX"
-}
-```
-2. 文本 + 图片
-```json
-000000000.0.jpg
-000000000.json
-{
-    "__key__": 000000000, 
-     "messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": "0.jpg"},
-                {"type": "text", "text": "Output all text in the image"},
-            ],
-        },
-        {"role": "assistant", "content": "The text in the image is balabala..."},
-    ],
-    "source": "XXXOCR"
-}
-```
-3. 文本 + 视频, 
-   1. video  参数:
-      - **video**: required，video 路径
-      - **video_start**: optional, 起始时间戳, 
-      - **video_end**: optional, 结束时间戳
-      - **nframes**: optional, 表示从start-end等宽采样多少帧（nframes，fps 2选一必选）
-      - **fps**: optional, 当nframes没设置的话，根据fps来计算要采样的帧（可以不给）
-      - **min_frames**: optional, 最少采样帧数（nframes不填时，fps计算依赖，有默认值）
-      - **max_frames**: optional, 最大采样帧数（nframes不填时，fps计算依赖，有默认值）
-      - **max_pixels**: optional
-      - **min_pixels**: optional 
-      - **total_pixels**: optional
-      - **resized_height**: optional
-      - **resized_width**: optional
-```json
-000000000.json
-{
-    "__key__": 000000000, 
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "video",
-                    "video": "file:///path/to/video1.mp4",
-                    "max_pixels": 360 * 420,
-                    "fps": 1.0,
-                    "video_start": 0,
-                    "video_end":
-                },
-                {"type": "text", "text": "Describe this video."},
-            ]
-        },
-        {"role": "assistant", "content": "The video describe ..."},
-    ],
-    "source": "kwai_video"
+
+Loads Kelix AR model + Kelix-DiT + DC-AE VAE, then:
+1. AR model generates image tokens + last hidden states.
+2. DiT flow-matching sampling in VAE latent space (32×32).
+3. VAE decode → 1024×1024 PIL image.
+
+Override model paths via env vars: `KELIX_DIR`, `DIT_DIR`, `VAE_DIR`, `MODEL_CONFIG_OVERRIDES`.
+
+## Training
+
+Example training scripts (OpenMPI / `mpirun` based) are provided:
+
+- **Kelix-LLM (AR) training** — `examples/keye_ar/train_scripts/run_train_demo.sh` with config `examples/keye_ar/train_scripts/run_train_demo.json`.
+- **Kelix-DiT training** — `examples/sana/ar_dit/demo_script/train_sft_sana.sh` with config `examples/sana/ar_dit/demo_script/train_sft_sana.json`.
+
+Each script reads a JSON dataset config (`--dataset-config`) whose `sources` field points to your data index. Edit the paths / set the `MODEL_DIR`, `KEYE_AR_DIR`, `VAE_DIR`, `DATASET_CONFIG` environment variables to point to your model checkpoints and data before running.
+
+## Key Results
+
+**Image understanding**
+
+| Benchmark | SEED-Bench | RealWorldQA | MMBench-EN | AI2D | MMMU | MathVista | ChartQA | TextVQA | OCRBench |
+|---|---|---|---|---|---|---|---|---|---|
+| Score | 76.0 | 72.1 | 80.2 | 82.4 | 54.1 | 76.5 | 83.0 | 81.4 | **86.7** |
+
+**Image generation**
+
+| Benchmark | GenEval (Overall) | WISE (Overall) | DPG-Bench (Overall) |
+|---|---|---|---|
+| Score | **87.6** | **57.0** | **85.5** |
+
+Highlights (see the [technical report](https://arxiv.org/pdf/2602.09843) for full tables):
+- **OCRBench 86.7** — matching Qwen2.5-VL-7B (86.4), **+23%** over the previous best discrete unified model X-Omni (70.4).
+- **GenEval 87.6** — SOTA among discrete-tokenization unified models, **+0.6** over the 27B Qwen-Image.
+- **WISE 57.0** — beats all continuous-tokenization unified models and larger dedicated T2I models.
+- **DPG-Bench 85.5** — competitive with X-Omni (7B, 87.7) **without** reinforced learning.
+
+## Citation
+
+If you find Kelix useful, please cite our technical report.
+
+```bibtex
+@article{kelix2026,
+  title   = {Kelix Technique Report: Closing the Understanding Gap of Discrete Tokens in Unified Multimodal Models},
+  author  = {Kuaishou Technology},
+  journal = {arXiv preprint arXiv:2602.09843},
+  year    = {2026},
+  url     = {https://arxiv.org/abs/2602.09843}
 }
 ```
 
-对于已经处理成图片的视频，video字段使用image list填写（需要保证图片顺序），例如：
+## License
 
-```json
-000000000.json
-{
-    "__key__": 000000000, 
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "video",
-                    "video": [
-                        {"type": "image", "image": "0.jpg"},
-                        {"type": "image", "image": "1.jpg"},
-                        {"type": "image", "image": "2.jpg"}
-                    ]
-                },
-                {"type": "text", "text": "Describe this video."},
-            ]
-        },
-        {"role": "assistant", "content": "The video describe ..."},
-    ],
-    "source": "kwai_video"
-}
-```
-多图格式的视频也可以按以下格式输入：
-
-```json
-000000000.json
-{
-    "__key__": 000000000, 
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "video",
-                    "video": [
-                        "0.jpg", "1.jpg", "2.jpg"
-                    ]
-                },
-                {"type": "text", "text": "Describe this video."},
-            ]
-        },
-        {"role": "assistant", "content": "The video describe ..."},
-    ],
-    "source": "kwai_video"
-}
-```
-注意：Parquet文件目前图片输入只支持base64，需要先将图片编码成base64，将其塞到`images`这个map中，然后再messages中通过key引用对应的图片；mp4直接放绝对路径。
-
-### Training
-
-#### 约定
-
-1. 模型路径
-
-所有模型都放在`/llm_reco_ssd/luoxinchen/output/RecoVLM/`下，路径格式需要符合`/llm_reco_ssd/luoxinchen/output/RecoVLM/project/version`
-
-- `project`代表一组实验，`version`区分具体的版本，例如：`/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.4/`
-
-- `project`命名规范：{Model-Family}-{Model-Size}-{stage}，比如`Qwen2-VL-7B-stage2`中，`Qwen2-VL`就是model family，`7B`就是模型大小，`stage-2`表示二阶段预训练。
-
-- `version`规范：版本命名符合`major.minor.patch`的形式，需要正式发版的模型增加minor或major。
-
-- 目前stage约定如下：一阶段预训练：`stage1`，二阶段预训练：`stage2`，sft版本：`sft`，dpo版本：`dpo`，rl版本：`rl`
-
-2. 实验记录
-
-所有实验提交都要有commit链接，参考`examples/vlm/run_pretrain_stage1_7B.sh`，使用这个脚本会自动添加格式化的commit message，例如：
-
-```text
-email=zhouyang12@kuaishou.com,time=20250105 18:55:38,script=./examples/vlm/run_pretrain_stage2_7B.sh,node=10,comment=测试stage2，打开LLM训练，使用the_cauldron，修复lr_decay再跑,output=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.4
-```
-
-3. 版本记录
-
-暂时手动管理版本，将比较重要的实验登记在https://docs.corp.kuaishou.com/d/home/fcACueI9SxQVJoUayiA1dVNtE
-
-### Evaluation
-
-## Troubleshooting
-
-## References
-- [LLaVA-Pretrain Dataset](https://huggingface.co/datasets/liuhaotian/LLaVA-Pretrain)
-- [COCO train2017 Dataset](http://images.cocodataset.org/zips/train2017.zip)
-- [GQA Images](https://downloads.cs.stanford.edu/nlp/data/gqa/images.zip)
-
-
-###
+Please contact the OneRec Team for the license of the Kelix series. The base components (Qwen3-8B, SANA-DiT, DC-AE, Keye-VL / NaViT) are subject to their respective original licenses.

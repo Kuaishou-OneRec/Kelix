@@ -1486,7 +1486,7 @@ class GenEvalInferenceDataset(Chat2ImageDataset):
     """
     def __init__(self, 
                  processor_path,
-                 gen_eval_csv_path="/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv", 
+                 gen_eval_csv_path="path/to/GenEval.tsv",
                  template='{}', 
                  system_prompt="You are a helpful assistant.",
                  infer_repeats=4,

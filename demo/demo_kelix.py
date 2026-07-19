@@ -9,8 +9,8 @@ lives in `kelix_utils.py`. This script just shows the core flow:
   3. Image-token generation: text prompt -> discrete visual tokens.
 
 Usage:
-    python examples/sana/ar_dit/opensource/demo_kelix.py
-    KELIX_DIR=/path/to/release_sft python examples/sana/ar_dit/opensource/demo_kelix.py
+    python demo/demo_kelix.py
+    KELIX_DIR=/path/to/release_sft python demo/demo_kelix.py
 """
 
 import torch

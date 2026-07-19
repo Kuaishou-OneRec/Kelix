@@ -964,6 +964,7 @@ def train():
 
 
     if dist.get_rank() == 0:
+        os.makedirs(args.output_dir, exist_ok=True)
         args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
         print_rank_0(f"Training Arguments:\n{args_str}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -975,7 +976,6 @@ def train():
     # TODO: support wandb
     tb_writer = None
     if dist.get_rank() == 0:
-        os.makedirs(args.output_dir, exist_ok=True)
         tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
         tb_writer.add_text("comment", args.comment, 0)
         tb_writer.add_text("comment_id", args.commit_id, 0)

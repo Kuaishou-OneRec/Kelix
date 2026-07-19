@@ -1,0 +1,21 @@
+# Kelix open-source dependencies.
+# Install with: pip install -r requirements.txt
+#
+# Versions are pinned to the validated release environment.
+
+torch>=2.6
+transformers>=4.51
+diffusers>=0.36
+accelerate>=1.9
+pillow>=11.0
+numpy>=2.0
+einops
+jinja2
+sentencepiece
+protobuf
+pyyaml
+safetensors
+
+# keye_vl_utils: vision/video processing helpers used by the Kelix demos and
+# training. Installed from the public Kwai-Keye repository.
+keye_vl_utils @ git+https://github.com/Kwai-Keye/Keye.git#subdirectory=keye-vl-utils

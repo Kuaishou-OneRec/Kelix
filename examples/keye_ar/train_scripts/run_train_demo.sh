@@ -1,160 +1,102 @@
-git config --global user.email 'maosiyang@kuaishou.com'
-git config --global user.name 'maosiyang'
+#!/bin/bash
+# Kelix-LLM (AR) training demo.
+#
+# Distributed training (OpenMPI / mpirun) of the Kelix AR model
+# (Kelix-Tok + Kelix-LLM) via recipes/ar/train_ar.py.
+#
+# Configure by setting the environment variables below (all overridable):
+#   MODEL_DIR        Kelix AR checkpoint dir (HF repo id or local path)
+#   DATASET_CONFIG   JSON dataset config path (its `sources` field points to
+#                    your data index)
+#   OUTPUT_DIR       Where checkpoints/logs are written
+#   HOSTFILE         MPI hostfile (defaults to a single-node "hostfile")
+#   NPROC_PER_NODE   GPU slots per host (default: 8)
+#
+# Usage:
+#   bash examples/keye_ar/train_scripts/run_train_demo.sh
+#   MODEL_DIR=/path/to/ckpt DATASET_CONFIG=/path/to/cfg.json \
+#     bash examples/keye_ar/train_scripts/run_train_demo.sh
+set -euo pipefail
 
-email=$(git config --get user.email)
+# --- Repo root on PYTHONPATH so `muse` / `recipes` import cleanly ---
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH}"
+cd "${REPO_ROOT}"
 
-# 检查 email 是否为空
-if [[ -z "$email" ]]; then
-        echo "Please set you git email:"
-        echo "  git config --global user.email 'you@kuaishou.com'"
-        exit 1
-else
-        echo "Git user.email: $email"
+# --- Config (env-overridable) ---
+MODEL_DIR="${MODEL_DIR:-OpenOneRec/Kelix-SFT}"
+DATASET_CONFIG="${DATASET_CONFIG:-examples/keye_ar/train_scripts/run_train_demo.json}"
+OUTPUT_DIR="${OUTPUT_DIR:-./output/keye_ar_train_demo}"
+NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
+
+# Default single-node hostfile if none provided.
+HOSTFILE="${HOSTFILE:-hostfile}"
+if [ ! -f "${HOSTFILE}" ]; then
+    echo "localhost slots=${NPROC_PER_NODE}" > "${HOSTFILE}"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
-script_name=$(basename "$0" .sh)
+mkdir -p "${OUTPUT_DIR}"
 
-# Model and output directories - modify as needed
-MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft
-
-# 动态构建 OUTPUT_DIR，对齐 exp30_ar_dit_324tokens_1e-4_reproduce_lbs.sh 命名风格
-SCRIPT_ABS_PATH=$(readlink -f "$0")
-if [ $? -ne 0 ]; then
-    # 兼容macOS（macOS无readlink -f，用realpath替代）
-    SCRIPT_ABS_PATH=$(realpath "$0")
-fi
-
-# 提取倒数第二级目录名
-SCRIPT_DIR=$(dirname "${SCRIPT_ABS_PATH}")
-SECOND_LAST_DIR=$(basename "$(dirname "${SCRIPT_DIR}")")
-
-# 提取最后一级目录名
-LAST_DIR=$(basename "${SCRIPT_DIR}")
-SCRIPT_NAME=$(basename "${SCRIPT_ABS_PATH}")
-SCRIPT_NAME_NO_SUFFIX=${SCRIPT_NAME%.*}  # 去掉最后一个.及后面的内容
-
-# 构建最终 OUTPUT_DIR：/mmu_mllm_hdd_2/maosiyang/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_NAME_NO_SUFFIX}
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/${SECOND_LAST_DIR}/${LAST_DIR}/${SCRIPT_NAME_NO_SUFFIX}
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-mkdir -p $OUTPUT_DIR
-KAI_FLAG_FILE=msy
-mkdir -p /tmp/_wids_cache
-
-nnode=$(wc -l < /etc/mpi/hostfile_seq)
-
-# 注意修改实验内容备注
 comment="keye_ar_train"
+git_hash="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-# git add --all
-# git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
-git_hash=$(git rev-parse --short HEAD)
+echo "Output: ${OUTPUT_DIR}"
+{
+    echo "$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "script: $0"
+    echo "commit_id: ${git_hash}"
+    echo "========================="
+} >> "${OUTPUT_DIR}/task_info.log"
 
-set -x
+# Pick the primary network interface for NCCL/MPI (best-effort).
+TCP_NIC="${TCP_NIC:-$(ifconfig | grep -B1 " $(hostname -i) " | grep -o '^\w*' || true)}"
+export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 
-SCRIPT_FILE=$(readlink -f $0)
-echo `date '+%Y-%m-%d %H:%M:%S'` >> $OUTPUT_DIR/task_info.log
-echo "script: ${SCRIPT_FILE}" >> $OUTPUT_DIR/task_info.log
-echo "commit_id: ${git_hash}" >> $OUTPUT_DIR/task_info.log
-echo "=========================" >> $OUTPUT_DIR/task_info.log
+MASTER_ADDR="${MASTER_ADDR:-$(hostname -I | awk '{print $1}')}"
+MASTER_PORT="${MASTER_PORT:-8499}"
 
-echo "Output: $OUTPUT_DIR"
+# Clean NCCL env (no IB assumptions; works on single-node multi-GPU).
+export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+export TOKENIZERS_PARALLELISM=false
 
-export PYTHONPATH=$PWD:$PYTHONPATH
-
-source set_env.sh
-
-hostfile=/etc/mpi/hostfile_seq
-Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
-TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
-
-
-MASTER_ADDR=$MY_NODE_IP
-MASTER_PORT=8499
-
-nohup mpirun --allow-run-as-root \
-        -hostfile $hostfile \
-        -mca btl self,tcp -mca pml ob1 \
-        -mca plm_rsh_num_concurrent 600 \
-        -mca routed_radix 600 \
-        -mca btl_tcp_if_include $TCP_NIC \
-        -mca oob_tcp_if_include $TCP_NIC \
-        -mca btl_openib_allow_ib false \
-        -mca opal_set_max_sys_limits 1 \
-        -x OMPI_MCA_btl=self,tcp \
-        -x OMPI_MCA_pml=ob1 \
-        -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
-        -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
-        -x OMPI_MCA_btl_openib_allow_ib=false \
-        -x NCCL_IB_DISABLE=0 \
-        -x NCCL_IB_GID_INDEX=3 \
-        -x NCCL_SOCKET_IFNAME=$TCP_NIC \
-        -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_DEBUG=WARN \
-        -x NCCL_IB_QPS_PER_CONNECTION=4 \
-        -x NCCL_NET_OVERHEAD=1000 \
-        -x NCCL_IB_TIMEOUT=20 \
-        -x LD_PRELOAD=$LD_PRELOAD \
-        -x http_proxy="" \
-        -x https_proxy="" \
-        -x HOROVOD_MPI_THREADS_DISABLE=1 \
-        -x MPI_THREAD_SINGLE=1 \
-        -x NO_COLOR=1 \
-        -x TERM=dumb \
-        -x COLORTERM=0 \
-        -x PYTHONIOENCODING=utf-8 \
-        -x LD_LIBRARY_PATH=$LIBRARY_PATH \
-        -x PATH \
-        -x PYTHONPATH=$PYTHONPATH \
-        -x JAVA_HOME=$JAVA_HOME \
-        -x HIVE_HOME=$HIVE_HOME \
-        -x CLASSPATH=$CLASSPATH \
-        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-        -x HADOOP_HOME=$HADOOP_HOME \
-        -x SPARK_HOME=$SPARK_HOME \
-        -x KWS_SERVICE_REGION=$KWS_SERVICE_REGION \
-        -x KWS_SERVICE_DC=$KWS_SERVICE_DC \
-        -x KWS_SERVICE_CATALOG=$KWS_SERVICE_CATALOG \
-        -x KWS_SERVICE_NAME=$KWS_SERVICE_NAME \
-        -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
-        -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
-        -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        -x MASTER_ADDR=$MASTER_ADDR \
-        -x MASTER_PORT=$MASTER_PORT \
-        -x LD_PRELOAD=$LD_PRELOAD \
-        -x KAI_FLAG_FILE \
-        -x KML_ID \
-        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-        -x TOKENIZERS_PARALLELISM=false \
-        -x http_proxy=\
-        -x https_proxy=\
-        with_nccl_local_env \
-        bash -c "python3 recipes/ar/train_ar.py \
-                --model-dir $MODEL_DIR \
-                --model-name KeyeARModel \
-                --output-dir $OUTPUT_DIR \
-                --dataset-config examples/keye_ar/train_scripts/run_train_demo.json \
-                --learning-rate 1e-4 \
-                --weight-decay 0.0 \
-                --beta1 0.9 \
-                --beta2 0.95 \
-                --model-dtype bfloat16 \
-                --chuncked-loss-compute-size 1024 \
-                --warmup-steps 1000 \
-                --lr-scheduler cosine \
-                --min-lr 1e-6 \
-                --freeze-params "visual_tokenizer." \
-                --logging-per-step 20 \
-                --max-steps 2500000 \
-                --save-checkpoint-per-step 1000 \
-                --seed 19260817 \
-                --max-length 1200 \
-                --enable-gradient-checkpointing \
-                --comment '$comment' \
-                --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
-
-
-
-
+mpirun --allow-run-as-root \
+    -hostfile "${HOSTFILE}" \
+    -mca btl self,tcp -mca pml ob1 \
+    -mca btl_tcp_if_include "${TCP_NIC}" \
+    -mca oob_tcp_if_include "${TCP_NIC}" \
+    -x OMPI_MCA_btl=self,tcp \
+    -x OMPI_MCA_pml=ob1 \
+    -x OMPI_MCA_btl_tcp_if_include="${TCP_NIC}" \
+    -x OMPI_MCA_oob_tcp_if_include="${TCP_NIC}" \
+    -x NCCL_DEBUG="${NCCL_DEBUG}" \
+    -x NCCL_SOCKET_IFNAME="${TCP_NIC}" \
+    -x PYTHONIOENCODING=utf-8 \
+    -x LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
+    -x PATH \
+    -x PYTHONPATH="${PYTHONPATH}" \
+    -x MASTER_ADDR="${MASTER_ADDR}" \
+    -x MASTER_PORT="${MASTER_PORT}" \
+    -x TOKENIZERS_PARALLELISM=false \
+    bash -c "python3 recipes/ar/train_ar.py \
+            --model-dir ${MODEL_DIR} \
+            --model-name KeyeARModel \
+            --output-dir ${OUTPUT_DIR} \
+            --dataset-config ${DATASET_CONFIG} \
+            --learning-rate 1e-4 \
+            --weight-decay 0.0 \
+            --beta1 0.9 \
+            --beta2 0.95 \
+            --model-dtype bfloat16 \
+            --chuncked-loss-compute-size 1024 \
+            --warmup-steps 1000 \
+            --lr-scheduler cosine \
+            --min-lr 1e-6 \
+            --freeze-params 'visual_tokenizer.' \
+            --logging-per-step 20 \
+            --max-steps 2500000 \
+            --save-checkpoint-per-step 1000 \
+            --seed 19260817 \
+            --max-length 1200 \
+            --enable-gradient-checkpointing \
+            --comment '${comment}' \
+            --commit-id ${git_hash}"

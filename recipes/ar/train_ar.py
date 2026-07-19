@@ -430,6 +430,7 @@ def train() -> None:
     if rank == 0:
         args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
         print_rank_0(f"Training Arguments:\n{args_str}")
+        os.makedirs(args.output_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w', encoding="utf-8") as f:
             f.write(args_str + "\n")

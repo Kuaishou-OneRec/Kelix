@@ -1,5 +1,5 @@
 {
-    "sources": "/llm_reco/zhangxu/vlm/datahub/datasets/Stage3_blended/0.7.105/index/parquet.json",
+    "sources": "path/to/your/parquet_index.json",
     "max_length": 16000,
     "min_visual_tokens_per_image": 32,
     "max_visual_tokens_per_image": 1280,
@@ -7,7 +7,7 @@
     "max_visual_tokens_per_frame": 768,
     "video_fps": 4.0,
     "video_max_frames": 128,
-    "base_model_dir": "/mmu_mllm_hdd_2/zhouyang12/models/onebase_1231_2wtoken/",
+    "base_model_dir": "path/to/your/base_model_dir",
     "shrink_ratio": 0.35,
     "max_retry": 3,
     "multiple_of": 8,

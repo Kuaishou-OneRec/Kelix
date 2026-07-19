@@ -3,26 +3,25 @@ Inference demo: visualize DiT reconstructions using Keye AR processor
 
 This script mirrors the visualization pipeline in
 `recipes/sana/train_sana_ar_dit.py` and is intended as a ready-to-run demo for
-inference/visualization using the parquet specified in
-`run_ar_dit_multiscale_cross_1280tokens_attn_v1.sh`.
+inference/visualization.
 
 Usage example:
-    python inference/keye_ar_sana/infer_visualize_reconstruction.py \
-        --model-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
-        --vae-dir /llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/ \
-        --keye-ar-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted \
-        --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
-        --parquet-path /mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet \
+    python recipes/sana/inference_ar2image.py \
+        --model-dir /path/to/kelix_dit \
+        --vae-dir /path/to/vae \
+        --keye-ar-dir /path/to/kelix_sft \
+        --dataset-config path/to/dataset_config.json \
+        --parquet-path path/to/vis_data.parquet \
         --output-dir /tmp/vis_demo --num-images 8
 For DCP checkpoint:
-    python inference/keye_ar_sana/infer_visualize_reconstruction.py \
-        --model-dir /mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/ar_dit/exp11_run_ar_dit_multiscale_1280tokens_attnrope_128u \
-        --dcp-source-dir /llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/ \
+    python recipes/sana/inference_ar2image.py \
+        --model-dir /path/to/kelix_dit \
+        --dcp-source-dir /path/to/dcp_ckpt \
         --dcp-tag global_step8000 \
-        --vae-dir /llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/ \
-        --keye-ar-dir /mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9/v2_stage3_1e-4_max1280/./step23000/global_step23000/muse_converted \
-        --dataset-config examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json \
-        --parquet-path /mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet \
+        --vae-dir /path/to/vae \
+        --keye-ar-dir /path/to/kelix_sft \
+        --dataset-config path/to/dataset_config.json \
+        --parquet-path path/to/vis_data.parquet \
         --output-dir /tmp/vis_demo --num-images 8
 
 This demo imports and reuses helper functions from
@@ -86,7 +85,7 @@ def parse_args():
                         default="examples/sana/ar_dit/run_ar_dit_lzx_4096_v2_1024im_multiscale.json",
                         help="Dataset config JSON used to build Chat2ImageDataset")
     parser.add_argument("--parquet-path", type=str,
-                        default="/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data1225.parquet",
+                        default="path/to/vis_data.parquet",
                         help="Parquet file for visualization samples")
     parser.add_argument("--output-dir", type=str, default="./vis_output",
                         help="Directory to save visualization outputs")
@@ -136,9 +135,9 @@ def parse_args():
 
 
 BENCHNAME2CSV_MAP = {
-    "GenEval": "/llm_reco/lingzhixin/recovlm_data/generation_data/GenEval.tsv",
-    "WISE_all": "/mmu_mllm_hdd_2/zangdunju/analysis/WISE/WISE_all.tsv",
-    "DPGBench": "/mmu_mllm_hdd_2/zangdunju/analysis/DPGBench/DPG_Bench.tsv",
+    "GenEval": "path/to/GenEval.tsv",
+    "WISE_all": "path/to/WISE_all.tsv",
+    "DPGBench": "path/to/DPG_Bench.tsv",
 }
 BENCHNAME2PROMPT_KEY_MAP = {
     "GenEval": "question",
