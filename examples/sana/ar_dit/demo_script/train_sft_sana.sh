@@ -22,13 +22,14 @@ step=7500
 
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/
 MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/ar_dit/exp23x/exp235_pretrain_sftv102_step7.5k/global_step16000/converted/
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_dit
 
 
-
-MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px-reproduce-0105/config.json
+MODEL_CONFIG=/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_dit/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 # IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 KEYE_AR_DIR=${top_sft_dir}/step${step}/global_step${step}/muse_converted
+KEYE_AR_DIR=/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft
 
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 VISUAL_PARQUET_PATH=/mmu_mllm_hdd_2/lingzhixin/recovlm_data/muse_v2/vis/vis_data0110.parquet
@@ -155,7 +156,7 @@ nohup mpirun --allow-run-as-root \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "diffusion_connector.0.weight,diffusion_connector.0.bias,diffusion_connector.2.weight,diffusion_connector.2.bias,diffusion_connector.3.weight" \
                 --skip-load-params "y_embedder.y_embedding" \
-                --dataset-config examples/sana/ar_dit/exp00debug/debug_sft.json \
+                --dataset-config examples/sana/ar_dit/demo_script/train_sft_sana.json \
                 --resolution-budgets "1024:24" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-4 \
