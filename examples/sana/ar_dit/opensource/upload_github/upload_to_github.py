@@ -90,8 +90,6 @@ UPLOAD_FILES = [
      "examples/sana/ar_dit/demo_script/debug_sft_sana.sh"),
     ("examples/sana/ar_dit/demo_script/debug_sft.json",
      "examples/sana/ar_dit/demo_script/debug_sft.json"),
-    ("examples/sana/ar_dit/exp00debug/debug_sft.json",
-     "examples/sana/ar_dit/exp00debug/debug_sft.json"),
 ]
 
 # Configure logging

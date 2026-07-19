@@ -1,3 +1,5 @@
+1. hf上传已经完成
+
 参考import os
 from huggingface_hub import login, upload_folder, upload_file
 
@@ -31,3 +33,6 @@ upload_folder(
 )代码，我希望你上传
 1. /mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_dit/到https://huggingface.co/OpenOneRec/Kelix-DiT
 2. /mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft/到https://huggingface.co/OpenOneRec/Kelix-SFT
+
+
+2. 

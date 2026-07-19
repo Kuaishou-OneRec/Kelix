@@ -1,0 +1,14 @@
+refer to examples/sana/ar_dit/opensource/task.txt
+the 'examples/sana/ar_dit/opensource/task.txt' task uploads ckpt to hf 
+
+now, our task is to upload the model code to github
+the github repo is Kuaishou-OneRec/Kelix
+
+you should first checkout the repo to onerec_lzx_case_release_github_v2
+then add examples/sana/ar_dit/opensource to .gitignore,
+then you clean the repo, you might also ensure examples/sana/ar_dit/opensource/demo_kelix.py and examples/sana/ar_dit/opensource/demo_kelix_t2i.py are runnable, and move them to a good dir
+you should also ensure 
+
+
+
+
