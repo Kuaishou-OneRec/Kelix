@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.9.1/v8_stage3_0.29/step18000/global_step18000/muse_converted/
+MODEL_DIR=/mmu_mllm_hdd_2/lingzhixin/output/release/muse/release_sft
 
 # 动态构建 OUTPUT_DIR，对齐 exp30_ar_dit_324tokens_1e-4_reproduce_lbs.sh 命名风格
 SCRIPT_ABS_PATH=$(readlink -f "$0")
@@ -134,7 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --model-dir $MODEL_DIR \
                 --model-name KeyeARModel \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/keye_ar/train_scripts/run_train_compare.json \
+                --dataset-config examples/keye_ar/train_scripts/run_train_demo.json \
                 --learning-rate 1e-4 \
                 --weight-decay 0.0 \
                 --beta1 0.9 \
@@ -148,7 +148,6 @@ nohup mpirun --allow-run-as-root \
                 --logging-per-step 20 \
                 --max-steps 2500000 \
                 --save-checkpoint-per-step 1000 \
-                --overfit-batches 1 \
                 --seed 19260817 \
                 --max-length 1200 \
                 --enable-gradient-checkpointing \
