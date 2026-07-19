@@ -265,63 +265,25 @@ def generate_image_tokens(
 ):
     """Generate discrete image tokens from a text prompt.
 
-    Uses the same generation path as demo_kelix_t2i.py (via ``tokenize_images``)
-    so that hidden states are produced and image tokens are extracted robustly
-    even when the model does not emit a closing ``vision_end`` token.
-
     Returns (output_ids, content, image_token_groups) where:
       - output_ids: raw generated token tensor (seq_len, n_tokens)
       - content: decoded text (special tokens preserved)
-      - image_token_groups: list of image token tensors
+      - image_token_groups: list from model.extract_image_tokens
     """
     device = next(model.parameters()).device
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
     inputs = process_message(processor, device, messages)
-
-    # Use tokenize_images (same path as demo_kelix_t2i.py) to generate and
-    # extract image tokens + hidden states.  This handles the edge case where
-    # vision_end is not emitted by falling back to image-id filtering.
-    cond_embeds, cond_mask, token_embed_lengths = tokenize_images(
-        ar_processor=processor,
-        ar_model=model,
-        batch_size=1,
-        max_condition_length=max_new_tokens,
-        input_ids=inputs["input_ids"],
-        teacher_forcing=False,
-        condition_on_special_tokens=True,
-    )
-
-    # Re-run generate to get the raw token ids for display (tokenize_images
-    # returns embeddings, not raw ids).  We reuse the same generation approach
-    # via get_model_embedding_and_tokens to stay consistent.
-    from recipes.sana.inference_ar2image import get_model_embedding_and_tokens
-    model.set_output_hidden_states([len(model.model.model.layers)])
-    output_ids, _ = get_model_embedding_and_tokens(
-        model=model,
-        teacher_forcing=False,
-        input_ids=inputs["input_ids"],
-        max_new_tokens=max_new_tokens,
-        top_k=top_k,
-    )
-    output_ids = output_ids[0, inputs["input_ids"].shape[1]:]
+    # Destroy KV caches so generate re-setup with the right max_length.
+    # A prior generate call (e.g. chat() with max_new_tokens=256) may have
+    # setup caches with a smaller max_length; generate only calls
+    # reset_caches() (which keeps the old size) when caches_are_setup(),
+    # silently truncating this longer generation.
+    for layer in model.model.model.layers:
+        layer.attn.kv_cache = None
+    output_ids = model.generate(**inputs, top_k=top_k, max_new_tokens=max_new_tokens)
+    output_ids = output_ids[0, inputs["input_ids"].shape[1] :]
     content = processor.decode(output_ids[:, 0].long().tolist(), skip_special_tokens=False)
-
-    # Extract image token groups using the same logic as tokenize_images:
-    # find vision_start, then take all rows whose first-column id >= voc_size.
-    voc_size = model.config.qwen_config.vocab_size
-    vision_start_id = model.config.qwen_config.vision_start_token_id
-    vision_end_id = model.config.qwen_config.vision_end_token_id
-    first_col = output_ids[:, 0]
-    start_indices = torch.where(first_col == vision_start_id)[0].tolist()
-    end_indices = torch.where(first_col == vision_end_id)[0].tolist()
-
-    image_token_groups = []
-    if start_indices:
-        s = start_indices[0]
-        e = end_indices[0] if end_indices and end_indices[0] > s else len(output_ids)
-        image_tokens = output_ids[s + 1:e]
-        image_token_groups.append(image_tokens)
-
+    image_token_groups = model.extract_image_tokens(output_ids)
     return output_ids, content, image_token_groups
 
 
