@@ -1,5 +1,6 @@
 """Single-GPU Kelix-AEDIT inference: an image or local VQ indices -> PNG."""
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -13,7 +14,9 @@ for parent in (ROOT, *ROOT.parents):
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--ckpt', default=str(ROOT) if (ROOT / 'dit').is_dir() else 'OpenOneRec/Kelix-AEDIT', help='Local ckpt directory or HF repo ID')
+    p.add_argument('--ckpt', default=str(ROOT) if (ROOT / 'config.json').is_file() else 'OpenOneRec/Kelix-AEDIT', help='Local DiT directory or HF repo ID')
+    p.add_argument('--tokenizer', default='OpenOneRec/Kelix-SFT', help='Kelix-SFT repo/directory or a standalone image tokenizer directory')
+    p.add_argument('--vae', default='Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae', help='Local DC-AE directory or HF repo/subfolder')
     inputs = p.add_mutually_exclusive_group(required=True)
     inputs.add_argument('--image', help='Image to encode and reconstruct')
     inputs.add_argument('--tokens', help='Safely loaded .pt LongTensor [H*W,8], local codebook indices')
@@ -35,6 +38,61 @@ def positions(h, w, device):
     return {'height': ids // w, 'width': ids % w}
 
 
+def resolve_directory(source, allow_patterns=None):
+    path = Path(source)
+    if path.is_dir():
+        return path
+    from huggingface_hub import snapshot_download
+    parts = str(source).split('/')
+    repo_id = '/'.join(parts[:2])
+    subfolder = '/'.join(parts[2:])
+    patterns = [f'{subfolder}/*'] if subfolder else allow_patterns
+    root = Path(snapshot_download(repo_id, allow_patterns=patterns))
+    return root / subfolder if subfolder else root
+
+
+def load_image_tokenizer(source, device, dtype):
+    """Load the visual tokenizer without instantiating or downloading the LLM."""
+    import torch
+    from accelerate import init_empty_weights
+    from safetensors import safe_open
+    from muse.config.model_config import KeyeTokenizerConfig
+    from muse.models.keye_tokenizer import KeyeImageTokenizer
+
+    folder = resolve_directory(source, ['*.json', '*.txt', '*.py', '*.jinja'])
+    config = json.loads((folder / 'config.json').read_text())
+    if 'tokenizer_config' not in config:
+        tokenizer = KeyeImageTokenizer.from_pretrained(
+            str(folder), strict=True, fusion_type='mean'
+        ).to(device=device, dtype=dtype).eval()
+        return tokenizer, folder
+
+    tokenizer_config = KeyeTokenizerConfig(**config['tokenizer_config'])
+    tokenizer_config.fusion_type = 'mean'
+    with init_empty_weights():
+        tokenizer = KeyeImageTokenizer(tokenizer_config)
+    index = json.loads((folder / 'model.safetensors.index.json').read_text())
+    prefix = 'visual_tokenizer.'
+    selected = {k: v for k, v in index['weight_map'].items() if k.startswith(prefix)}
+    if not selected:
+        raise ValueError('No visual_tokenizer weights found in the checkpoint index')
+    state = {}
+    for shard in sorted(set(selected.values())):
+        path = folder / shard
+        if not path.is_file():
+            if Path(source).is_dir():
+                raise FileNotFoundError(f'Missing tokenizer shard: {shard}')
+            from huggingface_hub import hf_hub_download
+            path = Path(hf_hub_download(source, shard, revision=folder.name))
+        with safe_open(str(path), framework='pt', device='cpu') as weights:
+            for key, filename in selected.items():
+                if filename == shard:
+                    state[key[len(prefix):]] = weights.get_tensor(key)
+    tokenizer.load_state_dict(state, strict=True, assign=True)
+    tokenizer = tokenizer.to(device=device, dtype=dtype).eval()
+    return tokenizer, folder
+
+
 def main(args):
     import torch
     import torch.nn.functional as F
@@ -42,27 +100,23 @@ def main(args):
     from diffusers import AutoencoderDC, FlowMatchEulerDiscreteScheduler
     from transformers import AutoProcessor
     from muse.models.base import Model
-    from muse.models.keye_tokenizer import KeyeImageTokenizer
     from muse.training.common import set_default_dtype
 
     if args.grid < 1 or args.steps < 1 or args.image_size < 32 or args.image_size % 32:
         raise ValueError('grid and steps must be positive; image-size must be a positive multiple of 32')
-    ckpt = Path(args.ckpt)
-    if not ckpt.is_dir():
-        from huggingface_hub import snapshot_download
-        ckpt = Path(snapshot_download(args.ckpt))
+    ckpt = resolve_directory(args.ckpt, ['config.json', '*.safetensors', '*.index.json'])
+    dit_dir = ckpt / 'dit' if (ckpt / 'dit').is_dir() else ckpt
     device, dtype = torch.device(args.device), getattr(torch, args.dtype)
     if device.type == 'cuda' and not torch.cuda.is_available():
         raise RuntimeError('CUDA is required for the FlashAttention vision encoder')
     torch.manual_seed(args.seed)
     with torch.inference_mode(), set_default_dtype(dtype):
         print('Loading DiT (strict=True)...', flush=True)
-        model = Model.from_pretrained(str(ckpt / 'dit'), strict=True).to(device=device, dtype=dtype).eval()
+        model = Model.from_pretrained(str(dit_dir), strict=True).to(device=device, dtype=dtype).eval()
         print('Loading image tokenizer (strict=True)...', flush=True)
-        tokenizer = KeyeImageTokenizer.from_pretrained(
-            str(ckpt / 'image_tokenizer'), strict=True, fusion_type='mean'
-        ).to(device=device, dtype=dtype).eval()
-        vae = AutoencoderDC.from_pretrained(str(ckpt / 'vae'), torch_dtype=dtype).to(device).eval()
+        tokenizer, tokenizer_dir = load_image_tokenizer(args.tokenizer, device, dtype)
+        vae_dir = resolve_directory(args.vae, ['config.json', '*.safetensors'])
+        vae = AutoencoderDC.from_pretrained(str(vae_dir), torch_dtype=dtype).to(device).eval()
         length = args.grid ** 2
         if args.tokens:
             indices = torch.load(args.tokens, map_location='cpu', weights_only=True)
@@ -79,7 +133,7 @@ def main(args):
             )
         else:
             processor = AutoProcessor.from_pretrained(
-                str(ckpt / 'image_tokenizer'), trust_remote_code=True, use_fast=False,
+                str(tokenizer_dir), trust_remote_code=True, use_fast=False,
             )
             # Match the original inference's square resize, then use an exact grid.
             # A merged Keye token covers 2*14 pixels; 18*28=504 for 324 tokens.

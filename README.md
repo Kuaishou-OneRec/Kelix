@@ -36,7 +36,7 @@ This installs `torch`, `transformers`, `diffusers`, `accelerate`, `pillow`, `num
 |---|---|---|
 | **Kelix-DiT** | Pretraining-stage diffusion-based image de-tokenizer. Renders 1024×1024 images from Kelix-LLM hidden states. | [`OpenOneRec/Kelix-DiT`](https://huggingface.co/OpenOneRec/Kelix-DiT) |
 | **Kelix-SFT** | Complete end-to-end release at the SFT stage — bundles Kelix-Tok + Kelix-LLM + Kelix-DiT (SFT). Use this for both understanding and generation. | [`OpenOneRec/Kelix-SFT`](https://huggingface.co/OpenOneRec/Kelix-SFT) |
-| **Kelix-AEDIT** | Image tokenizer and diffusion decoder for reconstruction from discrete image tokens. Default output: 512×512; does not require the LLM. | [`OpenOneRec/Kelix-AEDIT`](https://huggingface.co/OpenOneRec/Kelix-AEDIT) |
+| **Kelix-AEDIT** | Diffusion decoder for discrete image tokens. Reuses the Kelix-SFT tokenizer and SANA1.5 VAE. Default output: 512×512. | [`OpenOneRec/Kelix-AEDIT`](https://huggingface.co/OpenOneRec/Kelix-AEDIT) |
 | *(frozen, not included)* | DC-AE-F32C32 latent VAE (32× spatial downsampling → 32×32 latent) — from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae). | — |
 
 ## Quick Start
@@ -88,8 +88,11 @@ For the default `--grid 18`, the file must contain an integer tensor of shape
 `[324, 8]`, with local indices in `[0, 8192)` for each codebook and row-major
 spatial order. Tokens must use the matching tokenizer and codebooks.
 
-Kelix-AEDIT conditions its decoder on quantized image features with mean
-fusion. It does not use Kelix-LLM hidden states or accept text prompts directly.
+The image tokenizer is loaded from `OpenOneRec/Kelix-SFT`; only its tokenizer
+shards are downloaded and the LLM is not instantiated. The DC-AE VAE is loaded
+from the public SANA1.5 repository. Override these with `--tokenizer` and `--vae`
+to use local checkpoints. Kelix-AEDIT conditions its decoder on quantized image
+features with mean fusion. It does not use Kelix-LLM hidden states or accept text prompts directly.
 The default output is 512×512, with 20 Euler steps and guidance scale 4.5.
 
 ## Training
