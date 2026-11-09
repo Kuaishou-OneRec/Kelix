@@ -195,6 +195,7 @@ class KeyeImageTokenizer(Model):
             "commitment_loss": commitment_loss,
             "indices": indices,
             "x": image_embeds,
+            "token_embeds": token_embeds,
         }
     
     def forward_indices(self, indices):
