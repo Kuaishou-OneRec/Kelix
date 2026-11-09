@@ -1,6 +1,6 @@
 # Kelix
 
-[Paper](https://arxiv.org/pdf/2602.09843) | [Kelix-DiT](https://huggingface.co/OpenOneRec/Kelix-DiT) | [Kelix-SFT](https://huggingface.co/OpenOneRec/Kelix-SFT)
+[Paper](https://arxiv.org/pdf/2602.09843) | [Kelix-DiT](https://huggingface.co/OpenOneRec/Kelix-DiT) | [Kelix-SFT](https://huggingface.co/OpenOneRec/Kelix-SFT) | [Kelix-AEDIT](https://huggingface.co/OpenOneRec/Kelix-AEDIT)
 
 <p align="center">
   <img src="assets/fig3.png" alt="Kelix training pipeline: Kelix-Tok, Unified LLM, and Image DiT" width="90%">
@@ -36,6 +36,7 @@ This installs `torch`, `transformers`, `diffusers`, `accelerate`, `pillow`, `num
 |---|---|---|
 | **Kelix-DiT** | Pretraining-stage diffusion-based image de-tokenizer. Renders 1024×1024 images from Kelix-LLM hidden states. | [`OpenOneRec/Kelix-DiT`](https://huggingface.co/OpenOneRec/Kelix-DiT) |
 | **Kelix-SFT** | Complete end-to-end release at the SFT stage — bundles Kelix-Tok + Kelix-LLM + Kelix-DiT (SFT). Use this for both understanding and generation. | [`OpenOneRec/Kelix-SFT`](https://huggingface.co/OpenOneRec/Kelix-SFT) |
+| **Kelix-AEDIT** | Diffusion decoder for discrete image tokens. Reuses the Kelix-SFT tokenizer and SANA1.5 VAE. Default output: 512×512. | [`OpenOneRec/Kelix-AEDIT`](https://huggingface.co/OpenOneRec/Kelix-AEDIT) |
 | *(frozen, not included)* | DC-AE-F32C32 latent VAE (32× spatial downsampling → 32×32 latent) — from [`Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/vae`](https://huggingface.co/Efficient-Large-Model/SANA1.5_1.6B_1024px_diffusers/tree/main/vae). | — |
 
 ## Quick Start
@@ -64,6 +65,35 @@ Loads Kelix AR model + Kelix-DiT + DC-AE VAE, then:
 3. VAE decode → 1024×1024 PIL image.
 
 Override model paths via env vars: `KELIX_DIR`, `DIT_DIR`, `VAE_DIR`, `MODEL_CONFIG_OVERRIDES`.
+
+### Image reconstruction with Kelix-AEDIT
+
+Install the optional FlashAttention dependency after PyTorch:
+
+```bash
+pip install flash-attn==2.7.4.post1 --no-build-isolation
+```
+
+Use a FlashAttention build compatible with your PyTorch and CUDA versions.
+
+```bash
+python demo/infer_aedit.py \
+    --ckpt OpenOneRec/Kelix-AEDIT \
+    --image input.jpg \
+    --output reconstruction.png
+```
+
+To decode image tokens, replace `--image input.jpg` with `--tokens tokens.pt`.
+For the default `--grid 18`, the file must contain an integer tensor of shape
+`[324, 8]`, with local indices in `[0, 8192)` for each codebook and row-major
+spatial order. Tokens must use the matching tokenizer and codebooks.
+
+The image tokenizer is loaded from `OpenOneRec/Kelix-SFT`; only its tokenizer
+shards are downloaded and the LLM is not instantiated. The DC-AE VAE is loaded
+from the public SANA1.5 repository. Override these with `--tokenizer` and `--vae`
+to use local checkpoints. Kelix-AEDIT conditions its decoder on quantized image
+features with mean fusion. It does not use Kelix-LLM hidden states or accept text prompts directly.
+The default output is 512×512, with 20 Euler steps and guidance scale 4.5.
 
 ## Training
 
